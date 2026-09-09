@@ -10,6 +10,7 @@ import sys
 import os
 import json
 import re
+import math
 import colorsys
 from pathlib import Path
 from PIL import Image
@@ -59,6 +60,90 @@ def get_current_wallpaper() -> Path:
 
     return Path.home() / "Pictures" / "Wallpapers" / "wallhaven_k8d276.jpg"
 
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+def linear_to_srgb(c):
+    c = max(0.0, min(1.0, c))
+    return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1.0 / 2.4)) - 0.055
+
+def rgb_to_oklab(r, g, b):
+    lr = srgb_to_linear(r / 255.0)
+    lg = srgb_to_linear(g / 255.0)
+    lb = srgb_to_linear(b / 255.0)
+    l = (0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb) ** (1/3)
+    m = (0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb) ** (1/3)
+    s = (0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb) ** (1/3)
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+    a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+    b_val = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    C = math.sqrt(a * a + b_val * b_val)
+    h = math.atan2(b_val, a)
+    return L, a, b_val, C, h
+
+def oklch_to_hex(L, C, h):
+    a = C * math.cos(h)
+    b_val = C * math.sin(h)
+    l = (L + 0.3963377774 * a + 0.2158037573 * b_val) ** 3
+    m = (L - 0.1055613458 * a - 0.0638541728 * b_val) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b_val) ** 3
+    lr = +4.0767434721 * l - 3.3077115913 * m + 0.2309699292 * s
+    lg = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+    lb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    r = int(round(linear_to_srgb(lr) * 255))
+    g = int(round(linear_to_srgb(lg) * 255))
+    b = int(round(linear_to_srgb(lb) * 255))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def kmeans_oklab(points, k=5, iters=8):
+    if len(points) <= k:
+        return points
+    # Deterministic farthest-point seeding
+    centroids = [points[0]]
+    while len(centroids) < k:
+        best_pt, max_d = points[0], -1
+        for p in points[::6]:
+            d = min((p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2 for c in centroids)
+            if d > max_d:
+                max_d = d
+                best_pt = p
+        centroids.append(best_pt)
+
+    for _ in range(iters):
+        clusters = [[] for _ in range(k)]
+        for p in points:
+            best_idx, best_dist = 0, 999999
+            for i, c in enumerate(centroids):
+                d = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2
+                if d < best_dist:
+                    best_dist = d
+                    best_idx = i
+            clusters[best_idx].append(p)
+        new_centroids = []
+        for i in range(k):
+            if not clusters[i]:
+                new_centroids.append(centroids[i])
+            else:
+                L = sum(p[0] for p in clusters[i]) / len(clusters[i])
+                a = sum(p[1] for p in clusters[i]) / len(clusters[i])
+                b = sum(p[2] for p in clusters[i]) / len(clusters[i])
+                new_centroids.append((L, a, b, len(clusters[i])))
+        centroids = [(c[0], c[1], c[2]) for c in new_centroids]
+    return new_centroids
+
+def get_theme_name_from_deg(deg):
+    deg = deg % 360
+    if 330 <= deg or deg < 38:
+        return "crimson"
+    elif 38 <= deg < 75:
+        return "gold"
+    elif 75 <= deg < 170:
+        return "emerald"
+    elif 170 <= deg < 260:
+        return "sapphire"
+    else:
+        return "amethyst"
+
 def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
     """Analyze mean luminance and bright pixel ratio of lyric region."""
     w, h = img.size
@@ -67,7 +152,7 @@ def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
 
     crop = img.crop((max(0, x1), max(0, y1), min(w, x2), min(h, y2))).convert("RGB")
     crop_small = crop.resize((48, 24))
-    pixels = list(crop_small.convert("RGB").getdata())
+    pixels = [crop_small.getpixel((x, y)) for y in range(crop_small.height) for x in range(crop_small.width)]
     if not pixels:
         return 0.3, 0.0, False
 
@@ -79,80 +164,67 @@ def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
     return round(mean_lum, 3), round(bright_ratio, 3), is_light
 
 def extract_adaptive_palette(img: Image.Image, is_light: bool):
-    """Extract aesthetic, readable colors based on wallpaper tone and brightness."""
-    thumb = img.resize((96, 96)).convert("RGB")
-    pixels = list(thumb.getdata())
+    """
+    Extract aesthetic, readable colors based on OKLAB K-Means clustering,
+    visual salience weighting, and OKLCH Jewel Tone normalization.
+    """
+    thumb = img.resize((48, 48)).convert("RGB")
+    pixels = [thumb.getpixel((x, y)) for y in range(thumb.height) for x in range(thumb.width)]
+    ok_points = [rgb_to_oklab(r, g, b)[:3] for r, g, b in pixels]
 
-    # Count hues across color spectrum (0 to 360 deg)
-    hue_counts = {
-        "purple": 0,   # 250 - 330 deg (lilac, violet, magenta)
-        "blue": 0,     # 180 - 250 deg (cyan, azure, navy)
-        "green": 0,    # 80 - 180 deg (emerald, olive, jade)
-        "gold": 0,     # 30 - 65 deg (wheat, amber, champagne)
-        "red": 0,      # 330 - 30 deg (crimson, coral, ruby)
-    }
+    # Cluster into 5 perceptual centroids
+    clusters = kmeans_oklab(ok_points, k=5, iters=8)
 
-    saturated_colors = []
+    # Score clusters by Visual Salience: Chroma * (count ** 0.35)
+    salient_candidates = []
+    for L, a, b, count in clusters:
+        C = math.sqrt(a * a + b * b)
+        h = math.atan2(b, a)
+        deg = math.degrees(h) % 360
+        score = C * (count ** 0.35)
+        # Only consider clusters with meaningful chroma (avoid muddy grey/black shadows)
+        if C >= 0.08:
+            salient_candidates.append((score, C, L, h, deg, count))
 
-    for r, g, b in pixels:
-        h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
-        deg = h * 360
-        if s >= 0.20 and v >= 0.20:
-            saturated_colors.append((r, g, b, h, s, v, deg))
-            if 250 <= deg <= 330:
-                hue_counts["purple"] += 1
-            elif 180 <= deg < 250:
-                hue_counts["blue"] += 1
-            elif 80 <= deg < 180:
-                hue_counts["green"] += 1
-            elif 30 <= deg <= 65:
-                hue_counts["gold"] += 1
-            else:
-                hue_counts["red"] += 1
+    if salient_candidates:
+        # Sort by visual salience score
+        salient_candidates.sort(key=lambda x: x[0], reverse=True)
+        best = salient_candidates[0]
+        best_c, best_h, best_deg = best[1], best[3], best[4]
+        top_theme = get_theme_name_from_deg(best_deg)
 
-    # Determine dominant theme
-    total_saturated = len(saturated_colors)
-    top_theme = "warm_classic"
-    if total_saturated > 150:
-        sorted_hues = sorted(hue_counts.items(), key=lambda x: x[1], reverse=True)
-        top_name, top_count = sorted_hues[0]
-        if top_count > total_saturated * 0.22:
-            top_theme = top_name
-
-    # Theme-specific color mappings
-    if top_theme == "purple":
-        dark_hl = "#d8b4fe"   # Luminous Lilac
-        light_hl = "#7e22ce"  # Royal Purple Jewel Tone
-    elif top_theme == "blue":
-        dark_hl = "#38bdf8"   # Electric Cyan
-        light_hl = "#1d4ed8"  # Cobalt Sapphire
-    elif top_theme == "green":
-        dark_hl = "#34d399"   # Luminous Jade
-        light_hl = "#047857"  # Deep Emerald
-    elif top_theme == "gold":
-        dark_hl = "#deb06c"   # Vintage Champagne Gold
-        light_hl = "#b45309"  # Rich Warm Amber Gold
-    elif top_theme == "red":
-        dark_hl = "#fb7185"   # Luminous Rose Coral
-        light_hl = "#be123c"  # Deep Ruby Crimson
+        if is_light:
+            # LIGHT AREA: Deep jewel tone + soft white halo
+            norm_c = min(0.15, max(0.10, best_c))
+            hl_color = oklch_to_hex(0.38, norm_c, best_h)
+            base_text = "#0f172a"       # Deep Slate Ink
+            dead_text = "#475569"       # Neutral Soft Charcoal
+            shadow_dir = "#33000000"    # Soft directional shadow
+            shadow_amb = "#b3ffffff"    # 70% soft white halo for crisp separation
+        else:
+            # DARK AREA: Luminous jewel tone + deep ambient drop shadow
+            norm_c = min(0.12, max(0.09, best_c))
+            hl_color = oklch_to_hex(0.80, norm_c, best_h)
+            base_text = "#f8fafc"       # Crisp Pure White
+            dead_text = "#f1f5f9"       # Neutral Pure Ghost White
+            shadow_dir = "#a6020305"    # 65% deep dark
+            shadow_amb = "#66000000"    # 40% black
     else:
-        dark_hl = "#deb06c"   # Classic Champagne Gold
-        light_hl = "#b45309"  # Rich Warm Amber Gold
-
-    if is_light:
-        # LIGHT AREA: Dark Ink typography with soft white halo
-        base_text = "#0f172a"       # Deep Slate Ink
-        hl_color = light_hl         # Rich vibrant jewel tone
-        dead_text = "#475569"       # Muted slate
-        shadow_dir = "#33000000"    # Soft directional shadow
-        shadow_amb = "#b3ffffff"    # 70% soft white halo for crisp separation
-    else:
-        # DARK AREA: Luminous typography with deep ambient drop shadow
-        base_text = "#f8fafc"       # Crisp Pure White
-        hl_color = dark_hl          # Luminous vibrant accent
-        dead_text = "#cbd5e1"       # Soft misty white
-        shadow_dir = "#a6020305"    # 65% deep dark
-        shadow_amb = "#66000000"    # 40% black
+        # Subtle/Classical/Monochrome painting without garish neon:
+        # Fallback to timeless, luxurious Vintage Champagne Gold
+        top_theme = "warm_classic"
+        if is_light:
+            hl_color = "#b45309"        # Rich Warm Amber Bronze
+            base_text = "#0f172a"       # Deep Slate Ink
+            dead_text = "#475569"       # Neutral Soft Charcoal
+            shadow_dir = "#33000000"
+            shadow_amb = "#b3ffffff"
+        else:
+            hl_color = "#deb06c"        # Vintage Champagne Gold
+            base_text = "#f8fafc"       # Crisp Pure White
+            dead_text = "#f1f5f9"       # Neutral Pure Ghost White
+            shadow_dir = "#a6020305"
+            shadow_amb = "#66000000"
 
     return {
         "theme": top_theme,
