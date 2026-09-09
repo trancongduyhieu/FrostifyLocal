@@ -1,0 +1,210 @@
+import QtQuick
+import QtQuick.Layouts
+import "."
+
+Rectangle {
+    id: root
+    height: 64
+    color: "transparent"
+
+    property string currentTab: "all"
+    signal tabSelected(string tab)
+    signal searchRequested(string query)
+
+    RowLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        spacing: 14
+
+        // Spotify Navigation buttons: Back / Forward
+        RowLayout {
+            spacing: 8
+
+            Rectangle {
+                width: 34
+                height: 34
+                radius: 17
+                color: prevNavH.hovered ? "#282828" : "#181818"
+                Behavior on color { ColorAnimation { duration: 100 } }
+                HoverHandler { id: prevNavH }
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/go-previous-symbolic.svg"
+                    iconSize: 14
+                    color: Theme.textSecondary
+                }
+            }
+
+            Rectangle {
+                width: 34
+                height: 34
+                radius: 17
+                color: nextNavH.hovered ? "#282828" : "#181818"
+                Behavior on color { ColorAnimation { duration: 100 } }
+                HoverHandler { id: nextNavH }
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/go-previous-symbolic.svg"
+                    iconSize: 14
+                    rotation: 180
+                    color: Theme.textMuted
+                }
+            }
+        }
+
+        // Spotify Search Bar
+        Rectangle {
+            Layout.preferredWidth: 340
+            Layout.preferredHeight: 40
+            radius: 20
+            color: "#242424"
+            border.color: searchInput.activeFocus ? "#535353" : "transparent"
+            border.width: 1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                spacing: 10
+
+                SpotifyIcon {
+                    source: "../assets/icons/system-search-symbolic.svg"
+                    iconSize: 16
+                    color: searchInput.activeFocus ? "#ffffff" : Theme.textSecondary
+                }
+
+                TextInput {
+                    id: searchInput
+                    Layout.fillWidth: true
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    color: Theme.textPrimary
+                    selectByMouse: true
+                    onTextChanged: root.searchRequested(text)
+
+                    Text {
+                        text: "What do you want to play?"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                        color: Theme.textSecondary
+                        visible: !searchInput.text && !searchInput.activeFocus
+                    }
+                }
+
+                // Clear search icon
+                Item {
+                    width: 20; height: 20
+                    visible: searchInput.text.length > 0
+                    HoverHandler { id: clearH }
+
+                    SpotifyIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 12
+                        color: clearH.hovered ? "#ffffff" : Theme.textSecondary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            searchInput.text = "";
+                            root.searchRequested("");
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillWidth: true }
+
+        // Filter Pills: All, Music, Ado Collection
+        RowLayout {
+            spacing: 8
+
+            // "All" Pill
+            Rectangle {
+                height: 32
+                width: allTxt.implicitWidth + 24
+                radius: Theme.radiusPill
+                color: root.currentTab === "all" ? Theme.accentPill : "#242424"
+
+                Text {
+                    id: allTxt
+                    anchors.centerIn: parent
+                    text: "All"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: root.currentTab === "all" ? Theme.accentPillText : Theme.textPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.currentTab = "all";
+                        root.tabSelected("all");
+                    }
+                }
+            }
+
+            // "Music" Pill
+            Rectangle {
+                height: 32
+                width: musicTxt.implicitWidth + 24
+                radius: Theme.radiusPill
+                color: root.currentTab === "music" ? Theme.accentPill : "#242424"
+
+                Text {
+                    id: musicTxt
+                    anchors.centerIn: parent
+                    text: "Music"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: root.currentTab === "music" ? Theme.accentPillText : Theme.textPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.currentTab = "music";
+                        root.tabSelected("music");
+                    }
+                }
+            }
+
+            // "Ado Collection" Pill
+            Rectangle {
+                height: 32
+                width: adoTxt.implicitWidth + 24
+                radius: Theme.radiusPill
+                color: root.currentTab === "ado" ? Theme.accentPill : "#242424"
+
+                Text {
+                    id: adoTxt
+                    anchors.centerIn: parent
+                    text: "Ado Collection"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: root.currentTab === "ado" ? Theme.accentPillText : Theme.textPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.currentTab = "ado";
+                        root.tabSelected("ado");
+                    }
+                }
+            }
+        }
+    }
+}

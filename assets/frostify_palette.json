@@ -1,0 +1,22 @@
+{
+  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8d276.jpg",
+  "line1Color": "#f7768e",
+  "line2Color": "#9ADCE6",
+  "flameColor": "#a425f9",
+  "line1Luminance": 0.183,
+  "line2Luminance": 0.117,
+  "line1IsLightArea": false,
+  "line2IsLightArea": false,
+  "lightAreaStyle": {
+    "textColor": "#0c0e12",
+    "outlineColor": "#ffffff",
+    "activeAura": "#f7768e",
+    "runeColor": "#f7768e"
+  },
+  "darkAreaStyle": {
+    "textColor": "#ffffff",
+    "outlineColor": "#08090c",
+    "activeAura": "#f7768e",
+    "runeColor": "#f7768e"
+  }
+}
