@@ -1,12 +1,12 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_1q223g.jpg",
-  "meanLuminance": 0.371,
-  "brightRatio": 0.238,
-  "isLightArea": true,
-  "theme": "warm_classic",
-  "baseTextColor": "#0f172a",
-  "highlightColor": "#b45309",
-  "deadTextColor": "#475569",
-  "shadowDirectional": "#33000000",
-  "shadowAmbient": "#b3ffffff"
+  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8d276.jpg",
+  "meanLuminance": 0.256,
+  "brightRatio": 0.001,
+  "isLightArea": false,
+  "theme": "emerald",
+  "baseTextColor": "#f8fafc",
+  "highlightColor": "#c0cd78",
+  "deadTextColor": "#f1f5f9",
+  "shadowDirectional": "#a6020305",
+  "shadowAmbient": "#66000000"
 }

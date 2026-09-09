@@ -18,7 +18,7 @@ Item {
     // Dynamic Adaptive Colors (from wallpaper palette)
     property color colHighlight: "#deb06c"
     property color colActiveText: "#f8fafc"
-    property color colDeadText: "#cbd5e1"
+    property color colDeadText: "#f1f5f9"
     property color colShadowDirectional: "#a6020305"
     property color colShadowAmbient: "#66000000"
     property bool isLightArea: false
@@ -171,64 +171,9 @@ Item {
                         }
                     }
 
-                    // Layer 1: Ambient Diffuse Halo (when isLightArea: multi-angle backlight glow)
+                    // Layer 1: Ambient Deep Diffuse Drop Shadow (Cinematic atmosphere, no dirty white halo)
                     Text {
-                        id: shadowHaloTL
-                        visible: root.isLightArea
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: -1.2
-                        anchors.verticalCenterOffset: -1.2
-                        text: modelData.word
-                        font.family: root.activeFontFamily
-                        font.pixelSize: root.fontSize
-                        font.bold: false
-                        color: root.colShadowAmbient
-                        style: Text.Normal
-                    }
-                    Text {
-                        id: shadowHaloTR
-                        visible: root.isLightArea
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: 1.2
-                        anchors.verticalCenterOffset: -1.2
-                        text: modelData.word
-                        font.family: root.activeFontFamily
-                        font.pixelSize: root.fontSize
-                        font.bold: false
-                        color: root.colShadowAmbient
-                        style: Text.Normal
-                    }
-                    Text {
-                        id: shadowHaloBL
-                        visible: root.isLightArea
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: -1.2
-                        anchors.verticalCenterOffset: 1.2
-                        text: modelData.word
-                        font.family: root.activeFontFamily
-                        font.pixelSize: root.fontSize
-                        font.bold: false
-                        color: root.colShadowAmbient
-                        style: Text.Normal
-                    }
-                    Text {
-                        id: shadowHaloBR
-                        visible: root.isLightArea
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: 1.2
-                        anchors.verticalCenterOffset: 1.2
-                        text: modelData.word
-                        font.family: root.activeFontFamily
-                        font.pixelSize: root.fontSize
-                        font.bold: false
-                        color: root.colShadowAmbient
-                        style: Text.Normal
-                    }
-
-                    // Layer 1b: Ambient Deep Drop Shadow (when dark area)
-                    Text {
-                        id: shadowAmbientDark
-                        visible: !root.isLightArea
+                        id: shadowAmbient
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: 3.5
                         text: modelData.word
@@ -239,7 +184,7 @@ Item {
                         style: Text.Normal
                     }
 
-                    // Layer 2: Directional Sharp Drop Shadow
+                    // Layer 2: Directional Sharp Drop Shadow (High contrast legibility across all backgrounds)
                     Text {
                         id: shadowDirectional
                         anchors.centerIn: parent

@@ -46,7 +46,7 @@ PanelWindow {
         "isLightArea": false,
         "baseTextColor": "#f8fafc",
         "highlightColor": "#deb06c",
-        "deadTextColor": "#cbd5e1",
+        "deadTextColor": "#f1f5f9",
         "shadowDirectional": "#a6020305",
         "shadowAmbient": "#66000000"
     })
@@ -97,7 +97,7 @@ PanelWindow {
 
     readonly property color colHighlight: root.frostifyPalette.highlightColor || "#deb06c"
     readonly property color colActiveText: root.frostifyPalette.baseTextColor || "#f8fafc"
-    readonly property color colDeadText: root.frostifyPalette.deadTextColor || "#cbd5e1"
+    readonly property color colDeadText: root.frostifyPalette.deadTextColor || "#f1f5f9"
     readonly property color colShadowDir: root.frostifyPalette.shadowDirectional || "#a6020305"
     readonly property color colShadowAmb: root.frostifyPalette.shadowAmbient || "#66000000"
     readonly property bool isLightArea: !!root.frostifyPalette.isLightArea

@@ -165,66 +165,42 @@ def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
 
 def extract_adaptive_palette(img: Image.Image, is_light: bool):
     """
-    Extract aesthetic, readable colors based on OKLAB K-Means clustering,
-    visual salience weighting, and OKLCH Jewel Tone normalization.
+    Extract aesthetic, readable colors based on OKLAB Chromatic Salience Clustering,
+    and OKLCH Jewel Tone normalization with universal cinematic dark drop shadows.
     """
-    thumb = img.resize((48, 48)).convert("RGB")
+    thumb = img.resize((96, 96)).convert("RGB")
     pixels = [thumb.getpixel((x, y)) for y in range(thumb.height) for x in range(thumb.width)]
-    ok_points = [rgb_to_oklab(r, g, b)[:3] for r, g, b in pixels]
+    ok_all = [rgb_to_oklab(r, g, b) for r, g, b in pixels]
 
-    # Cluster into 5 perceptual centroids
-    clusters = kmeans_oklab(ok_points, k=5, iters=8)
+    # Pre-filter pixels with noticeable artistic color (Chroma >= 0.028)
+    chroma_pixels = [p[:3] for p in ok_all if p[3] >= 0.028]
+    chroma_ratio = len(chroma_pixels) / len(pixels)
 
-    # Score clusters by Visual Salience: Chroma * (count ** 0.35)
-    salient_candidates = []
-    for L, a, b, count in clusters:
-        C = math.sqrt(a * a + b * b)
-        h = math.atan2(b, a)
-        deg = math.degrees(h) % 360
-        score = C * (count ** 0.35)
-        # Only consider clusters with meaningful chroma (avoid muddy grey/black shadows)
-        if C >= 0.08:
-            salient_candidates.append((score, C, L, h, deg, count))
-
-    if salient_candidates:
-        # Sort by visual salience score
-        salient_candidates.sort(key=lambda x: x[0], reverse=True)
-        best = salient_candidates[0]
-        best_c, best_h, best_deg = best[1], best[3], best[4]
+    if chroma_ratio >= 0.05:
+        # Cluster chromatic pixels into 4 distinct artistic hue candidates
+        clusters = kmeans_oklab(chroma_pixels, k=4, iters=8)
+        # Select best cluster by Visual Salience: count^0.35 * C
+        best = max(clusters, key=lambda c: (c[3] ** 0.35) * math.sqrt(c[1]**2 + c[2]**2))
+        best_c = math.sqrt(best[1]**2 + best[2]**2)
+        best_h = math.atan2(best[2], best[1])
+        best_deg = math.degrees(best_h) % 360
         top_theme = get_theme_name_from_deg(best_deg)
 
-        if is_light:
-            # LIGHT AREA: Deep jewel tone + soft white halo
-            norm_c = min(0.15, max(0.10, best_c))
-            hl_color = oklch_to_hex(0.38, norm_c, best_h)
-            base_text = "#0f172a"       # Deep Slate Ink
-            dead_text = "#475569"       # Neutral Soft Charcoal
-            shadow_dir = "#33000000"    # Soft directional shadow
-            shadow_amb = "#b3ffffff"    # 70% soft white halo for crisp separation
-        else:
-            # DARK AREA: Luminous jewel tone + deep ambient drop shadow
-            norm_c = min(0.12, max(0.09, best_c))
-            hl_color = oklch_to_hex(0.80, norm_c, best_h)
-            base_text = "#f8fafc"       # Crisp Pure White
-            dead_text = "#f1f5f9"       # Neutral Pure Ghost White
-            shadow_dir = "#a6020305"    # 65% deep dark
-            shadow_amb = "#66000000"    # 40% black
+        # Calibrate to Luminous Jewel Tone (L=0.82, C in [0.08, 0.12])
+        norm_c = min(0.12, max(0.08, best_c * 1.4))
+        hl_color = oklch_to_hex(0.82, norm_c, best_h)
     else:
-        # Subtle/Classical/Monochrome painting without garish neon:
+        # Pure monochrome/pencil sketch without color:
         # Fallback to timeless, luxurious Vintage Champagne Gold
         top_theme = "warm_classic"
-        if is_light:
-            hl_color = "#b45309"        # Rich Warm Amber Bronze
-            base_text = "#0f172a"       # Deep Slate Ink
-            dead_text = "#475569"       # Neutral Soft Charcoal
-            shadow_dir = "#33000000"
-            shadow_amb = "#b3ffffff"
-        else:
-            hl_color = "#deb06c"        # Vintage Champagne Gold
-            base_text = "#f8fafc"       # Crisp Pure White
-            dead_text = "#f1f5f9"       # Neutral Pure Ghost White
-            shadow_dir = "#a6020305"
-            shadow_amb = "#66000000"
+        hl_color = "#deb06c"
+
+    # Universal High-End Cinematic Typography (Pure white base + custom jewel highlight + deep dark shadows)
+    # Eliminates cheap/blurry white halos completely across all wallpapers
+    base_text = "#f8fafc"       # Crisp Pure White
+    dead_text = "#f1f5f9"       # Pristine Soft White for graceful exit fade
+    shadow_dir = "#a6020305"    # Sharp dark drop shadow (contrast on all backgrounds)
+    shadow_amb = "#66000000"    # Deep ambient diffuse shadow
 
     return {
         "theme": top_theme,
