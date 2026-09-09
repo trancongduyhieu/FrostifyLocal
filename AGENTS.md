@@ -7,14 +7,24 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 ## 1. Tổng Quan Dự Án (Project Overview)
 
 **Frostify Local** là trình phát nhạc cục bộ và máy tính để bàn (Desktop Music & Streaming Player) được tối ưu hóa chuyên sâu cho môi trường Linux Wayland (Niri compositor), kết hợp giữa:
-- **Giao diện người dùng Spotify/Amberol hiện đại**: Viết bằng **Quickshell (Qt 6 / QML)** với khả năng tăng tốc GPU phần cứng và hỗ trợ native Wayland layer-shell.
+- **Giao diện người dùng hiện đại**: Viết bằng **Quickshell (Qt 6 / QML)** với khả năng tăng tốc GPU phần cứng và hỗ trợ native Wayland layer-shell.
 - **Backend phát nhạc độ trễ thấp**: Trình điều khiển **Python IPC daemon** (`backend/player_daemon.py`) giao tiếp trực tiếp qua Unix Domain Socket (`/tmp/frostify_mpv.sock`) với một tiến trình `mpv` chuyên biệt (hỗ trợ gapless playback, hardware decoding, flac/m4a/opus/mp3/ytdl streams).
 - **Desktop Lyrics ma thuật phong cách Gacha/Anime**: Hiển thị lyric nổi trực tiếp lên hình nền desktop (tọa độ trên tà váy nhân vật/vùng hạ tiêu cự) với font chữ cổ điển *Instrument Serif*, hiệu ứng pop chữ gacha và đổ bóng điện ảnh thích ứng màu sắc hình nền.
 - **Bộ máy màu sắc thích ứng Chromatic Salience (OKLAB / OKLCH)**: Trích xuất màu điểm nhấn nghệ thuật (màu tóc, má hồng, mắt, trang phục) từ hình nền hiện tại và cập nhật theo thời gian thực vào `~/.config/noctalia/frostify_palette.json`.
 
 ---
 
-## 2. Cấu Trúc Thư Mục (Repository Structure)
+## 2. Quy Tắc Tối Thượng Cho AI (Critical Architectural Rules)
+
+> [!CAUTION]
+> 1. **TUYỆT ĐỐI KHÔNG DÙNG EMOJI TRONG GIAO DIỆN**: Mọi nút bấm, trạng thái, modal hay icon phải dùng file SVG hoặc component icon có sẵn (`components/SpotifyIcon.qml` hoặc `assets/icons/*.svg`). Tuyệt đối không dùng ký tự emoji (như 🎵, 📥, ⚙️, ❌) vì gây vỡ giao diện và "phèn".
+> 2. **KHÔNG DÙNG VIỀN TRẮNG (WHITE HALO) CHO LYRIC**: Luôn tuân thủ Universal Cinematic Shadows (bóng đổ đa tầng màu tối sâu điện ảnh `#a6020305` và `#66000000`).
+> 3. **PORTABILITY**: Không hardcode đường dẫn người dùng. Luôn dùng `Quickshell.env("HOME")` hoặc `Path.home()`.
+> 4. **WAYBAR & STATUS BAR THUỘC NOCTALIA**: Tinh chỉnh thanh trạng thái Waybar/Noctalia là của repo `noctalia-shell`, không trộn lẫn vào code của FrostifyLocal.
+
+---
+
+## 3. Cấu Trúc Thư Mục (Repository Structure)
 
 ```
 /home/apple/Applications/FrostifyLocal/
@@ -24,7 +34,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 ├── assets/                         # Font chữ Instrument Serif, icon SVG, dữ liệu tĩnh
 ├── backend/
 │   ├── library.py                  # Bộ quét thư viện nhạc (~/Music) sử dụng Mutagen
-│   ├── lyrics_helper.py            # Trích xuất và phân giải file LRC đồng bộ
+│   ├── lyrics_helper.py            # Trích xuất và phân giải file LRC (tích hợp syncedlyrics fallback)
 │   ├── palette_extractor.py        # Thuật toán OKLAB Chromatic Salience Clustering
 │   └── player_daemon.py            # CLI wrapper điều khiển mpv qua /tmp/frostify_mpv.sock
 ├── components/
@@ -43,81 +53,41 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 │   ├── TrackCard.qml               # Card hiển thị từng bài hát trong grid
 │   └── TrackRow.qml                # Dòng hiển thị bài hát trong danh sách hàng đợi
 ├── AGENT.md                        # File này (chỉ dẫn dành cho AI)
-└── TODO.md                         # Danh sách tính năng và lộ trình phát triển tiếp theo
+├── AGENTS.md                       # Bản sao đồng bộ của AGENT.md
+└── TODO.md                         # Danh sách tính năng và lộ trình phát triển đã chốt
 ```
 
 ---
 
-## 3. Kiến Trúc Kỹ Thuật Chi Tiết (Technical Architecture)
+## 4. Công Cụ & Thư Viện Đã Được Chốt Phương Án Kỹ Thuật
 
-### 3.1. Frontend: Quickshell (Qt 6 / QML)
-- Chạy bằng binary `/usr/bin/quickshell -p /home/apple/Applications/FrostifyLocal/shell.qml`.
-- `shell.qml` chứa 2 thành phần cửa sổ độc lập:
-  1. `FloatingWindow { id: win }`: Cửa sổ ứng dụng chính (Spotify client UI).
-  2. `DesktopLyricsWidget { id: desktopLyrics }`: Window dạng layer desktop nổi không viền (`PanelWindow`), gắn vào desktop compositor, không bắt chuột (`mask: Region {}` hoặc click-through), tự động sync theo `win.currentTime` và `win.activeLyrics`.
-
-### 3.2. Hiệu Ứng Desktop Lyrics & Typography
-- **Font chữ**:
-  - Tiếng Anh: *Instrument Serif* (tải từ `assets/fonts/InstrumentSerif-Regular.ttf` & `Italic.ttf`).
-  - Tiếng Việt: Tự động fallback sang *Noto Serif* qua regex `hasVietnamese`.
-- **Baseline Staggering**: Các từ trong câu không nằm trên một đường thẳng cứng nhắc mà được lệch nhẹ sole tự nhiên: `[-2.5, 3.5, -2.0, 2.5, -3.0, 2.0, -1.5, 2.5]px` theo phong cách Harry Potter / Swing Lynn.
-- **Gacha Pop In & Out**:
-  - Từ đang hát nhảy nảy nhẹ (`wordScale: 0.88 -> 1.06 -> 1.0`) kèm hiệu ứng chuyển màu từ trắng ngà sang màu ngọc highlight trong 240ms.
-  - Câu đã hát xong (`colDeadText: #f1f5f9`) hạ thấp sâu `+52px` về phía dưới, nghiêng hữu cơ `1.8°` và mờ dần trong 1.6 giây trước khi biến mất.
-- **Universal Cinematic Drop Shadows (Chuẩn Điện Ảnh)**:
-  - **TUYỆT ĐỐI KHÔNG DÙNG VIỀN TRẮNG (White Halo)**: Không bao giờ dùng viền sáng bao quanh chữ vì gây nhòe mờ và kém sang.
-  - **Lớp bóng 1 (Ambient Deep Diffuse)**: Offset `+3.5px`, màu `#66000000` tạo chiều sâu không gian.
-  - **Lớp bóng 2 (Directional Sharp)**: Offset `+1.2px, +1.8px`, màu `#a6020305` tạo độ nổi khối sắc nét trên mọi nền sáng/tối.
-
-### 3.3. Bộ Máy Trích Xuất Màu Sắc (Chromatic Salience trong OKLAB)
-- Nằm tại: `backend/palette_extractor.py`.
-- Được gọi tự động bởi Noctalia theme hook: `~/.config/noctalia/apply_theme.sh` mỗi khi người dùng đổi hình nền.
-- **Thuật toán**:
-  1. Chuyển đổi màu sắc sRGB $\rightarrow$ Linear RGB $\rightarrow$ OKLAB / OKLCH.
-  2. Lọc bỏ toàn bộ pixel trung tính/xám xịt với ngưỡng Chroma $C \ge 0.028$.
-  3. Phân cụm K-Means ($k=4$) trên các pixel sắc độ.
-  4. Lựa chọn màu theo điểm thị giác $S = N^{0.35} \times C$ (ưu tiên các chi tiết nhỏ nhưng rực rỡ như mái tóc, màu mắt, má hồng của nhân vật anime).
-  5. Chuẩn hóa về dải màu đá quý phát quang (*Luminous Jewel Tone*): Độ sáng $L = 0.82$, Sắc độ $C \in [0.08, 0.12]$.
-  6. Xuất cấu hình ra `~/.config/noctalia/frostify_palette.json` và `assets/frostify_palette.json`.
-
-### 3.4. Backend Điều Khiển Âm Thanh (mpv IPC)
-- Quickshell định kỳ kích hoạt `backend/player_daemon.py status` để lấy trạng thái JSON:
-  `{"is_playing": true, "time_pos": 16.5, "duration": 186.0, "filename": "...", "volume": 100.0}`.
-- Các lệnh điều khiển:
-  - Play / Pause: `python3 backend/player_daemon.py toggle`
-  - Seek: `python3 backend/player_daemon.py seek <seconds>`
-  - Volume: `python3 backend/player_daemon.py volume <0-100>`
-  - Next / Prev / Play Track: `python3 backend/player_daemon.py play <file_path>`
-
----
-
-## 4. Các Công Cụ & Thư Viện Liên Quan Trong Hệ Thống
-
-1. **`adb` (Android Debug Bridge)**:
-   - Đường dẫn: `/home/apple/.local/bin/adb`.
-   - Thiết bị Android đã gắn kết nối: ID `2bd3dce5`.
-   - Mục đích: Kéo trực tiếp các bài hát mới tải về từ SimpMusic trên điện thoại (`/storage/emulated/0/...`) về máy tính.
-2. **`anpan` (Universal Media Downloader)**:
-   - Đường dẫn: `/home/apple/.local/bin/anpan`.
-   - Cú pháp: `anpan -o ~/Music/Downloads_Phone <url>` (hỗ trợ YouTube, YT Music, SoundCloud, Twitter, v.v.).
-3. **Mã nguồn tham khảo SimpMusic**:
+1. **YouTube Music Online Streaming (Item 8)**:
+   - Thư viện: `ytmusicapi` (Python) để đăng nhập tài khoản / Visitor token, tìm kiếm bài hát và lấy playlist.
+   - Trình phát: `mpv` tích hợp hook `yt-dlp` (`mpv --ytdl-format="bestaudio"`) để stream luồng âm thanh trực tiếp với dung lượng RAM tối thiểu (< 100MB RAM), không cần tải file về đĩa.
+2. **Online Synced Lyrics Fetcher (Item 3)**:
+   - Thư viện: `syncedlyrics` (Python) tự động fallback tuần tự qua các nguồn: **LRCLIB $\rightarrow$ NetEase Cloud Music $\rightarrow$ Musixmatch** khi thiếu file `.lrc` cục bộ.
+3. **Trình tải nhạc `anpan` (Item 5)**:
+   - Đường dẫn CLI: `/home/apple/.local/bin/anpan`.
+   - Gọi ngầm: `anpan -o ~/Music/Downloads_Phone "<URL>"`.
+   - Giao diện: Nút icon SVG download trên Header mở modal dán link kèm thanh tiến trình.
+4. **Đồng bộ điện thoại qua ADB (Item 10)**:
+   - Binary: `/home/apple/.local/bin/adb` (thiết bị `2bd3dce5` đã gắn kết nối).
+   - Thư mục nguồn trên điện thoại: `/storage/emulated/0/Music/SimpMusic/`.
+   - Thư mục đích trên máy tính: `~/Music/SimpMusic/Tracks/`.
+   - Lệnh sync: `adb pull -a /storage/emulated/0/Music/SimpMusic/. ~/Music/SimpMusic/Tracks/`.
+5. **Cấu hình & Tinh chỉnh Preset (Item 4 & 9)**:
+   - File cấu hình: `~/.config/noctalia/frostify_settings.json`.
+   - Hỗ trợ chọn Preset: `GachaPop`, `SpotifyClassic`, `CinematicFlow`, `MinimalistPill`.
+   - Tùy chọn màu sắc: `Auto (Wallpaper Adaptive)` vs `Manual Color Picker`.
+6. **Mã nguồn tham khảo SimpMusic**:
    - Vị trí clone: `/home/apple/Applications/SimpMusic/`.
-   - Tài liệu kỹ thuật chi tiết: `/home/apple/Applications/SimpMusic/CLAUDE.md`.
-   - Kỹ thuật cốt lõi để học hỏi:
-     - Giải mã chữ ký số YouTube Innertube / `player_configs.json` / QuickJS cipher engine.
-     - Cơ chế hàng đợi (Queue), Play Next, và Context Menu tương tác.
+   - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete) và Albums Detail View.
 
 ---
 
-## 5. Quy Chuẩn Phát Triển & Kiểm Tra Cho AI (Dev Rules)
+## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 
-1. **Universal Portability & Không Hardcode**:
-   - Tuyệt đối không hardcode đường dẫn tuyệt đối tĩnh trong QML/Python.
-   - Luôn sử dụng `Quickshell.env("HOME")`, `Path.home()`, `os.path.expanduser("~")`.
-2. **Quy Trình Kiểm Tra Bắt Buộc Trước Khi Commit**:
-   - Cú pháp QML: `qmllint components/*.qml shell.qml` (phải đạt 0 lỗi).
-   - Cú pháp Python: `python3 -m py_compile backend/*.py`.
-   - Kiểm tra trực quan: Chụp ảnh bằng `/usr/bin/grim` -> xem bằng `view_file` trước khi báo cáo hoàn tất.
-3. **Quản Lý Phiên Bản Git**:
-   - Remote: `origin` -> `git@github.com:trancongduyhieu/FrostifyLocal.git` (nhánh `main`).
-   - Luôn commit sạch, rõ ràng sau mỗi tính năng hoàn thành.
+1. Cú pháp QML: `qmllint components/*.qml shell.qml` (phải đạt 0 lỗi).
+2. Cú pháp Python: `python3 -m py_compile backend/*.py`.
+3. Kiểm tra trực quan: Chụp màn hình bằng `/usr/bin/grim` -> xem bằng `view_file`.
+4. Git push: Luôn commit và push lên `git@github.com:trancongduyhieu/FrostifyLocal.git` (nhánh `main`).
