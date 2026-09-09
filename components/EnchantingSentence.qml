@@ -15,10 +15,19 @@ Item {
     readonly property bool hasVietnamese: /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(root.text)
     readonly property string activeFontFamily: hasVietnamese ? "Noto Serif" : (root.fontFamily !== "" ? root.fontFamily : "Instrument Serif")
 
-    // Tuned Palette: Sophisticated Vintage Champagne Gold (Extracted from reference video)
-    property color colHighlight: "#deb06c"     // Warm Vintage Champagne Gold
-    property color colActiveText: "#f8fafc"    // Crisp Pure White
-    property color colMutedWhite: Qt.rgba(0.92, 0.94, 0.96, 0.70) // Soft ghost white for exit
+    // Dynamic Adaptive Colors (from wallpaper palette)
+    property color colHighlight: "#deb06c"
+    property color colActiveText: "#f8fafc"
+    property color colDeadText: "#cbd5e1"
+    property color colShadowDirectional: "#a6020305"
+    property color colShadowAmbient: "#66000000"
+    property bool isLightArea: false
+
+    Behavior on colHighlight { ColorAnimation { duration: 350 } }
+    Behavior on colActiveText { ColorAnimation { duration: 350 } }
+    Behavior on colDeadText { ColorAnimation { duration: 350 } }
+    Behavior on colShadowDirectional { ColorAnimation { duration: 350 } }
+    Behavior on colShadowAmbient { ColorAnimation { duration: 350 } }
 
     implicitHeight: root.fontSize + 24
     implicitWidth: wordRow.implicitWidth
@@ -98,7 +107,7 @@ Item {
                         if (root.isDead) {
                             wordAlpha = 1.0;
                             wordScale = 1.0;
-                            currentColor = root.colMutedWhite;
+                            currentColor = root.colDeadText;
                             isSung = true;
                             return;
                         }
@@ -125,18 +134,18 @@ Item {
 
                     opacity: root.isDead ? 1.0 : wordAlpha
 
-                    // Gacha Pop Animation: Crisp Pure White Pop -> Smooth Transition to Vintage Champagne Gold
+                    // Gacha Pop Animation: Base Color Pop -> Smooth Transition to Highlight
                     SequentialAnimation {
                         id: gachaPopAnim
 
-                        // 1. Pop In as Crisp White
+                        // 1. Pop In
                         ParallelAnimation {
                             NumberAnimation { target: wordItem; property: "wordAlpha"; from: 0.0; to: 1.0; duration: 150; easing.type: Easing.OutQuad }
                             NumberAnimation { target: wordItem; property: "wordScale"; from: 0.88; to: 1.06; duration: 180; easing.type: Easing.OutBack; easing.overshoot: 1.20 }
                             PropertyAction { target: wordItem; property: "currentColor"; value: root.colActiveText }
                         }
 
-                        // 2. Settle Scale & Transition White -> Vintage Champagne Gold
+                        // 2. Settle Scale & Transition to Highlight
                         ParallelAnimation {
                             NumberAnimation { target: wordItem; property: "wordScale"; to: 1.0; duration: 140; easing.type: Easing.OutQuad }
                             ColorAnimation { target: wordItem; property: "currentColor"; to: root.colHighlight; duration: 240; easing.type: Easing.InOutQuad }
@@ -147,7 +156,7 @@ Item {
                         if (root.isDead) {
                             wordAlpha = 1.0;
                             wordScale = 1.0;
-                            currentColor = root.colMutedWhite;
+                            currentColor = root.colDeadText;
                             isSung = true;
                         } else if (shouldBeSung) {
                             wordAlpha = 1.0;
@@ -162,33 +171,89 @@ Item {
                         }
                     }
 
-                    // Layer 1: Ambient Diffuse Drop Shadow (Deep atmosphere, no harsh stroke)
+                    // Layer 1: Ambient Diffuse Halo (when isLightArea: multi-angle backlight glow)
                     Text {
-                        id: shadowAmbient
+                        id: shadowHaloTL
+                        visible: root.isLightArea
                         anchors.centerIn: parent
-                        anchors.verticalCenterOffset: 3.0
+                        anchors.horizontalCenterOffset: -1.2
+                        anchors.verticalCenterOffset: -1.2
                         text: modelData.word
                         font.family: root.activeFontFamily
                         font.pixelSize: root.fontSize
                         font.bold: false
-                        color: Qt.rgba(0.0, 0.0, 0.0, 0.35)
+                        color: root.colShadowAmbient
+                        style: Text.Normal
+                    }
+                    Text {
+                        id: shadowHaloTR
+                        visible: root.isLightArea
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: 1.2
+                        anchors.verticalCenterOffset: -1.2
+                        text: modelData.word
+                        font.family: root.activeFontFamily
+                        font.pixelSize: root.fontSize
+                        font.bold: false
+                        color: root.colShadowAmbient
+                        style: Text.Normal
+                    }
+                    Text {
+                        id: shadowHaloBL
+                        visible: root.isLightArea
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: -1.2
+                        anchors.verticalCenterOffset: 1.2
+                        text: modelData.word
+                        font.family: root.activeFontFamily
+                        font.pixelSize: root.fontSize
+                        font.bold: false
+                        color: root.colShadowAmbient
+                        style: Text.Normal
+                    }
+                    Text {
+                        id: shadowHaloBR
+                        visible: root.isLightArea
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: 1.2
+                        anchors.verticalCenterOffset: 1.2
+                        text: modelData.word
+                        font.family: root.activeFontFamily
+                        font.pixelSize: root.fontSize
+                        font.bold: false
+                        color: root.colShadowAmbient
                         style: Text.Normal
                     }
 
-                    // Layer 2: Directional Sharp Drop Shadow (High contrast legibility on light/dark backgrounds)
+                    // Layer 1b: Ambient Deep Drop Shadow (when dark area)
+                    Text {
+                        id: shadowAmbientDark
+                        visible: !root.isLightArea
+                        anchors.centerIn: parent
+                        anchors.verticalCenterOffset: 3.5
+                        text: modelData.word
+                        font.family: root.activeFontFamily
+                        font.pixelSize: root.fontSize
+                        font.bold: false
+                        color: root.colShadowAmbient
+                        style: Text.Normal
+                    }
+
+                    // Layer 2: Directional Sharp Drop Shadow
                     Text {
                         id: shadowDirectional
                         anchors.centerIn: parent
-                        anchors.verticalCenterOffset: 1.5
+                        anchors.horizontalCenterOffset: 1.2
+                        anchors.verticalCenterOffset: 1.8
                         text: modelData.word
                         font.family: root.activeFontFamily
                         font.pixelSize: root.fontSize
                         font.bold: false
-                        color: Qt.rgba(0.02, 0.03, 0.05, 0.60)
+                        color: root.colShadowDirectional
                         style: Text.Normal
                     }
 
-                    // Layer 3: Main Pristine Illuminated Word (Razor-sharp Instrument Serif typography)
+                    // Layer 3: Main Pristine Word (Razor-sharp Instrument Serif typography)
                     Text {
                         id: wordTxt
                         anchors.centerIn: parent
@@ -196,7 +261,7 @@ Item {
                         font.family: root.activeFontFamily
                         font.pixelSize: root.fontSize
                         font.bold: false
-                        color: root.isDead ? root.colMutedWhite : wordItem.currentColor
+                        color: root.isDead ? root.colDeadText : (gachaPopAnim.running ? wordItem.currentColor : (wordItem.isSung ? root.colHighlight : root.colActiveText))
                         style: Text.Normal
                     }
                 }

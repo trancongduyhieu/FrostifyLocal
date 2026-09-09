@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Frostify Local - Wallpaper Palette & Local Luminance Extractor
-Extracts 3 high-contrast triad colors (Line 1, Line 2, Flame) and detects
-local luminance at desktop lyrics placement coordinates.
+Frostify Local - Intelligent Adaptive Wallpaper Palette & Luminance Inversion Engine
+Analyzes the desktop wallpaper and local lyric region (x: 14%..52%, y: 69%..77%).
+Detects light vs dark background contrast, extracts harmonic highlight colors,
+and outputs dynamic styling parameters to ~/.config/noctalia/frostify_palette.json.
 """
 
 import sys
@@ -56,104 +57,116 @@ def get_current_wallpaper() -> Path:
     if thumb.exists():
         return thumb
 
-    return None
+    return Path.home() / "Pictures" / "Wallpapers" / "wallhaven_k8d276.jpg"
 
-def rgb_to_hex(r, g, b) -> str:
-    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
-
-def get_luminance(r, g, b) -> float:
-    # Standard sRGB perceptual luminance (0.0 to 1.0)
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-
-def analyze_crop_luminance(img: Image.Image, box_norm: tuple) -> float:
-    """Calculate mean luminance of a normalized bounding box (x1, y1, x2, y2)."""
+def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
+    """Analyze mean luminance and bright pixel ratio of lyric region."""
     w, h = img.size
-    x1 = int(box_norm[0] * w)
-    y1 = int(box_norm[1] * h)
-    x2 = int(box_norm[2] * w)
-    y2 = int(box_norm[3] * h)
+    x1, y1 = int(box_norm[0] * w), int(box_norm[1] * h)
+    x2, y2 = int(box_norm[2] * w), int(box_norm[3] * h)
 
     crop = img.crop((max(0, x1), max(0, y1), min(w, x2), min(h, y2))).convert("RGB")
-    crop_small = crop.resize((32, 16))
-    pixels = list(crop_small.getdata())
+    crop_small = crop.resize((48, 24))
+    pixels = list(crop_small.convert("RGB").getdata())
     if not pixels:
-        return 0.5
-    total_lum = sum(get_luminance(r, g, b) for r, g, b in pixels)
-    return total_lum / len(pixels)
+        return 0.3, 0.0, False
 
-def extract_triad_palette(img: Image.Image):
-    """
-    Extract 3 harmonious, high-contrast colors from wallpaper:
-    1. Line 1 Accent (Warm / Ruby / Crimson tone or primary distinct hue)
-    2. Line 2 Accent (Cool / Cyan / Azure tone or secondary distinct hue)
-    3. Flame Ignition Burst (High vibrancy, luminous spark/ember color)
-    """
-    # Downsample for fast analysis
-    thumb = img.resize((128, 128)).convert("RGB")
-    quantized = thumb.quantize(colors=32, method=Image.Quantize.MEDIANCUT)
-    palette_raw = quantized.getpalette()[: 32 * 3]
-    color_counts = quantized.getcolors()
+    lums = [(0.299 * r + 0.587 * g + 0.114 * b) / 255.0 for r, g, b in pixels]
+    mean_lum = sum(lums) / len(lums)
+    bright_ratio = sum(1 for l in lums if l > 0.55) / len(lums)
+    is_light = (mean_lum > 0.45) or (bright_ratio > 0.20)
 
-    # Sort colors by frequency
-    sorted_colors = sorted(color_counts, key=lambda x: x[0], reverse=True)
+    return round(mean_lum, 3), round(bright_ratio, 3), is_light
 
-    candidates = []
-    for count, idx in sorted_colors:
-        r = palette_raw[idx * 3]
-        g = palette_raw[idx * 3 + 1]
-        b = palette_raw[idx * 3 + 2]
+def extract_adaptive_palette(img: Image.Image, is_light: bool):
+    """Extract aesthetic, readable colors based on wallpaper tone and brightness."""
+    thumb = img.resize((96, 96)).convert("RGB")
+    pixels = list(thumb.getdata())
+
+    # Count hues across color spectrum (0 to 360 deg)
+    hue_counts = {
+        "purple": 0,   # 250 - 330 deg (lilac, violet, magenta)
+        "blue": 0,     # 180 - 250 deg (cyan, azure, navy)
+        "green": 0,    # 80 - 180 deg (emerald, olive, jade)
+        "gold": 0,     # 30 - 65 deg (wheat, amber, champagne)
+        "red": 0,      # 330 - 30 deg (crimson, coral, ruby)
+    }
+
+    saturated_colors = []
+
+    for r, g, b in pixels:
         h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
-        # Score based on count and saturation (we want visible colors, not pure mud)
-        score = (count ** 0.5) * (0.3 + 0.7 * s) * (0.4 + 0.6 * v)
-        candidates.append({
-            "rgb": (r, g, b),
-            "hex": rgb_to_hex(r, g, b),
-            "hsv": (h, s, v),
-            "score": score,
-            "lum": get_luminance(r, g, b)
-        })
+        deg = h * 360
+        if s >= 0.20 and v >= 0.20:
+            saturated_colors.append((r, g, b, h, s, v, deg))
+            if 250 <= deg <= 330:
+                hue_counts["purple"] += 1
+            elif 180 <= deg < 250:
+                hue_counts["blue"] += 1
+            elif 80 <= deg < 180:
+                hue_counts["green"] += 1
+            elif 30 <= deg <= 65:
+                hue_counts["gold"] += 1
+            else:
+                hue_counts["red"] += 1
 
-    # Pick the most vibrant/prominent color
-    vibrant_candidates = [c for c in candidates if c["hsv"][1] > 0.18 and c["hsv"][2] > 0.25]
-    if not vibrant_candidates:
-        vibrant_candidates = candidates
+    # Determine dominant theme
+    total_saturated = len(saturated_colors)
+    top_theme = "warm_classic"
+    if total_saturated > 150:
+        sorted_hues = sorted(hue_counts.items(), key=lambda x: x[1], reverse=True)
+        top_name, top_count = sorted_hues[0]
+        if top_count > total_saturated * 0.22:
+            top_theme = top_name
 
-    # 1. Line 1 Accent: First vibrant color
-    c1 = vibrant_candidates[0]
+    # Theme-specific color mappings
+    if top_theme == "purple":
+        dark_hl = "#d8b4fe"   # Luminous Lilac
+        light_hl = "#7e22ce"  # Royal Purple Jewel Tone
+    elif top_theme == "blue":
+        dark_hl = "#38bdf8"   # Electric Cyan
+        light_hl = "#1d4ed8"  # Cobalt Sapphire
+    elif top_theme == "green":
+        dark_hl = "#34d399"   # Luminous Jade
+        light_hl = "#047857"  # Deep Emerald
+    elif top_theme == "gold":
+        dark_hl = "#deb06c"   # Vintage Champagne Gold
+        light_hl = "#b45309"  # Rich Warm Amber Gold
+    elif top_theme == "red":
+        dark_hl = "#fb7185"   # Luminous Rose Coral
+        light_hl = "#be123c"  # Deep Ruby Crimson
+    else:
+        dark_hl = "#deb06c"   # Classic Champagne Gold
+        light_hl = "#b45309"  # Rich Warm Amber Gold
 
-    # 2. Line 2 Accent: Color with the largest angular hue distance from c1
-    c2 = None
-    max_hue_dist = -1
-    for c in vibrant_candidates:
-        hue_dist = abs(c["hsv"][0] - c1["hsv"][0])
-        if hue_dist > 0.5:
-            hue_dist = 1.0 - hue_dist
-        if hue_dist > max_hue_dist and hue_dist > 0.12:
-            max_hue_dist = hue_dist
-            c2 = c
+    if is_light:
+        # LIGHT AREA: Dark Ink typography with soft white halo
+        base_text = "#0f172a"       # Deep Slate Ink
+        hl_color = light_hl         # Rich vibrant jewel tone
+        dead_text = "#475569"       # Muted slate
+        shadow_dir = "#33000000"    # Soft directional shadow
+        shadow_amb = "#b3ffffff"    # 70% soft white halo for crisp separation
+    else:
+        # DARK AREA: Luminous typography with deep ambient drop shadow
+        base_text = "#f8fafc"       # Crisp Pure White
+        hl_color = dark_hl          # Luminous vibrant accent
+        dead_text = "#cbd5e1"       # Soft misty white
+        shadow_dir = "#a6020305"    # 65% deep dark
+        shadow_amb = "#66000000"    # 40% black
 
-    if c2 is None:
-        # Fallback: synthesize complementary triad if wallpaper is monochromatic
-        h2 = (c1["hsv"][0] + 0.45) % 1.0
-        r2, g2, b2 = colorsys.hsv_to_rgb(h2, max(0.45, c1["hsv"][1]), max(0.70, c1["hsv"][2]))
-        c2 = {
-            "rgb": (int(r2 * 255), int(g2 * 255), int(b2 * 255)),
-            "hex": rgb_to_hex(r2 * 255, g2 * 255, b2 * 255),
-            "hsv": (h2, c1["hsv"][1], c1["hsv"][2]),
-            "lum": get_luminance(r2 * 255, g2 * 255, b2 * 255)
-        }
-
-    # 3. Flame Color: High-luminance fire/ignition spark (Golden Amber / Radiant Flame)
-    flame_hue = (c1["hsv"][0] + 0.18) % 1.0
-    rf, gf, bf = colorsys.hsv_to_rgb(flame_hue, 0.85, 0.98)
-    flame_hex = rgb_to_hex(rf * 255, gf * 255, bf * 255)
-
-    return c1["hex"], c2["hex"], flame_hex
+    return {
+        "theme": top_theme,
+        "isLightArea": is_light,
+        "baseTextColor": base_text,
+        "highlightColor": hl_color,
+        "deadTextColor": dead_text,
+        "shadowDirectional": shadow_dir,
+        "shadowAmbient": shadow_amb
+    }
 
 def main():
     wp_path = get_current_wallpaper()
     if not wp_path or not wp_path.exists():
-        print("Warning: Wallpaper not found, using default radiant palette.", file=sys.stderr)
         wp_path = Path.home() / "Pictures" / "Wallpapers" / "wallhaven_k8d276.jpg"
 
     print(f"Analyzing wallpaper: {wp_path}")
@@ -174,65 +187,32 @@ def main():
         print(f"Error opening image {img_to_open}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Coordinates for Line 1 (x: ~14% to ~50%, y: ~77% to ~86%)
-    # Coordinates for Line 2 (x: ~25% to ~61%, y: ~87% to ~96%)
-    line1_lum = analyze_crop_luminance(img, (0.13, 0.77, 0.50, 0.86))
-    line2_lum = analyze_crop_luminance(img, (0.24, 0.87, 0.61, 0.96))
+    mean_lum, bright_ratio, is_light = analyze_crop(img, (0.14, 0.69, 0.52, 0.77))
+    palette_info = extract_adaptive_palette(img, is_light)
 
-    line1_is_light = line1_lum > 0.52
-    line2_is_light = line2_lum > 0.52
-
-    line1_color, line2_color, flame_color = extract_triad_palette(img)
-
-    # Noctalia wallbash fallback check
-    wallbash_file = Path.home() / ".config" / "noctalia" / "wallbash_colors.json"
-    if wallbash_file.exists():
-        try:
-            wb = json.loads(wallbash_file.read_text())
-            if wb.get("mError"):
-                line1_color = wb["mError"]
-            if wb.get("mOnSurfaceVariant"):
-                line2_color = wb["mOnSurfaceVariant"]
-        except Exception:
-            pass
-
-    palette_data = {
+    result = {
         "wallpaper": str(wp_path),
-        "line1Color": line1_color,
-        "line2Color": line2_color,
-        "flameColor": flame_color,
-        "line1Luminance": round(line1_lum, 3),
-        "line2Luminance": round(line2_lum, 3),
-        "line1IsLightArea": line1_is_light,
-        "line2IsLightArea": line2_is_light,
-        "lightAreaStyle": {
-            "textColor": "#0c0e12",
-            "outlineColor": "#ffffff",
-            "activeAura": line1_color,
-            "runeColor": line1_color
-        },
-        "darkAreaStyle": {
-            "textColor": "#ffffff",
-            "outlineColor": "#08090c",
-            "activeAura": line1_color,
-            "runeColor": line1_color
-        }
+        "meanLuminance": mean_lum,
+        "brightRatio": bright_ratio,
+        "isLightArea": palette_info["isLightArea"],
+        "theme": palette_info["theme"],
+        "baseTextColor": palette_info["baseTextColor"],
+        "highlightColor": palette_info["highlightColor"],
+        "deadTextColor": palette_info["deadTextColor"],
+        "shadowDirectional": palette_info["shadowDirectional"],
+        "shadowAmbient": palette_info["shadowAmbient"]
     }
 
-    # Save to ~/.config/noctalia/frostify_palette.json
-    out_dir = Path.home() / ".config" / "noctalia"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "frostify_palette.json"
-    out_file.write_text(json.dumps(palette_data, indent=2))
+    out_file = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
-    # Also save to project assets for local fallback
-    script_dir = Path(__file__).resolve().parent.parent
-    local_out = script_dir / "assets" / "frostify_palette.json"
+    local_out = Path(__file__).resolve().parent.parent / "assets" / "frostify_palette.json"
     local_out.parent.mkdir(parents=True, exist_ok=True)
-    local_out.write_text(json.dumps(palette_data, indent=2))
+    local_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     print(f"Successfully generated palette at {out_file}")
-    print(json.dumps(palette_data, indent=2))
+    print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
     main()

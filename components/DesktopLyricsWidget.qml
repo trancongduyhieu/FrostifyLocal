@@ -39,8 +39,68 @@ PanelWindow {
 
     readonly property string magicFontFamily: (instrumentSerifFont.status === FontLoader.Ready && instrumentSerifFont.name !== "") ? instrumentSerifFont.name : "Instrument Serif"
 
-    // Palette & Colors: Sophisticated Vintage Champagne Gold
-    readonly property color colHighlight: "#deb06c"
+    // =========================================================================
+    // Dynamic Adaptive Palette Engine (Auto-syncs with active wallpaper)
+    // =========================================================================
+    property var frostifyPalette: ({
+        "isLightArea": false,
+        "baseTextColor": "#f8fafc",
+        "highlightColor": "#deb06c",
+        "deadTextColor": "#cbd5e1",
+        "shadowDirectional": "#a6020305",
+        "shadowAmbient": "#66000000"
+    })
+
+    Timer {
+        id: delayedPaletteRead
+        interval: 80
+        repeat: false
+        running: false
+        onTriggered: {
+            if (frostifyPaletteFile.loaded) {
+                parseFrostifyPalette(frostifyPaletteFile.text());
+            }
+        }
+    }
+
+    FileView {
+        id: frostifyPaletteFile
+        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_palette.json"
+        watchChanges: true
+        onFileChanged: {
+            this.reload();
+            delayedPaletteRead.start();
+        }
+        onLoadedChanged: {
+            if (this.loaded) {
+                parseFrostifyPalette(this.text());
+            }
+        }
+        Component.onCompleted: {
+            if (this.loaded) {
+                parseFrostifyPalette(this.text());
+            }
+        }
+    }
+
+    function parseFrostifyPalette(raw) {
+        if (!raw || raw.trim() === "") return;
+        try {
+            var obj = JSON.parse(raw);
+            var updated = Object.assign({}, root.frostifyPalette);
+            for (var k in obj) {
+                updated[k] = obj[k];
+            }
+            root.frostifyPalette = updated;
+        } catch(e) {}
+    }
+
+    readonly property color colHighlight: root.frostifyPalette.highlightColor || "#deb06c"
+    readonly property color colActiveText: root.frostifyPalette.baseTextColor || "#f8fafc"
+    readonly property color colDeadText: root.frostifyPalette.deadTextColor || "#cbd5e1"
+    readonly property color colShadowDir: root.frostifyPalette.shadowDirectional || "#a6020305"
+    readonly property color colShadowAmb: root.frostifyPalette.shadowAmbient || "#66000000"
+    readonly property bool isLightArea: !!root.frostifyPalette.isLightArea
 
     // =========================================================================
     // Synchronized Timing Engine (Single Line Active + Deep Languid Exiting Fade)
@@ -134,6 +194,11 @@ PanelWindow {
                 fontFamily: root.magicFontFamily
                 fontSize: 35
                 colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colDeadText: root.colDeadText
+                colShadowDirectional: root.colShadowDir
+                colShadowAmbient: root.colShadowAmb
+                isLightArea: root.isLightArea
             }
 
             SequentialAnimation {
@@ -189,7 +254,7 @@ PanelWindow {
 
         // =========================================================================
         // ACTIVE LYRIC LINE: 1-Line only, raised to lap/skirt area (y ≈ 72.5%)
-        // Words pop in White -> shift to Vintage Champagne Gold (#deb06c)
+        // Words pop in Base Color -> shift to Adaptive Highlight Color
         // =========================================================================
         Item {
             id: activeContainer
@@ -208,6 +273,11 @@ PanelWindow {
                 fontFamily: root.magicFontFamily
                 fontSize: 35
                 colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colDeadText: root.colDeadText
+                colShadowDirectional: root.colShadowDir
+                colShadowAmbient: root.colShadowAmb
+                isLightArea: root.isLightArea
             }
         }
     }
