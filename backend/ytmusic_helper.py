@@ -193,16 +193,16 @@ def get_recent_seed_track():
 
 DEFAULT_MOOD_PILLS = [
     {"title": "All", "params": ""},
-    {"title": "Relax", "params": "ggMPOg1uX1JOQWZFeDByc2Jm"},
-    {"title": "Sleep", "params": "ggMPOg1uX1MxaFQ3Z0JMZkN4"},
-    {"title": "Energize", "params": "ggMPOg1uX2lRZUZiMnNrQnJW"},
-    {"title": "Sad", "params": "ggMPOg1uX3NISTh4UmtWcFgz"},
-    {"title": "Romance", "params": "ggMPOg1uX1JCQnB2QXVYVEIz"},
-    {"title": "Feel good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3"},
-    {"title": "Workout", "params": "ggMPOg1uXzIxYkNac21YZ2Z0"},
-    {"title": "Party", "params": "ggMPOg1uX2w1aW1CRDFTSUNo"},
-    {"title": "Commute", "params": "ggMPOg1uX044Z2o5WERLckpU"},
-    {"title": "Focus", "params": "ggMPOg1uX0NvNGNhWThMYWRh"}
+    {"title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB"},
+    {"title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB"},
+    {"title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB"},
+    {"title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD"}
 ]
 
 def get_mood_categories_live():
@@ -212,6 +212,11 @@ def get_mood_categories_live():
     return DEFAULT_MOOD_PILLS
 
 def get_personalized_home():
+    cached = load_json(HOME_CACHE_FILE, None)
+    if cached and (time.time() - cached.get("timestamp", 0)) < 1800:
+        if cached.get("quick_picks") or cached.get("featured_playlists"):
+            return cached
+
     yt = get_ytmusic_client()
     quick_picks = []
     featured_playlists = []
@@ -339,10 +344,22 @@ def get_personalized_home():
 
     cache_online_tracks(quick_picks)
 
+    # Load all existing cached moods from ~/.cache/frostify/moods/ into preloaded_moods for 0ms QML startup
+    preloaded = {}
+    if os.path.exists(MOOD_CACHE_DIR):
+        for f in os.listdir(MOOD_CACHE_DIR):
+            if f.endswith(".json"):
+                m_data = load_json(os.path.join(MOOD_CACHE_DIR, f))
+                if m_data and (m_data.get("quick_picks") or m_data.get("featured_playlists")):
+                    m_title = f.split("_")[0]
+                    preloaded[m_title] = m_data
+
     res = {
+        "timestamp": time.time(),
         "moods": mood_pills,
-        "quick_picks": quick_picks[:12],
-        "featured_playlists": featured_playlists[:14]
+        "quick_picks": quick_picks[:16],
+        "featured_playlists": featured_playlists[:40],
+        "preloaded_moods": preloaded
     }
     save_json(HOME_CACHE_FILE, res)
 
@@ -381,7 +398,123 @@ def get_radio(video_id, limit=30):
         sys.stderr.write(f"[get_radio error for {video_id}]: {e}\n")
         return []
 
+def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max_qp=30, max_fp=60):
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if "musicResponsiveListItemRenderer" in it:
+            r = it["musicResponsiveListItemRenderer"]
+            vid = r.get("playlistItemData", {}).get("videoId")
+            cols = r.get("flexColumns", [])
+            title_text = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
+            artist = ""
+            if len(cols) > 1:
+                artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+            thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+            thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+            if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+            if vid and title_text and len(quick_picks) < max_qp:
+                if not any(q.get("videoId") == vid for q in quick_picks):
+                    quick_picks.append({
+                        "id": f"yt_{vid}",
+                        "title": title_text,
+                        "name": title_text,
+                        "artist": artist or "YouTube Music",
+                        "source": "YouTube Music",
+                        "path": f"ytdl://{vid}",
+                        "videoId": vid,
+                        "duration": "--:--",
+                        "durationMs": 0,
+                        "image": thumb_url
+                    })
+        elif "musicTwoRowItemRenderer" in it:
+            r = it["musicTwoRowItemRenderer"]
+            t_text = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
+            sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+            thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+            thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+            if "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+
+            nav_ep = r.get("navigationEndpoint", {})
+            watch_ep = nav_ep.get("watchEndpoint", {})
+            browse_ep = nav_ep.get("browseEndpoint", {})
+
+            vid = watch_ep.get("videoId")
+            pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
+
+            if vid and (not pl_id or "listen again" in shelf_title.lower()):
+                if len(quick_picks) < max_qp and not any(q.get("videoId") == vid for q in quick_picks):
+                    quick_picks.append({
+                        "id": f"yt_{vid}",
+                        "title": t_text,
+                        "name": t_text,
+                        "artist": sub or "YouTube Music",
+                        "source": "YouTube Music",
+                        "path": f"ytdl://{vid}",
+                        "videoId": vid,
+                        "duration": "--:--",
+                        "durationMs": 0,
+                        "image": thumb_url
+                    })
+            elif pl_id and t_text and thumb_url:
+                if len(featured_playlists) < max_fp and not any(p.get("title") == t_text for p in featured_playlists):
+                    featured_playlists.append({
+                        "id": pl_id,
+                        "playlistId": pl_id,
+                        "title": t_text,
+                        "subtitle": sub or shelf_title or "Playlist",
+                        "image": thumb_url
+                    })
+        elif isinstance(it, dict) and (it.get("playlistId") or it.get("browseId")):
+            pl_id = it.get("playlistId") or it.get("browseId")
+            t_text = it.get("title", "")
+            thumbs = it.get("thumbnails", [])
+            thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+            if "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+            if pl_id and t_text and thumb_url:
+                if len(featured_playlists) < max_fp and not any(p.get("title") == t_text for p in featured_playlists):
+                    featured_playlists.append({
+                        "id": pl_id,
+                        "playlistId": pl_id,
+                        "title": t_text,
+                        "subtitle": it.get("description") or shelf_title or "Playlist",
+                        "image": thumb_url
+                    })
+        elif isinstance(it, dict) and it.get("videoId"):
+            vid = it.get("videoId")
+            t_text = it.get("title", "")
+            artist = ", ".join(a.get("name", "") for a in it.get("artists", [])) if it.get("artists") else ""
+            thumbs = it.get("thumbnails", [])
+            thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+            if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+            if vid and t_text and len(quick_picks) < max_qp:
+                if not any(q.get("videoId") == vid for q in quick_picks):
+                    quick_picks.append({
+                        "id": f"yt_{vid}",
+                        "title": t_text,
+                        "name": t_text,
+                        "artist": artist or shelf_title or "YouTube Music",
+                        "source": "YouTube Music",
+                        "path": f"ytdl://{vid}",
+                        "videoId": vid,
+                        "duration": "--:--",
+                        "durationMs": 0,
+                        "image": thumb_url
+                    })
+
 def get_mood_feed(params, title=""):
+    if (not params or params == "") and title and title != "All":
+        cats = get_mood_categories_live()
+        for c in cats:
+            if c.get("title", "").lower() == title.lower():
+                params = c.get("params", "")
+                break
+
     if not params or title == "All":
         return get_personalized_home()
 
@@ -401,88 +534,35 @@ def get_mood_feed(params, title=""):
 
     try:
         # Native personalized mood browse via FEmusic_home with params
-        res = yt._send_request("browse", {"browseId": "FEmusic_home", "params": params})
-        sections = res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+        endpoint = "browse"
+        body = {"browseId": "FEmusic_home", "params": params}
+        res = yt._send_request(endpoint, body)
 
-        for s in sections:
+        # 1. Process initial sections
+        raw_sections = res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+        for s in raw_sections:
             shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
             if not shelf:
                 continue
             header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
             shelf_title = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
-            items = shelf.get("contents", [])
+            _process_mood_items(shelf.get("contents", []), shelf_title, quick_picks, featured_playlists)
 
-            for it in items:
-                # Case 1: musicResponsiveListItemRenderer (Quick picks for this mood)
-                if "musicResponsiveListItemRenderer" in it:
-                    r = it["musicResponsiveListItemRenderer"]
-                    vid = r.get("playlistItemData", {}).get("videoId")
-                    cols = r.get("flexColumns", [])
-                    title_text = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
-                    artist = ""
-                    if len(cols) > 1:
-                        artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
-                        artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
-                    thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-                    thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
-                    if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-                    if vid and title_text and len(quick_picks) < 24:
-                        if not any(q.get("videoId") == vid for q in quick_picks):
-                            quick_picks.append({
-                                "id": f"yt_{vid}",
-                                "title": title_text,
-                                "name": title_text,
-                                "artist": artist or "YouTube Music",
-                                "source": "YouTube Music",
-                                "path": f"ytdl://{vid}",
-                                "videoId": vid,
-                                "duration": "--:--",
-                                "durationMs": 0,
-                                "image": thumb_url
-                            })
+        # 2. Process continuation sections (SimpMusic continuation scraper for 50+ playlists)
+        from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
+        from ytmusicapi.parsers.browsing import parse_mixed_content
+        from ytmusicapi.continuations import get_continuations
 
-                # Case 2: musicTwoRowItemRenderer (Listen again, Mixes, Playlists)
-                elif "musicTwoRowItemRenderer" in it:
-                    r = it["musicTwoRowItemRenderer"]
-                    t_text = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
-                    sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
-                    thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-                    thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-                    if "w120" in thumb_url or "w226" in thumb_url:
-                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-
-                    nav_ep = r.get("navigationEndpoint", {})
-                    watch_ep = nav_ep.get("watchEndpoint", {})
-                    browse_ep = nav_ep.get("browseEndpoint", {})
-
-                    vid = watch_ep.get("videoId")
-                    pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
-
-                    # If watchEndpoint has videoId and is in "Listen again", it's a personalized track!
-                    if vid and (not pl_id or "listen again" in shelf_title.lower()):
-                        if len(quick_picks) < 24 and not any(q.get("videoId") == vid for q in quick_picks):
-                            quick_picks.append({
-                                "id": f"yt_{vid}",
-                                "title": t_text,
-                                "name": t_text,
-                                "artist": sub or "YouTube Music",
-                                "source": "YouTube Music",
-                                "path": f"ytdl://{vid}",
-                                "videoId": vid,
-                                "duration": "--:--",
-                                "durationMs": 0,
-                                "image": thumb_url
-                            })
-                    elif pl_id and t_text and thumb_url:
-                        if len(featured_playlists) < 18 and not any(p.get("title") == t_text for p in featured_playlists):
-                            featured_playlists.append({
-                                "id": pl_id,
-                                "playlistId": pl_id,
-                                "title": t_text,
-                                "subtitle": sub or shelf_title or "Playlist",
-                                "image": thumb_url
-                            })
+        section_list = nav(res, [*SINGLE_COLUMN_TAB, "sectionListRenderer"], True)
+        if section_list and "continuations" in section_list:
+            try:
+                request_func = lambda additionalParams: yt._send_request(endpoint, body, additionalParams)
+                conts = get_continuations(section_list, "sectionListContinuation", 10, request_func, parse_mixed_content)
+                for c_sec in conts:
+                    c_title = c_sec.get("title", "")
+                    _process_mood_items(c_sec.get("contents", []), c_title, quick_picks, featured_playlists)
+            except Exception as e:
+                sys.stderr.write(f"[continuations error for {title}]: {e}\n")
     except Exception as e:
         sys.stderr.write(f"[personalized mood browse error for {title}]: {e}\n")
 
@@ -523,8 +603,8 @@ def get_mood_feed(params, title=""):
 
     result = {
         "timestamp": time.time(),
-        "quick_picks": quick_picks[:12],
-        "featured_playlists": featured_playlists[:14]
+        "quick_picks": quick_picks[:30],
+        "featured_playlists": featured_playlists[:60]
     }
     save_json(cache_path, result)
     return result

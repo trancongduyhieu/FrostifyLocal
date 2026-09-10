@@ -76,16 +76,16 @@ Rectangle {
                         Repeater {
                             model: root.moods.length > 0 ? root.moods : [
                                 { "title": "All", "params": "" },
-                                { "title": "Chill", "params": "ggMPOg1uX1JOQWZFeDByc2Jm" },
-                                { "title": "Sleep", "params": "ggMPOg1uX1MxaFQ3Z0JMZkN4" },
-                                { "title": "Energize", "params": "ggMPOg1uX2lRZUZiMnNrQnJW" },
-                                { "title": "Sad", "params": "ggMPOg1uX3NISTh4UmtWcFgz" },
-                                { "title": "Romance", "params": "ggMPOg1uX1JCQnB2QXVYVEIz" },
-                                { "title": "Feel good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3" },
-                                { "title": "Workout", "params": "ggMPOg1uXzIxYkNac21YZ2Z0" },
-                                { "title": "Party", "params": "ggMPOg1uX2w1aW1CRDFTSUNo" },
-                                { "title": "Commute", "params": "ggMPOg1uX044Z2o5WERLckpU" },
-                                { "title": "Focus", "params": "ggMPOg1uX0NvNGNhWThMYWRh" }
+                                { "title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB" },
+                                { "title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB" },
+                                { "title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB" },
+                                { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
                             ]
 
                             Rectangle {
@@ -158,7 +158,7 @@ Rectangle {
                     columnSpacing: 12
 
                     Repeater {
-                        model: root.quickPicks.slice(0, 12)
+                        model: root.quickPicks.slice(0, 18)
 
                         Rectangle {
                             Layout.fillWidth: true

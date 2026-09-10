@@ -30,9 +30,54 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/api/auth/status":
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query = parse_qs(parsed_url.query)
+
+        if path == "/api/auth/status":
             st = ytmusic_helper.get_auth_status()
             payload = json.dumps(st, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif path == "/api/mood":
+            params = query.get("params", [""])[0]
+            title = query.get("title", [""])[0]
+            data = ytmusic_helper.get_mood_feed(params, title)
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif path == "/api/home":
+            data = ytmusic_helper.get_personalized_home()
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif path == "/api/suggestions":
+            q = query.get("q", [""])[0]
+            data = ytmusic_helper.get_search_suggestions(q)
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif path == "/api/playlist":
+            pl_id = query.get("id", [""])[0]
+            data = ytmusic_helper.get_playlist_tracks(pl_id)
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json")

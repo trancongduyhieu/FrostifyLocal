@@ -42,6 +42,7 @@ Scope {
     property var homeQuickPicks: []
     property var homeFeaturedPlaylists: []
     property bool isLoadingHome: false
+    property string activePlaylistId: ""
 
     property real trackChangeTimestamp: 0
     property var moodCache: ({})
@@ -192,6 +193,11 @@ Scope {
                         quick_picks: win.homeQuickPicks,
                         featured_playlists: win.homeFeaturedPlaylists
                     };
+                    if (res.preloaded_moods) {
+                        for (var m in res.preloaded_moods) {
+                            win.moodCache[m] = res.preloaded_moods[m];
+                        }
+                    }
                 } catch(e) {
                     console.log("homeProc parse error:", e);
                 } finally {
@@ -408,6 +414,7 @@ Scope {
 
     function loadPlaylistTracks(pl) {
         if (!pl || !pl.playlistId) return;
+        win.activePlaylistId = pl.playlistId || pl.id || "";
         if (win.currentView !== "search" && win.currentView !== "playlist") {
             win.previousView = win.currentView;
         }
@@ -520,6 +527,11 @@ Scope {
                     Layout.maximumWidth: visible ? 240 : 0
                     Layout.minimumWidth: visible ? 240 : 0
                     playlists: win.playlists
+                    onlinePlaylists: win.homeFeaturedPlaylists
+                    queueTracks: win.currentTracks
+                    currentTrack: win.currentTrack
+                    isPlaying: win.isPlaying
+                    activePlaylistId: win.activePlaylistId
                     selectedIndex: win.selectedPlaylistIndex
                     currentView: win.currentView
                     visible: !win.showAmberolDetails || win.width >= 900
@@ -540,11 +552,26 @@ Scope {
                         settingsModal.visible = true;
                     }
                     onPlaylistSelected: (idx, pl) => {
-                        if (win.currentView !== "library") win.previousView = win.currentView;
-                        win.currentView = "library";
-                        win.selectedPlaylistIndex = idx;
-                        win.selectPlaylist(pl.id);
+                        if (pl && pl.playlistId) {
+                            win.loadPlaylistTracks(pl);
+                        } else {
+                            if (win.currentView !== "library") win.previousView = win.currentView;
+                            win.currentView = "library";
+                            win.selectedPlaylistIndex = idx;
+                            if (pl && pl.id) win.selectPlaylist(pl.id);
+                        }
                         if (win.width < 1020) win.showAmberolDetails = false;
+                    }
+                    onOnlinePlaylistSelected: pl => {
+                        win.loadPlaylistTracks(pl);
+                        if (win.width < 1020) win.showAmberolDetails = false;
+                    }
+                    onTrackSelected: trk => {
+                        if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
+                            win.playOnlineTrack(trk);
+                        } else {
+                            win.playTrack(trk);
+                        }
                     }
                 }
 
@@ -628,11 +655,17 @@ Scope {
                 isShuffle: win.isShuffle
                 isRepeat: win.isRepeat
                 isLyricsActive: win.showAmberolDetails
-                isQueueActive: win.showAmberolDetails
+                isQueueActive: leftSidebar.sidebarTab === "queue"
 
                 onPlayPauseClicked: win.togglePlay()
                 onNextClicked: win.playNext()
                 onPrevClicked: win.playPrev()
+                onOpenDetailsRequested: {
+                    win.showAmberolDetails = !win.showAmberolDetails;
+                }
+                onQueueClicked: {
+                    leftSidebar.sidebarTab = (leftSidebar.sidebarTab === "queue" ? "playlists" : "queue");
+                }
                 onToggleShuffle: {
                     win.isShuffle = !win.isShuffle;
                     win.saveSettings();
@@ -643,7 +676,6 @@ Scope {
                 }
                 onSeekRequested: sec => win.seekAudio(sec)
                 onReqVolumeChange: vol => win.setVolume(vol)
-                onOpenDetailsRequested: win.showAmberolDetails = !win.showAmberolDetails
             }
         }
 

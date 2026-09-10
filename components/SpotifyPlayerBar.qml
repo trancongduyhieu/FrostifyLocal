@@ -29,6 +29,7 @@ Rectangle {
     signal seekRequested(real seconds)
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
+    signal queueClicked()
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -388,7 +389,7 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openDetailsRequested()
+                    onClicked: root.queueClicked()
                 }
             }
 
