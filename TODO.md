@@ -69,3 +69,36 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
 - [ ] **12. Thiết Kế Bản Sắc Giao Diện Độc Bản (Diverge from Spotify Clone)**
   - *Định hướng*: Từng bước thoát ly bố cục Spotify để phát triển giao diện Anime / Gacha Cyberpunk riêng biệt.
   - *Yêu cầu mỹ thuật*: Tuyệt đối không dùng emoji; dùng icon SVG sắc sảo, hiệu ứng kính mờ (glassmorphism) và ánh sáng phát quang ăn khớp màu hình nền desktop.
+
+- [ ] **13. Thay Đổi Giao Diện Theo Phong Cách MIO (Warm Butter Pastel & Vinyl Player - Đã Chốt Theo Ảnh Đính Kèm)**
+  - *Tham chiếu trực quan*: Thiết kế MIO (`media_1789071007982.png`).
+  - *Bảng màu*: Butter Yellow Pastel (`#FCEEA7` / `#FDF2B8`) làm điểm nhấn, nền kem ấm (`#FFFDF5`), phân vùng điều khiển than chì tối (`#1E1E1E` / `#191919`).
+  - *Đĩa Than Nổi Nghệ Thuật (Vinyl Peek Record)*: Đĩa than đen xoay tròn nhô một nửa ra khỏi bìa Album Art vuông khi đang phát nhạc.
+  - *Đường Phân Cách Lượn Sóng Hữu Cơ (Organic Wavy Divider)*: Đường cong mềm mại ngăn cách giữa khu vực nội dung và thanh điều khiển bên dưới.
+  - *Thanh Sóng Âm Trực Quan (Soundwave Visualizer)*: Bộ equalizer sóng âm (`||| | | |||`) tích hợp trực tiếp ngay trong thanh player bar cạnh nút Play/Pause.
+  - *Tabs Điều Hướng Nghệ Thuật*: Phân nhóm "BY ALBUM", "BY PLAYLIST", "BY ARTIST" kèm avatar nghệ sĩ tròn viền tối giản.
+
+- [ ] **14. Đồng Bộ Lịch Sử Nghe Nhạc Lên YouTube Music (Watch History & Playback Tracking Sync)**
+  - *Mục tiêu*: Gửi lượt nghe thực tế của người dùng từ Frostify Local lên YouTube Music để YouTube tính lượt xem/nghe, kích hoạt lại mục "Listen again" (Nghe lại) và tối ưu hóa thuật toán gợi ý trang chủ.
+  - *Kỹ thuật*: 
+    - Gọi `ytmusicapi.get_song(videoId)` để lấy `playbackTracking`.
+    - Gửi request đến `videostatsPlaybackUrl` và `videostatsWatchtimeUrl` với tham số `cpn`, `c: "WEB_REMIX"` (hoặc dùng hàm `ytmusic.add_history_item(song)`).
+    - Hỗ trợ switch cấu hình bật/tắt đồng bộ (`sendBackToGoogle`) trong Settings.
+  - *Quy trình*: Đang thực hiện phỏng vấn thiết kế chi tiết qua `/grill-me`.
+
+- [ ] **15. Mở Rộng Tìm Kiếm Đa Phân Loại: Kệ Album, Nghệ Sĩ & Bài Hát Liên Quan (Categorized Search)**
+  - *Hiện trạng*: Tìm kiếm YouTube Music hiện tại chỉ trả về danh sách các bài hát đơn lẻ.
+  - *Nâng cấp*: Phân loại kết quả tìm kiếm theo `resultType` (hoặc truy vấn kết hợp Songs, Albums, Artists):
+    - **Top Result**: Kết quả trùng khớp nhất dạng Banner/Card lớn.
+    - **Songs**: Lưới danh sách bài hát có thể click nghe ngay.
+    - **Albums**: Kệ ngang các Album liên quan trực tiếp đến từ khóa tìm kiếm (bấm vào mở danh sách bài trong album).
+    - **Artists & Playlists**: Kệ các Playlist tổng hợp và kênh nghệ sĩ chính thức.
+
+- [ ] **16. Tab Artwork: Hiển Thị Chi Tiết Nghệ Sĩ, Lượt Xem/Thích/Không Thích & Mô Tả Bài Hát (SimpMusic Metadata Inspector)**
+  - *Mục tiêu*: Biến tab Artwork trong `AmberolDetailView` thành bảng thông tin chi tiết bài hát chuyên nghiệp như SimpMusic.
+  - *Dữ liệu tích hợp*:
+    - Tên nghệ sĩ kèm số lượng người đăng ký (Subscribers count, ví dụ: "mindfreakkk • 120K subscribers").
+    - Thời gian phát hành / Ngày tải lên (Publish / Upload Date).
+    - Lượt xem (View count), lượt thích (Like count).
+    - Lượt không thích (Dislike count - tích hợp API `https://returnyoutubedislikeapi.com/Votes?videoId={videoId}`).
+    - Mô tả bài hát (Song description / Credits / Lyrics text nếu có).
