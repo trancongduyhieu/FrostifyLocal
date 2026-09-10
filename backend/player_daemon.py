@@ -38,7 +38,9 @@ def ensure_mpv():
         "--no-video",
         f"--input-ipc-server={MPV_SOCKET}",
         "--audio-buffer=0.2",
-        "--title=frostify-audio"
+        "--title=frostify-audio",
+        "--loop-playlist=inf",
+        "--gapless-audio=yes"
     ]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
@@ -84,8 +86,35 @@ def main():
     if action == "play" and len(sys.argv) > 2:
         file_path = sys.argv[2]
         send_mpv_cmd(["loadfile", file_path, "replace"])
+        send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
         print("Playing:", file_path)
+
+    elif action == "next":
+        send_mpv_cmd(["playlist-next"])
+        print("Next track")
+
+    elif action == "prev":
+        send_mpv_cmd(["playlist-prev"])
+        print("Previous track")
+
+    elif action == "set_playlist" and len(sys.argv) > 2:
+        idx = int(sys.argv[2])
+        m3u_file = "/tmp/frostify_playlist.m3u"
+        if len(sys.argv) > 3:
+            try:
+                tracks = json.loads(sys.argv[3])
+                with open(m3u_file, "w", encoding="utf-8") as f:
+                    for t in tracks:
+                        f.write(t + "\n")
+            except Exception as e:
+                pass
+        if os.path.exists(m3u_file):
+            send_mpv_cmd(["loadlist", m3u_file, "replace"])
+            send_mpv_cmd(["set_property", "loop-playlist", "inf"])
+            send_mpv_cmd(["playlist-play-index", idx])
+            send_mpv_cmd(["set_property", "pause", False])
+            print("Set playlist and playing index:", idx)
 
     elif action == "toggle":
         is_paused = get_mpv_property("pause")

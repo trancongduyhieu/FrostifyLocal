@@ -15,6 +15,11 @@ Scope {
         implicitWidth: 1280
         implicitHeight: 820
         color: "transparent"
+        visible: true
+
+        onClosed: {
+            win.visible = false;
+        }
 
         property var activeLyrics: amberolView.activeLyrics
 
@@ -200,7 +205,16 @@ Scope {
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
 
-        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path];
+        var curIdx = win.currentTracks.findIndex(t => t.path === trk.path);
+        if (curIdx < 0) curIdx = 0;
+
+        var paths = [];
+        for (var i = 0; i < win.currentTracks.length; i++) {
+            if (win.currentTracks[i] && win.currentTracks[i].path) {
+                paths.push(win.currentTracks[i].path);
+            }
+        }
+        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)];
         playerCmd.running = true;
     }
 
@@ -302,6 +316,19 @@ Scope {
         }
     }
     } // end win (FloatingWindow)
+
+    IpcHandler {
+        target: "frostify"
+        function openWindow() {
+            win.visible = true;
+        }
+        function closeWindow() {
+            win.visible = false;
+        }
+        function toggle() {
+            win.visible = !win.visible;
+        }
+    }
 
     // =========================================================================
     // Magical Harry Potter Desktop Lyrics Widget on Maid Skirt (Layer Bottom)
