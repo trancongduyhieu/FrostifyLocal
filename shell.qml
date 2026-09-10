@@ -241,6 +241,32 @@ Scope {
         }
     }
 
+    Process {
+        id: browserLoginProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res.success) {
+                        settingsModal.statusMessage = "Connected as " + (res.name || "Google User") + "!";
+                        win.checkAuthStatus();
+                        win.loadHomeFeed();
+                    } else {
+                        settingsModal.statusMessage = "Login: " + (res.error || "Failed");
+                    }
+                } catch(e) {
+                    settingsModal.statusMessage = "Error: " + e;
+                } finally {
+                    settingsModal.isProcessing = false;
+                }
+            }
+        }
+        onExited: {
+            settingsModal.isProcessing = false;
+        }
+    }
+
     function loadHomeFeed() {
         win.isLoadingHome = true;
         homeProc.running = false;
@@ -256,7 +282,7 @@ Scope {
         }
         win.isLoadingHome = true;
         moodProc.running = false;
-        moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params];
+        moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params, title];
         moodProc.running = true;
     }
 
@@ -504,6 +530,13 @@ Scope {
                 logoutProc.running = false;
                 logoutProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "logout"];
                 logoutProc.running = true;
+            }
+            onLaunchBrowserLoginRequested: {
+                settingsModal.isProcessing = true;
+                settingsModal.statusMessage = "Opening Google login window... Please sign in in the popup.";
+                browserLoginProc.running = false;
+                browserLoginProc.command = ["python3", "-u", win.appDir + "/backend/browser_login.py"];
+                browserLoginProc.running = true;
             }
         }
     }

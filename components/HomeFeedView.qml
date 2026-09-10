@@ -76,14 +76,14 @@ Rectangle {
                         Repeater {
                             model: root.moods.length > 0 ? root.moods : [
                                 { "title": "All", "params": "" },
-                                { "title": "Relax", "params": "ggMPOg1uX1JOQWZFeDByc2Jm" },
-                                { "title": "Sleep", "params": "ggMPOg1uX0h4T0xYVlR1VHRl" },
+                                { "title": "Chill", "params": "ggMPOg1uX1JOQWZFeDByc2Jm" },
+                                { "title": "Sleep", "params": "ggMPOg1uX1MxaFQ3Z0JMZkN4" },
                                 { "title": "Energize", "params": "ggMPOg1uX2lRZUZiMnNrQnJW" },
-                                { "title": "Sad", "params": "ggMPOg1uX3VRaFdQWFFZRFZB" },
-                                { "title": "Romance", "params": "ggMPOg1uX0tEZk5zT2pTUTVF" },
-                                { "title": "Feel Good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3" },
-                                { "title": "Workout", "params": "ggMPOg1uX096TGJvTjVHTVRX" },
-                                { "title": "Party", "params": "ggMPOg1uX2pnU0VjTE5kUVVR" },
+                                { "title": "Sad", "params": "ggMPOg1uX3NISTh4UmtWcFgz" },
+                                { "title": "Romance", "params": "ggMPOg1uX1JCQnB2QXVYVEIz" },
+                                { "title": "Feel good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3" },
+                                { "title": "Workout", "params": "ggMPOg1uXzIxYkNac21YZ2Z0" },
+                                { "title": "Party", "params": "ggMPOg1uX2w1aW1CRDFTSUNo" },
                                 { "title": "Commute", "params": "ggMPOg1uX044Z2o5WERLckpU" },
                                 { "title": "Focus", "params": "ggMPOg1uX0NvNGNhWThMYWRh" }
                             ]
@@ -93,10 +93,8 @@ Rectangle {
                                 height: 32
                                 width: pillTxt.implicitWidth + 24
                                 radius: Theme.radiusPill
-                                color: root.selectedMood === modelData.title ? Theme.accentPill : (pillHover.hovered ? "#333333" : "#242424")
+                                color: root.selectedMood === modelData.title ? Theme.accentPill : (pillMouse.containsMouse ? "#333333" : "#242424")
                                 Behavior on color { ColorAnimation { duration: 100 } }
-
-                                HoverHandler { id: pillHover }
 
                                 Text {
                                     id: pillTxt
@@ -109,7 +107,10 @@ Rectangle {
                                 }
 
                                 MouseArea {
+                                    id: pillMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    preventStealing: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.selectedMood = modelData.title;
@@ -163,10 +164,8 @@ Rectangle {
                             Layout.fillWidth: true
                             height: 56
                             radius: 6
-                            color: qpHover.hovered ? "#282828" : "#1a1a1a"
+                            color: qpMouse.containsMouse ? "#282828" : "#1a1a1a"
                             Behavior on color { ColorAnimation { duration: 100 } }
-
-                            HoverHandler { id: qpHover }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -191,7 +190,7 @@ Rectangle {
                                     Rectangle {
                                         anchors.fill: parent
                                         color: Qt.rgba(0, 0, 0, 0.4)
-                                        visible: qpHover.hovered || (root.currentTrack && root.currentTrack.path === modelData.path)
+                                        visible: qpMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
 
                                         SpotifyIcon {
                                             anchors.centerIn: parent
@@ -231,7 +230,10 @@ Rectangle {
                             }
 
                             MouseArea {
+                                id: qpMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
+                                preventStealing: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.trackPlayRequested(modelData)
                             }
@@ -267,10 +269,8 @@ Rectangle {
                             width: 172
                             height: 240
                             radius: Theme.radiusCard
-                            color: plHover.hovered ? Theme.bgCardHover : Theme.bgCard
+                            color: plMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
                             Behavior on color { ColorAnimation { duration: 120 } }
-
-                            HoverHandler { id: plHover }
 
                             ColumnLayout {
                                 anchors.fill: parent
@@ -300,7 +300,7 @@ Rectangle {
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 8
-                                        visible: plHover.hovered
+                                        visible: plMouse.containsMouse
 
                                         SpotifyIcon {
                                             anchors.centerIn: parent
@@ -338,7 +338,10 @@ Rectangle {
                             }
 
                             MouseArea {
+                                id: plMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
+                                preventStealing: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.playlistSelected(modelData)
                             }

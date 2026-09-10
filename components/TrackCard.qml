@@ -7,7 +7,7 @@ Rectangle {
     width: 176
     height: 250
     radius: Theme.radiusCard
-    color: cardHover.hovered ? Theme.bgCardHover : Theme.bgCard
+    color: cardMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
 
     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -15,8 +15,6 @@ Rectangle {
     property bool isPlaying: false
     signal playRequested(var trk)
     signal detailsRequested(var trk)
-
-    HoverHandler { id: cardHover }
 
     ColumnLayout {
         anchors.fill: parent
@@ -72,8 +70,8 @@ Rectangle {
                 z: 10
 
                 // Fade & Slide up on hover
-                opacity: cardHover.hovered || root.isPlaying ? 1.0 : 0.0
-                y: cardHover.hovered || root.isPlaying ? parent.height - height - 8 : parent.height - height
+                opacity: cardMouse.containsMouse || root.isPlaying ? 1.0 : 0.0
+                y: cardMouse.containsMouse || root.isPlaying ? parent.height - height - 8 : parent.height - height
                 Behavior on opacity { NumberAnimation { duration: 150 } }
                 Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
 
@@ -115,7 +113,10 @@ Rectangle {
     }
 
     MouseArea {
+        id: cardMouse
         anchors.fill: parent
+        hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.PointingHandCursor
         z: 20
         onClicked: root.playRequested(root.track)

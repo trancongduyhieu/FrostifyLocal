@@ -19,6 +19,7 @@ Rectangle {
     signal closeRequested()
     signal connectRequested(string rawAuth)
     signal logoutRequested()
+    signal launchBrowserLoginRequested()
 
     MouseArea {
         anchors.fill: parent
@@ -146,6 +147,52 @@ Rectangle {
                 }
             }
 
+            // 1-Click Native Login Button (SimpMusic Style)
+            Rectangle {
+                Layout.fillWidth: true
+                height: 42
+                radius: 21
+                visible: !root.isLoggedIn
+                color: root.isProcessing ? "#1db95466" : (browserLoginMouse.containsMouse ? "#1ed760" : Theme.spotifyGreen)
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: root.isProcessing ? "Waiting for Google Sign-In in browser window..." : "Open Google Sign-In Window (1-Click)"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: "#000000"
+                }
+
+                MouseArea {
+                    id: browserLoginMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: root.isProcessing ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    enabled: !root.isProcessing
+                    onClicked: root.launchBrowserLoginRequested()
+                }
+            }
+
+            // Separator text
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                visible: !root.isLoggedIn
+
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#2c2c2c" }
+                Text {
+                    text: "OR PASTE COOKIES MANUALLY"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: "#666666"
+                }
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#2c2c2c" }
+            }
+
             // Instructions when not connected
             ColumnLayout {
                 Layout.fillWidth: true
@@ -162,7 +209,7 @@ Rectangle {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 140
+                    Layout.preferredHeight: 88
                     radius: 8
                     color: "#121212"
                     border.color: authInput.activeFocus ? Theme.spotifyGreen : "#2c2c2c"
@@ -219,12 +266,10 @@ Rectangle {
                 Rectangle {
                     height: 38
                     radius: 19
-                    color: pasteH.hovered ? "#333333" : "#242424"
+                    color: pasteMouse.containsMouse ? "#333333" : "#242424"
                     border.color: "#3a3a3a"
                     border.width: 1
                     Layout.preferredWidth: pasteTxt.implicitWidth + 32
-
-                    HoverHandler { id: pasteH }
 
                     Text {
                         id: pasteTxt
@@ -237,7 +282,10 @@ Rectangle {
                     }
 
                     MouseArea {
+                        id: pasteMouse
                         anchors.fill: parent
+                        hoverEnabled: true
+                        preventStealing: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             authInput.selectAll();
@@ -252,9 +300,7 @@ Rectangle {
                     height: 38
                     width: 90
                     radius: 19
-                    color: cancelH.hovered ? "#333333" : "#242424"
-
-                    HoverHandler { id: cancelH }
+                    color: cancelMouse.containsMouse ? "#333333" : "#242424"
 
                     Text {
                         anchors.centerIn: parent
@@ -266,7 +312,10 @@ Rectangle {
                     }
 
                     MouseArea {
+                        id: cancelMouse
                         anchors.fill: parent
+                        hoverEnabled: true
+                        preventStealing: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.closeRequested()
                     }
@@ -276,9 +325,7 @@ Rectangle {
                     height: 38
                     width: 140
                     radius: 19
-                    color: root.isProcessing ? "#1db95488" : (saveH.hovered ? "#1ed760" : Theme.spotifyGreen)
-
-                    HoverHandler { id: saveH }
+                    color: root.isProcessing ? "#1db95488" : (saveMouse.containsMouse ? "#1ed760" : Theme.spotifyGreen)
 
                     Text {
                         anchors.centerIn: parent
@@ -290,7 +337,10 @@ Rectangle {
                     }
 
                     MouseArea {
+                        id: saveMouse
                         anchors.fill: parent
+                        hoverEnabled: true
+                        preventStealing: true
                         cursorShape: root.isProcessing ? Qt.ArrowCursor : Qt.PointingHandCursor
                         enabled: !root.isProcessing && authInput.text.trim().length > 0
                         onClicked: root.connectRequested(authInput.text.trim())

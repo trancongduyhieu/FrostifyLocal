@@ -15,6 +15,8 @@ AUTH_FILE = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
 STREAM_CACHE_FILE = os.path.expanduser("~/.cache/frostify/stream_cache.json")
 HOME_CACHE_FILE = os.path.expanduser("~/.cache/frostify/home_feed.json")
 ONLINE_TRACKS_FILE = os.path.expanduser("~/.cache/frostify/online_tracks.json")
+MOOD_CACHE_DIR = os.path.expanduser("~/.cache/frostify/moods")
+MOOD_CATS_FILE = os.path.expanduser("~/.cache/frostify/mood_categories.json")
 
 def load_json(filepath, default=None):
     if os.path.exists(filepath):
@@ -189,23 +191,46 @@ def get_recent_seed_track():
             pass
     return "J7p4bzqLvCw"
 
+DEFAULT_MOOD_PILLS = [
+    {"title": "All", "params": ""},
+    {"title": "Relax", "params": "ggMPOg1uX1JOQWZFeDByc2Jm"},
+    {"title": "Sleep", "params": "ggMPOg1uX1MxaFQ3Z0JMZkN4"},
+    {"title": "Energize", "params": "ggMPOg1uX2lRZUZiMnNrQnJW"},
+    {"title": "Sad", "params": "ggMPOg1uX3NISTh4UmtWcFgz"},
+    {"title": "Romance", "params": "ggMPOg1uX1JCQnB2QXVYVEIz"},
+    {"title": "Feel good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3"},
+    {"title": "Workout", "params": "ggMPOg1uXzIxYkNac21YZ2Z0"},
+    {"title": "Party", "params": "ggMPOg1uX2w1aW1CRDFTSUNo"},
+    {"title": "Commute", "params": "ggMPOg1uX044Z2o5WERLckpU"},
+    {"title": "Focus", "params": "ggMPOg1uX0NvNGNhWThMYWRh"}
+]
+
+def get_mood_categories_live():
+    cached = load_json(MOOD_CATS_FILE, None)
+    if cached and (time.time() - cached.get("timestamp", 0)) < 86400:
+        return cached.get("categories", DEFAULT_MOOD_PILLS)
+
+    yt = get_ytmusic_client()
+    try:
+        cats = yt.get_mood_categories()
+        moments = cats.get("Moods & moments", [])
+        if moments:
+            pills = [{"title": "All", "params": ""}]
+            for m in moments:
+                title = m.get("title", "")
+                params = m.get("params", "")
+                if title and params:
+                    pills.append({"title": title, "params": params})
+            save_json(MOOD_CATS_FILE, {"timestamp": time.time(), "categories": pills})
+            return pills
+    except Exception as e:
+        sys.stderr.write(f"[get_mood_categories_live error]: {e}\n")
+    return DEFAULT_MOOD_PILLS
+
 def get_personalized_home():
     yt = get_ytmusic_client()
     seed_vid = get_recent_seed_track()
-
-    mood_pills = [
-        {"title": "All", "params": ""},
-        {"title": "Relax", "params": "ggMPOg1uX1JOQWZFeDByc2Jm"},
-        {"title": "Sleep", "params": "ggMPOg1uX0h4T0xYVlR1VHRl"},
-        {"title": "Energize", "params": "ggMPOg1uX2lRZUZiMnNrQnJW"},
-        {"title": "Sad", "params": "ggMPOg1uX3VRaFdQWFFZRFZB"},
-        {"title": "Romance", "params": "ggMPOg1uX0tEZk5zT2pTUTVF"},
-        {"title": "Feel Good", "params": "ggMPOg1uXzZQbDB5eThLRTQ3"},
-        {"title": "Workout", "params": "ggMPOg1uX096TGJvTjVHTVRX"},
-        {"title": "Party", "params": "ggMPOg1uX2pnU0VjTE5kUVVR"},
-        {"title": "Commute", "params": "ggMPOg1uX044Z2o5WERLckpU"},
-        {"title": "Focus", "params": "ggMPOg1uX0NvNGNhWThMYWRh"}
-    ]
+    mood_pills = get_mood_categories_live()
 
     quick_picks = []
     try:
@@ -278,53 +303,91 @@ def get_radio(video_id, limit=30):
         sys.stderr.write(f"[get_radio error for {video_id}]: {e}\n")
         return []
 
-def get_mood_feed(params):
+def get_mood_feed(params, title=""):
+    os.makedirs(MOOD_CACHE_DIR, exist_ok=True)
+    slug = re.sub(r'[^a-zA-Z0-9_-]', '_', f"{title}_{params[:16]}" if params else title)
+    cache_path = os.path.join(MOOD_CACHE_DIR, f"{slug}.json")
+
+    # Instant cache return (valid for 3 hours)
+    cached = load_json(cache_path, None)
+    if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
+        if cached.get("quick_picks") or cached.get("featured_playlists"):
+            return cached
+
     yt = get_ytmusic_client()
-    try:
-        raw_playlists = yt.get_mood_playlists(params)
-        playlists = []
-        for item in raw_playlists[:16]:
-            pl_id = item.get("playlistId")
-            title = item.get("title", "")
-            thumbs = item.get("thumbnails", [])
-            thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-            if "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-            if pl_id and title:
-                playlists.append({
-                    "id": pl_id,
-                    "playlistId": pl_id,
-                    "title": title,
-                    "subtitle": item.get("description") or "Playlist",
-                    "image": thumb_url
-                })
+    playlists = []
+    quick_picks = []
 
-        # Extract mood quick picks from the top mood playlist tracks
-        quick_picks = []
-        if playlists:
-            top_pl_id = playlists[0]["playlistId"]
+    # 1. Try official mood playlists
+    if params:
+        try:
+            raw_playlists = yt.get_mood_playlists(params)
+            for item in raw_playlists[:16]:
+                pl_id = item.get("playlistId")
+                pl_title = item.get("title", "")
+                thumbs = item.get("thumbnails", [])
+                thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+                if "w120" in thumb_url or "w226" in thumb_url:
+                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                if pl_id and pl_title:
+                    playlists.append({
+                        "id": pl_id,
+                        "playlistId": pl_id,
+                        "title": pl_title,
+                        "subtitle": item.get("description") or "Playlist",
+                        "image": thumb_url
+                    })
+        except Exception as e:
+            sys.stderr.write(f"[mood playlist error for {title}]: {e}\n")
+
+    # 2. Extract quick picks from top playlists
+    if playlists:
+        for pl in playlists[:2]:
             try:
-                top_tracks = get_playlist_tracks(top_pl_id, limit=12)
+                top_tracks = get_playlist_tracks(pl["playlistId"], limit=12)
                 if top_tracks:
                     quick_picks = top_tracks
+                    break
             except Exception:
                 pass
 
-        if not quick_picks and playlists and len(playlists) > 1:
-            try:
-                top_tracks = get_playlist_tracks(playlists[1]["playlistId"], limit=12)
-                if top_tracks:
-                    quick_picks = top_tracks
-            except Exception:
-                pass
+    # 3. Fallback search if mood API 404s or returned empty (GUARANTEE NON-EMPTY FEED)
+    query = title if title else "Relax"
+    if not quick_picks:
+        try:
+            quick_picks = search_ytmusic(f"{query} songs", limit=12)
+        except Exception as e:
+            sys.stderr.write(f"[mood fallback tracks error]: {e}\n")
 
-        return {
-            "quick_picks": quick_picks,
-            "featured_playlists": playlists
-        }
-    except Exception as e:
-        sys.stderr.write(f"[get_mood_feed error]: {e}\n")
-        return {"quick_picks": [], "featured_playlists": []}
+    if not playlists:
+        try:
+            search_pls = yt.search(f"{query} playlist", filter="playlists", limit=12)
+            for item in search_pls:
+                pl_id = item.get("browseId")
+                pl_title = item.get("title", "")
+                thumbs = item.get("thumbnails", [])
+                thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+                if "w120" in thumb_url or "w226" in thumb_url:
+                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                if pl_id and pl_title:
+                    playlists.append({
+                        "id": pl_id,
+                        "playlistId": pl_id,
+                        "title": pl_title,
+                        "subtitle": item.get("itemCount") or "Playlist",
+                        "image": thumb_url
+                    })
+        except Exception as e:
+            sys.stderr.write(f"[mood fallback playlists error]: {e}\n")
+
+    cache_online_tracks(quick_picks)
+    res = {
+        "timestamp": time.time(),
+        "quick_picks": quick_picks,
+        "featured_playlists": playlists
+    }
+    save_json(cache_path, res)
+    return res
 
 def get_playlist_tracks(playlist_id, limit=50):
     if not playlist_id:
@@ -441,7 +504,8 @@ if __name__ == "__main__":
 
     elif cmd == "mood" and len(sys.argv) > 2:
         params = sys.argv[2]
-        res = get_mood_feed(params)
+        title = sys.argv[3] if len(sys.argv) > 3 else ""
+        res = get_mood_feed(params, title)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "playlist" and len(sys.argv) > 2:
