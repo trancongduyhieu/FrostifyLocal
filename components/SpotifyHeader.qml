@@ -8,6 +8,7 @@ Rectangle {
     color: "transparent"
 
     property string currentTab: "all"
+    property string currentView: "home"
     signal tabSelected(string tab)
     signal searchRequested(string query)
 
@@ -121,8 +122,9 @@ Rectangle {
 
         Item { Layout.fillWidth: true }
 
-        // Filter Pills: All, Music, Ado Collection
+        // Filter Pills: All, Music, Ado Collection (Only in library/downloads view)
         RowLayout {
+            visible: root.currentView !== "home"
             spacing: 8
 
             // "All" Pill

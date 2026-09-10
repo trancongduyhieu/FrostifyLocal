@@ -33,13 +33,19 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Hiện trạng*: Bấm vào Album không có phản hồi dù hiện dấu cộng.
   - *Giải pháp (học từ SimpMusic)*: Bấm vào Album Card sẽ mở trang hiển thị danh sách toàn bộ bài hát thuộc Album đó; có nút "Play All" để phát từ đầu và nút "Add Album to Queue".
 
-- [x] **8. Phát Nhạc Trực Tuyến Qua YouTube Music (Online Streaming - ĐÃ HOÀN THÀNH)**
+- [x] **8. Phát Nhạc Trực Tuyến & Bóc Tách Thuật Toán Gợi Ý SimpMusic (Online Streaming & Personalized Feed - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*: 
-    - Thư viện `ytmusicapi` tích hợp tìm kiếm bài hát online theo thời gian thực (hỗ trợ tiếng Nhật/Anh/Việt), phân giải metadata chuẩn (`id`, `title`, `artist`, `image`, `durationMs`).
-    - `yt-dlp` với TLS Client Impersonation (`chrome` / `curl_cffi`) giải mã luồng WebM Opus trực tiếp không bị chặn lỗi HTTP 403.
-    - Bộ nhớ đệm URL phát trực tuyến 3 giờ tại `~/.cache/frostify/stream_cache.json` (giảm thời gian khởi động bài hát xuống còn ~27ms).
-    - `player_daemon.py` điều khiển `mpv` phát trực tiếp qua socket IPC `/tmp/frostify_mpv.sock`, tự động gán `force-media-title` để Noctalia Bar và Amberol Detail View đồng bộ tên bài hát, bìa album và lyric theo thời gian thực.
-    - Bộ lọc Header "YouTube Music" kết hợp thanh tìm kiếm debounced (500ms) chuyển mượt mà giữa thư viện cục bộ và kho nhạc YouTube Music.
+    - **Thuật toán gợi ý Hybrid thông minh (SimpMusic Adaptation)**:
+      - Khi chưa kết nối Google Account: Tự động học gu nghe nhạc cục bộ từ `frostify_session.json` / `library.json`, gọi `ytmusic.get_watch_playlist(videoId)` tạo ra 12–20 bài "Quick picks" (Radio mix) cá nhân hóa 100% thay vì các bài trending rác.
+      - Khi kết nối Google Account: Gọi `ytmusic.get_home()` mang lại trang chủ chuẩn xác theo tài khoản cá nhân.
+      - Bấm vào bài hát Quick Pick tự động khởi tạo hàng đợi Automix Radio (`get_watch_playlist`).
+    - **Mặc định mở app ở chế độ Online**: Khởi động trực tiếp vào giao diện Home feed (`currentView: "home"`).
+    - **Giao diện 3 cột chuẩn Desktop (SimpMusic Image 2 Layout)**:
+      - Cột 1 (Sidebar trái - 240px): 3 nút chính gồm "Home (Online)", "Downloads (Local)", "Settings & Account" (đã loại bỏ hoàn toàn Mix & Analytics), bên dưới là "Local Collections".
+      - Cột 2 (Center Content): Lời chào theo buổi ("Good Evening/Morning/Afternoon"), 11 Mood Pills ("All", "Relax", "Sleep", "Energize", "Sad", "Romance", "Feel Good", "Workout", "Party", "Commute", "Focus"), lưới 3 cột Quick picks, và lưới Featured Playlists.
+      - Cột 3 (Right Collapsible Panel - 360px): Now Playing panel có switch [Lyrics | Artwork], hiển thị lyric cuộn Amberol hoặc ảnh bìa nghệ thuật chất lượng cao, có thể bật/tắt qua nút Details trên player bar.
+    - **Bảo mật tối đa (No Browser-Sniffing)**: Tuyệt đối không đọc trộm cookie từ profile trình duyệt. Người dùng chủ động kết nối qua modal Settings Dark Glass (`SettingsModal.qml`), tự động phân giải `SAPISID` và băm `SAPISIDHASH` SHA1 an toàn cục bộ.
+    - **Zero Emojis**: 100% icon trên toàn bộ giao diện sử dụng SVG tượng trưng chuẩn hệ thống.
 
 - [ ] **9. Hệ Thống Đa Preset Cho Desktop Lyrics (Preset Lyrics System)**
   - *Kiến trúc*: Quản lý qua file JSON `~/.config/noctalia/frostify_settings.json`.

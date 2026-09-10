@@ -35,6 +35,17 @@ Scope {
 
     readonly property string appDir: Quickshell.env("HOME") + "/Applications/FrostifyLocal"
 
+    property string currentView: "home" // "home" or "library"
+    property var homeMoods: []
+    property string selectedMood: "All"
+    property var homeQuickPicks: []
+    property var homeFeaturedPlaylists: []
+    property bool isLoadingHome: false
+
+    property bool isAuthLoggedIn: false
+    property string authAccountName: ""
+    property string authAccountThumb: ""
+
     property var playlists: []
     property var allTracks: []
     property var currentTracks: []
@@ -87,6 +98,194 @@ Scope {
         ytSearchProc.running = true;
     }
 
+    Process {
+        id: homeProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res.moods && Array.isArray(res.moods)) win.homeMoods = res.moods;
+                    if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
+                    if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
+                } catch(e) {
+                    console.log("homeProc parse error:", e);
+                } finally {
+                    win.isLoadingHome = false;
+                }
+            }
+        }
+        onExited: {
+            win.isLoadingHome = false;
+        }
+    }
+
+    Process {
+        id: moodProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
+                    if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
+                } catch(e) {
+                    console.log("moodProc error:", e);
+                } finally {
+                    win.isLoadingHome = false;
+                }
+            }
+        }
+        onExited: {
+            win.isLoadingHome = false;
+        }
+    }
+
+    Process {
+        id: radioProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        win.currentTracks = arr;
+                    }
+                } catch(e) {
+                    console.log("radioProc error:", e);
+                }
+            }
+        }
+    }
+
+    Process {
+        id: playlistTracksProc
+        property string targetTitle: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        win.currentTracks = arr;
+                        win.currentView = "library";
+                        mainGrid.sectionTitle = playlistTracksProc.targetTitle;
+                    }
+                } catch(e) {
+                    console.log("playlistTracksProc error:", e);
+                }
+            }
+        }
+    }
+
+    Process {
+        id: authStatusProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var s = JSON.parse(data);
+                    win.isAuthLoggedIn = !!s.logged_in;
+                    win.authAccountName = s.name || "";
+                    win.authAccountThumb = s.thumb || "";
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
+        id: saveAuthProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res.success) {
+                        settingsModal.statusMessage = "Connected as " + (res.name || "Google User") + "!";
+                        win.checkAuthStatus();
+                        win.loadHomeFeed();
+                    } else {
+                        settingsModal.statusMessage = "Error: " + (res.error || "Failed to parse credentials");
+                    }
+                } catch(e) {
+                    settingsModal.statusMessage = "Error: Invalid response";
+                } finally {
+                    settingsModal.isProcessing = false;
+                }
+            }
+        }
+        onExited: {
+            settingsModal.isProcessing = false;
+        }
+    }
+
+    Process {
+        id: logoutProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                settingsModal.statusMessage = "Logged out successfully.";
+                settingsModal.isProcessing = false;
+                win.checkAuthStatus();
+                win.loadHomeFeed();
+            }
+        }
+        onExited: {
+            settingsModal.isProcessing = false;
+        }
+    }
+
+    function loadHomeFeed() {
+        win.isLoadingHome = true;
+        homeProc.running = false;
+        homeProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "home"];
+        homeProc.running = true;
+    }
+
+    function selectMood(title, params) {
+        win.selectedMood = title;
+        if (title === "All" || !params) {
+            win.loadHomeFeed();
+            return;
+        }
+        win.isLoadingHome = true;
+        moodProc.running = false;
+        moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params];
+        moodProc.running = true;
+    }
+
+    function playOnlineTrack(trk) {
+        if (!trk) return;
+        win.currentTrack = trk;
+        win.currentTime = 0.0;
+        win.totalDuration = (trk.durationMs || 0) / 1000.0;
+        win.isPlaying = true;
+
+        var streamPath = trk.path || ("ytdl://" + trk.videoId);
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath]);
+
+        if (trk.videoId) {
+            radioProc.running = false;
+            radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", trk.videoId];
+            radioProc.running = true;
+        }
+        pollTimer.restart();
+    }
+
+    function loadPlaylistTracks(pl) {
+        if (!pl || !pl.playlistId) return;
+        playlistTracksProc.running = false;
+        playlistTracksProc.targetTitle = pl.title || "Playlist";
+        playlistTracksProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "playlist", pl.playlistId];
+        playlistTracksProc.running = true;
+    }
+
+    function checkAuthStatus() {
+        authStatusProc.running = false;
+        authStatusProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "auth_status"];
+        authStatusProc.running = true;
+    }
+
     property var currentTrack: null
     property bool isPlaying: false
     property real currentTime: 0.0
@@ -100,6 +299,11 @@ Scope {
     Shortcut {
         sequence: "F11"
         onActivated: win.fullscreen = !win.fullscreen
+    }
+
+    Component.onCompleted: {
+        win.loadHomeFeed();
+        win.checkAuthStatus();
     }
 
     // Master Container with Spotify Dark Aesthetic
@@ -118,12 +322,13 @@ Scope {
                 id: topHeader
                 Layout.fillWidth: true
                 currentTab: win.currentTab
+                currentView: win.currentView
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onSearchRequested: query => win.filterBySearch(query)
             }
 
-            // Main Content Area: Left Sidebar + Right Main Grid (Or Amberol Synced Lyrics View)
+            // Main Content Area: 3-Column Desktop Layout (SimpMusic Optimized)
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -131,27 +336,63 @@ Scope {
                 Layout.rightMargin: 8
                 spacing: 8
 
-                // Left: Your Library
+                // Column 1: Left Navigation Sidebar
                 SpotifySidebar {
                     id: leftSidebar
                     Layout.fillHeight: true
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: visible ? 240 : 0
+                    Layout.maximumWidth: visible ? 240 : 0
+                    Layout.minimumWidth: visible ? 240 : 0
                     playlists: win.playlists
                     selectedIndex: win.selectedPlaylistIndex
+                    currentView: win.currentView
                     visible: !win.showAmberolDetails || win.width >= 900
-                    Layout.preferredWidth: visible ? 240 : 0
 
+                    onHomeSelected: {
+                        win.currentView = "home";
+                        if (win.width < 1020) win.showAmberolDetails = false;
+                    }
+                    onLibrarySelected: {
+                        win.currentView = "library";
+                        if (win.width < 1020) win.showAmberolDetails = false;
+                    }
+                    onSettingsRequested: {
+                        settingsModal.visible = true;
+                    }
                     onPlaylistSelected: (idx, pl) => {
+                        win.currentView = "library";
                         win.selectedPlaylistIndex = idx;
                         win.selectPlaylist(pl.id);
-                        win.showAmberolDetails = false;
+                        if (win.width < 1020) win.showAmberolDetails = false;
                     }
                 }
 
-                // Right: Dynamic Stack View (Grid or Amberol Details)
+                // Column 2: Center Main Content (Home Feed or Local Library)
                 StackLayout {
+                    id: centerStack
+                    visible: !win.showAmberolDetails || win.width >= 1020
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    currentIndex: win.showAmberolDetails ? 1 : 0
+                    Layout.minimumWidth: 400
+                    currentIndex: win.currentView === "home" ? 0 : 1
+
+                    HomeFeedView {
+                        id: homeView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        moods: win.homeMoods
+                        selectedMood: win.selectedMood
+                        quickPicks: win.homeQuickPicks
+                        featuredPlaylists: win.homeFeaturedPlaylists
+                        isLoading: win.isLoadingHome
+                        currentTrack: win.currentTrack
+                        isPlaying: win.isPlaying
+
+                        onMoodSelected: (title, params) => win.selectMood(title, params)
+                        onTrackPlayRequested: trk => win.playOnlineTrack(trk)
+                        onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
+                    }
 
                     SpotifyMainGrid {
                         id: mainGrid
@@ -160,27 +401,38 @@ Scope {
                         tracks: win.currentTracks
                         currentTrack: win.currentTrack
                         isPlaying: win.isPlaying
-                        sectionTitle: win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Featured & Popular"
+                        sectionTitle: win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Downloads & Local Library"
                         isLoading: win.isSearchingYT
 
-                        onTrackPlayRequested: trk => win.playTrack(trk)
+                        onTrackPlayRequested: trk => {
+                            if (trk && trk.path && trk.path.startsWith("ytdl://")) {
+                                win.playOnlineTrack(trk);
+                            } else {
+                                win.playTrack(trk);
+                            }
+                        }
                         onTrackDetailsRequested: trk => {
                             win.currentTrack = trk;
                             win.showAmberolDetails = true;
                         }
                     }
+                }
 
-                    AmberolDetailView {
-                        id: amberolView
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        track: win.currentTrack
-                        currentTime: win.currentTime
-                        isPlaying: win.isPlaying
+                // Column 3: Amberol Detail View (Right Collapsible Panel)
+                AmberolDetailView {
+                    id: amberolView
+                    visible: win.showAmberolDetails
+                    Layout.fillHeight: true
+                    Layout.fillWidth: win.width < 1020
+                    Layout.preferredWidth: win.width >= 1020 ? 360 : -1
+                    Layout.maximumWidth: win.width >= 1020 ? 380 : -1
+                    Layout.minimumWidth: win.width >= 1020 ? 320 : -1
+                    track: win.currentTrack
+                    currentTime: win.currentTime
+                    isPlaying: win.isPlaying
 
-                        onCloseRequested: win.showAmberolDetails = false
-                        onSeekRequested: sec => win.seekAudio(sec)
-                    }
+                    onCloseRequested: win.showAmberolDetails = false
+                    onSeekRequested: sec => win.seekAudio(sec)
                 }
             }
 
@@ -212,6 +464,30 @@ Scope {
                 onSeekRequested: sec => win.seekAudio(sec)
                 onReqVolumeChange: vol => win.setVolume(vol)
                 onOpenDetailsRequested: win.showAmberolDetails = !win.showAmberolDetails
+            }
+        }
+
+        // YouTube Music Settings / Google Account Modal
+        SettingsModal {
+            id: settingsModal
+            isLoggedIn: win.isAuthLoggedIn
+            accountName: win.authAccountName
+            accountThumb: win.authAccountThumb
+
+            onCloseRequested: settingsModal.visible = false
+            onConnectRequested: rawAuth => {
+                settingsModal.isProcessing = true;
+                settingsModal.statusMessage = "Connecting and validating credentials...";
+                saveAuthProc.running = false;
+                saveAuthProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "save_auth", rawAuth];
+                saveAuthProc.running = true;
+            }
+            onLogoutRequested: {
+                settingsModal.isProcessing = true;
+                settingsModal.statusMessage = "Logging out...";
+                logoutProc.running = false;
+                logoutProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "logout"];
+                logoutProc.running = true;
             }
         }
     }
@@ -268,6 +544,25 @@ Scope {
         id: sessionFileView
         path: "/tmp/frostify_current_track.json"
         watchChanges: true
+        onFileChanged: {
+            reload();
+            try {
+                var raw = text();
+                if (!raw || raw.trim() === "") return;
+                var meta = JSON.parse(raw);
+                if (meta && meta.title) {
+                    if (!win.currentTrack || win.currentTrack.name !== meta.title) {
+                        win.currentTrack = {
+                            name: meta.title,
+                            title: meta.title,
+                            artist: meta.artist || "Unknown Artist",
+                            image: meta.artUrl || "",
+                            path: meta.path || ""
+                        };
+                    }
+                }
+            } catch(e) {}
+        }
     }
 
     // Library Data Loader
@@ -276,7 +571,9 @@ Scope {
         onLoaded: {
             win.playlists = libLoader.playlists;
             win.allTracks = libLoader.allTracks;
-            win.currentTracks = win.allTracks;
+            if (win.currentView === "library") {
+                win.currentTracks = win.allTracks;
+            }
 
             var restored = false;
             if (sessionFileView.text()) {
@@ -338,7 +635,11 @@ Scope {
 
     function filterBySearch(q) {
         if (q && q.trim() !== "") {
+            win.currentView = "library";
             win.showAmberolDetails = false;
+            mainGrid.sectionTitle = 'Search: "' + q + '"';
+        } else {
+            mainGrid.sectionTitle = win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Downloads & Local Library";
         }
         if (win.currentTab === "ytmusic") {
             win.lastYTQuery = q;
@@ -387,17 +688,21 @@ Scope {
 
     function playNext() {
         if (win.currentTracks.length === 0) return;
+        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && (t.path === win.currentTrack.path || (t.videoId && win.currentTrack.videoId === t.videoId)));
+        var nextIdx = 0;
         if (win.isShuffle && win.currentTracks.length > 1) {
-            var curIdx = win.currentTracks.findIndex(t => win.currentTrack && t.path === win.currentTrack.path);
-            var nextIdx = curIdx;
+            nextIdx = curIdx;
             while (nextIdx === curIdx) {
                 nextIdx = Math.floor(Math.random() * win.currentTracks.length);
             }
-            win.playTrack(win.currentTracks[nextIdx]);
         } else {
-            var curIdx = win.currentTracks.findIndex(t => win.currentTrack && t.path === win.currentTrack.path);
-            var nextIdx = (curIdx + 1) % win.currentTracks.length;
-            win.playTrack(win.currentTracks[nextIdx]);
+            nextIdx = (curIdx + 1) % win.currentTracks.length;
+        }
+        var nextTrk = win.currentTracks[nextIdx];
+        if (nextTrk.path && nextTrk.path.startsWith("ytdl://")) {
+            win.playOnlineTrack(nextTrk);
+        } else {
+            win.playTrack(nextTrk);
         }
     }
 
@@ -407,9 +712,14 @@ Scope {
             win.seekAudio(0.0);
             return;
         }
-        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && t.path === win.currentTrack.path);
+        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && (t.path === win.currentTrack.path || (t.videoId && win.currentTrack.videoId === t.videoId)));
         var prevIdx = (curIdx - 1 + win.currentTracks.length) % win.currentTracks.length;
-        win.playTrack(win.currentTracks[prevIdx]);
+        var prevTrk = win.currentTracks[prevIdx];
+        if (prevTrk.path && prevTrk.path.startsWith("ytdl://")) {
+            win.playOnlineTrack(prevTrk);
+        } else {
+            win.playTrack(prevTrk);
+        }
     }
 
     function seekAudio(sec) {
@@ -494,6 +804,15 @@ Scope {
                 }
                 Qt.callLater(function() { amberolView.updateActiveLyric(true); });
             }
+        }
+        function toggleDetails() {
+            win.showAmberolDetails = !win.showAmberolDetails;
+        }
+        function openSettings() {
+            settingsModal.visible = true;
+        }
+        function closeSettings() {
+            settingsModal.visible = false;
         }
     }
 

@@ -9,9 +9,8 @@ Rectangle {
     id: root
     color: "#121212"
     radius: Theme.radiusCard
-    Layout.fillWidth: true
     Layout.fillHeight: true
-    implicitWidth: 800
+    implicitWidth: 360
     implicitHeight: 600
 
     property var track: null
@@ -19,6 +18,8 @@ Rectangle {
     property bool isPlaying: false
     property var activeLyrics: []
     property int currentLyricIndex: -1
+
+    property string compactTab: "lyrics" // "lyrics" or "art"
 
     readonly property bool isCompact: root.width < 720
 
@@ -118,6 +119,14 @@ Rectangle {
         color: Qt.rgba(0.06, 0.06, 0.08, 0.90)
     }
 
+    property bool allowClose: false
+    Timer {
+        interval: 600
+        running: true
+        repeat: false
+        onTriggered: root.allowClose = true
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.isCompact ? 12 : 24
@@ -146,13 +155,17 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.closeRequested()
+                    onClicked: mouse => {
+                        if (root.allowClose) {
+                            root.closeRequested();
+                        }
+                    }
                 }
             }
 
             Text {
-                Layout.leftMargin: 12
-                text: "Now Playing Details & Synced Lyrics"
+                Layout.leftMargin: 8
+                text: root.isCompact ? "Now Playing" : "Now Playing Details & Synced Lyrics"
                 font.family: Theme.fontFamily
                 font.pixelSize: 14
                 font.bold: true
@@ -160,14 +173,78 @@ Rectangle {
             }
 
             Item { Layout.fillWidth: true }
+
+            // Segmented pill switch when compact: [Lyrics | Art]
+            Rectangle {
+                visible: root.isCompact
+                width: 140
+                height: 30
+                radius: 15
+                color: "#181818"
+                border.color: "#282828"
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 15
+                        color: root.compactTab === "lyrics" ? Theme.spotifyGreen : (lyrH.hovered ? "#242424" : "transparent")
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                        HoverHandler { id: lyrH }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Lyrics"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: root.compactTab === "lyrics" ? "#000000" : Theme.textSecondary
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.compactTab = "lyrics"
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 15
+                        color: root.compactTab === "art" ? Theme.spotifyGreen : (artH.hovered ? "#242424" : "transparent")
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                        HoverHandler { id: artH }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Artwork"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: root.compactTab === "art" ? "#000000" : Theme.textSecondary
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.compactTab = "art"
+                        }
+                    }
+                }
+            }
         }
 
-        // Compact Header when window is narrow
+        // Compact Header when window is narrow and showing lyrics
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
             spacing: 12
-            visible: root.isCompact
+            visible: root.isCompact && root.compactTab === "lyrics"
 
             Rectangle {
                 width: 52
@@ -221,28 +298,29 @@ Rectangle {
             }
         }
 
-        // Main Layout: Two Columns (Wide) or Full Lyrics (Compact)
+        // Main Layout: Two Columns (Wide) or Full Lyrics / Full Art (Compact)
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: root.isCompact ? 0 : 28
 
-            // Left: Large Amberol Cover Card & Metadata (Only when wide)
+            // Left: Large Amberol Cover Card & Metadata (Visible when wide OR when compactTab == 'art')
             ColumnLayout {
-                visible: !root.isCompact
-                Layout.preferredWidth: root.isCompact ? 0 : 320
-                Layout.maximumWidth: root.isCompact ? 0 : 320
-                Layout.minimumWidth: root.isCompact ? 0 : 320
-                Layout.fillWidth: false
+                visible: !root.isCompact || root.compactTab === "art"
+                Layout.fillWidth: true
+                Layout.preferredWidth: 320
+                Layout.maximumWidth: root.isCompact ? 360 : 320
+                Layout.minimumWidth: 260
                 Layout.fillHeight: true
-                Layout.alignment: Qt.AlignTop
+                Layout.alignment: root.isCompact ? Qt.AlignHCenter : Qt.AlignTop
                 spacing: 16
 
                 Rectangle {
-                    width: 300
-                    height: 300
-                    Layout.preferredWidth: 300
-                    Layout.preferredHeight: 300
+                    width: root.isCompact ? 280 : 300
+                    height: width
+                    Layout.preferredWidth: width
+                    Layout.preferredHeight: height
+                    Layout.alignment: Qt.AlignHCenter
                     radius: 14
                     color: "#181818"
                     border.color: "#282828"
@@ -277,12 +355,14 @@ Rectangle {
 
                 // Track Title & Artist Info
                 ColumnLayout {
-                    Layout.preferredWidth: 300
-                    Layout.maximumWidth: 300
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: root.isCompact ? 280 : 300
+                    Layout.maximumWidth: 320
+                    Layout.alignment: Qt.AlignHCenter
                     spacing: 4
 
                     Text {
-                        Layout.preferredWidth: 300
+                        Layout.fillWidth: true
                         text: root.track ? root.track.name : "No track selected"
                         font.family: Theme.fontFamily
                         font.pixelSize: 20
@@ -291,25 +371,28 @@ Rectangle {
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
                         elide: Text.ElideRight
+                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
                     }
 
                     Text {
-                        Layout.preferredWidth: 300
+                        Layout.fillWidth: true
                         text: root.track ? root.track.artist : "Unknown Artist"
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         color: Theme.spotifyGreen
                         font.bold: true
                         elide: Text.ElideRight
+                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
                     }
 
                     Text {
-                        Layout.preferredWidth: 300
+                        Layout.fillWidth: true
                         text: root.track && root.track.album ? root.track.album : "Single / SimpMusic"
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
                         color: Theme.textSecondary
                         elide: Text.ElideRight
+                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
                     }
                 }
 
@@ -319,9 +402,10 @@ Rectangle {
             // Right: Amberol Synced Lyrics Flow
             Rectangle {
                 id: lyricsCard
+                visible: !root.isCompact || root.compactTab === "lyrics"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumWidth: 300
+                Layout.minimumWidth: root.isCompact ? 200 : 300
                 radius: 14
                 color: "#161618"
                 border.color: "#28282c"
