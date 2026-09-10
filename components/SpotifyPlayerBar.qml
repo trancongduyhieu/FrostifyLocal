@@ -17,6 +17,9 @@ Rectangle {
     property bool isRepeat: false
     property bool isLyricsActive: false
     property bool isQueueActive: false
+    property bool isScrubbingProgress: false
+    property real scrubTime: 0.0
+    property bool isScrubbingVolume: false
 
     signal playPauseClicked()
     signal nextClicked()
@@ -262,7 +265,7 @@ Rectangle {
                 spacing: 10
 
                 Text {
-                    text: root.fmtTime(root.currentTime)
+                    text: root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     color: Theme.textSecondary
@@ -275,15 +278,17 @@ Rectangle {
                     radius: 2
                     color: "#4d4d4d"
 
+                    readonly property real effectiveTime: root.isScrubbingProgress ? root.scrubTime : root.currentTime
+
                     Rectangle {
                         id: progressFill
                         height: parent.height
                         radius: 2
-                        color: scrubHover.hovered ? Theme.spotifyGreen : "#ffffff"
-                        width: parent.width * Math.min(1.0, Math.max(0.0, root.totalDuration > 0 ? (root.currentTime / root.totalDuration) : 0))
+                        color: (scrubHover.hovered || root.isScrubbingProgress) ? Theme.spotifyGreen : "#ffffff"
+                        width: parent.width * Math.min(1.0, Math.max(0.0, root.totalDuration > 0 ? (scrubTrack.effectiveTime / root.totalDuration) : 0))
                     }
 
-                    // Interactive Thumb on Hover
+                    // Interactive Thumb on Hover or Drag
                     Rectangle {
                         width: 12
                         height: 12
@@ -291,19 +296,47 @@ Rectangle {
                         color: "#ffffff"
                         anchors.verticalCenter: parent.verticalCenter
                         x: Math.max(0, Math.min(parent.width - 12, progressFill.width - 6))
-                        visible: scrubHover.hovered
+                        visible: scrubHover.hovered || root.isScrubbingProgress
                     }
 
                     HoverHandler { id: scrubHover }
 
                     MouseArea {
+                        id: scrubMouseArea
                         anchors.fill: parent
+                        anchors.topMargin: -6
+                        anchors.bottomMargin: -6
+                        preventStealing: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: mouse => {
-                            if (root.totalDuration > 0) {
-                                var ratio = Math.max(0.0, Math.min(1.0, mouse.x / scrubTrack.width));
-                                root.seekRequested(ratio * root.totalDuration);
+
+                        function updateScrubPos(mx) {
+                            if (root.totalDuration > 0 && scrubTrack.width > 0) {
+                                var ratio = Math.max(0.0, Math.min(1.0, mx / scrubTrack.width));
+                                root.scrubTime = ratio * root.totalDuration;
                             }
+                        }
+
+                        onPressed: mouse => {
+                            root.isScrubbingProgress = true;
+                            updateScrubPos(mouse.x);
+                        }
+
+                        onPositionChanged: mouse => {
+                            if (root.isScrubbingProgress) {
+                                updateScrubPos(mouse.x);
+                            }
+                        }
+
+                        onReleased: mouse => {
+                            if (root.isScrubbingProgress) {
+                                updateScrubPos(mouse.x);
+                                root.seekRequested(root.scrubTime);
+                                root.isScrubbingProgress = false;
+                            }
+                        }
+
+                        onCanceled: {
+                            root.isScrubbingProgress = false;
                         }
                     }
                 }
@@ -402,7 +435,7 @@ Rectangle {
                         id: volFill
                         height: parent.height
                         radius: 2
-                        color: volH.hovered ? Theme.spotifyGreen : "#ffffff"
+                        color: (volH.hovered || root.isScrubbingVolume) ? Theme.spotifyGreen : "#ffffff"
                         width: parent.width * (root.volume / 100.0)
                     }
 
@@ -413,18 +446,48 @@ Rectangle {
                         color: "#ffffff"
                         anchors.verticalCenter: parent.verticalCenter
                         x: Math.max(0, Math.min(parent.width - 10, volFill.width - 5))
-                        visible: volH.hovered
+                        visible: volH.hovered || root.isScrubbingVolume
                     }
 
                     HoverHandler { id: volH }
 
                     MouseArea {
+                        id: volMouseArea
                         anchors.fill: parent
+                        anchors.topMargin: -6
+                        anchors.bottomMargin: -6
+                        preventStealing: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: mouse => {
-                            var newVol = Math.max(0, Math.min(100, (mouse.x / volTrack.width) * 100));
-                            root.volume = newVol;
-                            root.reqVolumeChange(newVol);
+
+                        function updateVolPos(mx) {
+                            if (volTrack.width > 0) {
+                                var ratio = Math.max(0.0, Math.min(1.0, mx / volTrack.width));
+                                var newVol = Math.round(ratio * 100);
+                                root.volume = newVol;
+                                root.reqVolumeChange(newVol);
+                            }
+                        }
+
+                        onPressed: mouse => {
+                            root.isScrubbingVolume = true;
+                            updateVolPos(mouse.x);
+                        }
+
+                        onPositionChanged: mouse => {
+                            if (root.isScrubbingVolume) {
+                                updateVolPos(mouse.x);
+                            }
+                        }
+
+                        onReleased: mouse => {
+                            if (root.isScrubbingVolume) {
+                                updateVolPos(mouse.x);
+                                root.isScrubbingVolume = false;
+                            }
+                        }
+
+                        onCanceled: {
+                            root.isScrubbingVolume = false;
                         }
                     }
                 }

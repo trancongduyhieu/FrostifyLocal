@@ -6,13 +6,11 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
 
 ## Danh Sách Các Hạng Mục Tiếp Theo Đang Triển Khai
 
-- [ ] **2. Sửa Thanh Trượt Âm Lượng & Thời Lượng (Draggable Scrubbing)**
-  - *Hiện trạng*: Chỉ click-to-seek, không kéo rê được cục tròn (thumb).
-  - *Giải pháp*: Cập nhật `components/SpotifyPlayerBar.qml` dùng `MouseArea` với `drag.target` (hoặc `Slider` có custom thumb) cho phép người dùng nhấn giữ cục tròn và kéo mượt mà theo thời gian thực.
+- [x] **2. Sửa Thanh Trượt Âm Lượng & Thời Lượng (Draggable Scrubbing)**
+  - *Đã hoàn thành*: `components/SpotifyPlayerBar.qml` hỗ trợ kéo rê thumb thanh thời lượng và âm lượng theo thời gian thực (MouseArea `onPressed`, `onPositionChanged`, `onReleased` với `preventStealing: true`), mở rộng hit area 16px để thao tác nhạy, cập nhật text thời gian mượt mà không bị xung đột binding với daemon.
 
-- [ ] **3. Bộ Lấy Lyric Tự Động Từ Internet (Online Synced Lyrics Fallback)**
-  - *Công cụ đã chọn*: Sử dụng thư viện Python `syncedlyrics`.
-  - *Cơ chế*: Khi `backend/lyrics_helper.py` không tìm thấy file `.lrc` cục bộ, tự động truy vấn tuần tự qua các provider: **LRCLIB $\rightarrow$ NetEase Cloud Music $\rightarrow$ Musixmatch**. Tự động lưu cache file `.lrc` về thư mục bài hát.
+- [x] **3. Bộ Lấy Lyric Tự Động Từ Internet (Online Synced Lyrics Fallback)**
+  - *Đã hoàn thành*: Tích hợp thư viện Python `syncedlyrics` với kiến trúc phân tầng: Cache `.lrc` $\rightarrow$ Online (LRCLIB $\rightarrow$ NetEase $\rightarrow$ Musixmatch) $\rightarrow$ Dự phòng cuối cùng (SimpMusic SQLite DB). Tự động lưu cache file `.lrc` vào `~/.cache/frostify/lyrics/` để nạp offline trong ~30ms.
 
 - [ ] **4. Bảng Điều Khiển Desktop Lyrics (Bật/Tắt & Tinh Chỉnh Màu)**
   - *Cấu hình*: Lưu trạng thái trong `~/.config/noctalia/frostify_settings.json`.

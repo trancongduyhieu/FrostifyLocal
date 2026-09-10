@@ -53,10 +53,17 @@ Rectangle {
         activeLyrics = [];
         currentLyricIndex = -1;
         var songTitle = (track && (track.title || track.name)) ? (track.title || track.name) : "";
+        var songArtist = (track && track.artist) ? track.artist : "";
+        var songVid = (track && track.videoId) ? track.videoId : "";
+        var songPath = (track && (track.path || track.file_path || track.filePath)) ? (track.path || track.file_path || track.filePath) : "";
         if (songTitle !== "") {
-            console.log("Fetching lyrics for track:", songTitle);
+            console.log("Fetching lyrics for track:", songTitle, "by", songArtist);
             lyricsProc.running = false;
-            lyricsProc.command = ["python3", "-u", Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/lyrics_helper.py", songTitle];
+            lyricsProc.command = [
+                "python3", "-u",
+                Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/lyrics_helper.py",
+                songTitle, songArtist, songVid, songPath
+            ];
             lyricsProc.running = true;
         }
     }
