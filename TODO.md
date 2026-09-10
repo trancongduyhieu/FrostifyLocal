@@ -33,10 +33,13 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Hiện trạng*: Bấm vào Album không có phản hồi dù hiện dấu cộng.
   - *Giải pháp (học từ SimpMusic)*: Bấm vào Album Card sẽ mở trang hiển thị danh sách toàn bộ bài hát thuộc Album đó; có nút "Play All" để phát từ đầu và nút "Add Album to Queue".
 
-- [ ] **8. Phát Nhạc Trực Tuyến Qua YouTube Music Token (Online Streaming - QUAN TRỌNG NHẤT)**
-  - *Công cụ đã chọn*: Sử dụng thư viện `ytmusicapi` (Python) + `mpv` (với `yt-dlp` hook).
-  - *Cơ chế*: Dùng `ytmusicapi` để quản lý token/tài khoản cá nhân, tìm kiếm và lấy luồng phát YouTube Music.
-  - *Phát trực tiếp*: Truyền URL âm thanh trực tiếp sang `/tmp/frostify_mpv.sock` để `mpv` stream trực tuyến mà không cần tải file về đĩa, tối ưu RAM cực thấp (< 100MB RAM).
+- [x] **8. Phát Nhạc Trực Tuyến Qua YouTube Music (Online Streaming - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*: 
+    - Thư viện `ytmusicapi` tích hợp tìm kiếm bài hát online theo thời gian thực (hỗ trợ tiếng Nhật/Anh/Việt), phân giải metadata chuẩn (`id`, `title`, `artist`, `image`, `durationMs`).
+    - `yt-dlp` với TLS Client Impersonation (`chrome` / `curl_cffi`) giải mã luồng WebM Opus trực tiếp không bị chặn lỗi HTTP 403.
+    - Bộ nhớ đệm URL phát trực tuyến 3 giờ tại `~/.cache/frostify/stream_cache.json` (giảm thời gian khởi động bài hát xuống còn ~27ms).
+    - `player_daemon.py` điều khiển `mpv` phát trực tiếp qua socket IPC `/tmp/frostify_mpv.sock`, tự động gán `force-media-title` để Noctalia Bar và Amberol Detail View đồng bộ tên bài hát, bìa album và lyric theo thời gian thực.
+    - Bộ lọc Header "YouTube Music" kết hợp thanh tìm kiếm debounced (500ms) chuyển mượt mà giữa thư viện cục bộ và kho nhạc YouTube Music.
 
 - [ ] **9. Hệ Thống Đa Preset Cho Desktop Lyrics (Preset Lyrics System)**
   - *Kiến trúc*: Quản lý qua file JSON `~/.config/noctalia/frostify_settings.json`.

@@ -86,7 +86,7 @@ Rectangle {
                     onTextChanged: root.searchRequested(text)
 
                     Text {
-                        text: "What do you want to play?"
+                        text: root.currentTab === "ytmusic" ? "Search YouTube Music online..." : "What do you want to play?"
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         color: Theme.textSecondary
@@ -202,6 +202,33 @@ Rectangle {
                     onClicked: {
                         root.currentTab = "ado";
                         root.tabSelected("ado");
+                    }
+                }
+            }
+
+            // "YouTube Music" Pill
+            Rectangle {
+                height: 32
+                width: ytTxt.implicitWidth + 24
+                radius: Theme.radiusPill
+                color: root.currentTab === "ytmusic" ? Theme.accentPill : "#242424"
+
+                Text {
+                    id: ytTxt
+                    anchors.centerIn: parent
+                    text: "YouTube Music"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: root.currentTab === "ytmusic" ? Theme.accentPillText : Theme.textPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.currentTab = "ytmusic";
+                        root.tabSelected("ytmusic");
                     }
                 }
             }

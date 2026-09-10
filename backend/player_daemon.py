@@ -78,6 +78,21 @@ def get_mpv_property(prop):
 
 LAST_PATH_FILE = "/tmp/frostify_last_path"
 
+def resolve_media_path(file_path):
+    if not file_path:
+        return file_path
+    if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import ytmusic_helper
+            vid = file_path.replace("ytdl://", "")
+            res = ytmusic_helper.resolve_stream_url(vid)
+            if res and res.get("stream_url"):
+                return res["stream_url"]
+        except Exception as e:
+            sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
+    return file_path
+
 def update_current_track_metadata(file_path):
     if not file_path:
         return
@@ -99,6 +114,26 @@ def update_current_track_metadata(file_path):
                         artist = t.get("artist", "")
                         break
 
+        # Fallback to online tracks cache if not in local library
+        if not title:
+            online_json = os.path.expanduser("~/.cache/frostify/online_tracks.json")
+            if os.path.exists(online_json):
+                try:
+                    with open(online_json, "r", encoding="utf-8") as f:
+                        on_data = json.load(f)
+                        vid = file_path.replace("ytdl://", "")
+                        t = on_data.get(file_path) or on_data.get(vid)
+                        if t:
+                            art_url = t.get("image", "")
+                            title = t.get("title", "") or t.get("name", "")
+                            artist = t.get("artist", "")
+                except Exception:
+                    pass
+
+        # If still no title and artist, do not overwrite existing valid metadata
+        if not title and not artist:
+            return
+
         meta = {
             "title": title,
             "artist": artist,
@@ -112,8 +147,10 @@ def update_current_track_metadata(file_path):
         os.makedirs(os.path.dirname(session_file), exist_ok=True)
         with open(session_file, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
+        return meta
     except Exception:
         pass
+    return None
 
 def main():
     if len(sys.argv) < 2:
@@ -124,10 +161,16 @@ def main():
 
     if action == "play" and len(sys.argv) > 2:
         file_path = sys.argv[2]
-        update_current_track_metadata(file_path)
-        send_mpv_cmd(["loadfile", file_path, "replace"])
+        meta = update_current_track_metadata(file_path)
+        stream_target = resolve_media_path(file_path)
+        send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
+        if meta and meta.get("title"):
+            disp_title = f"{meta['title']} - {meta.get('artist', '')}".strip(" -")
+            send_mpv_cmd(["set_property", "force-media-title", disp_title])
+        else:
+            send_mpv_cmd(["set_property", "force-media-title", ""])
         print("Playing:", file_path)
 
     elif action == "next":
@@ -141,22 +184,35 @@ def main():
     elif action == "set_playlist" and len(sys.argv) > 2:
         idx = int(sys.argv[2])
         m3u_file = "/tmp/frostify_playlist.m3u"
+        tracks = []
+        meta = None
         if len(sys.argv) > 3:
             try:
                 tracks = json.loads(sys.argv[3])
                 if len(tracks) > idx:
-                    update_current_track_metadata(tracks[idx])
-                with open(m3u_file, "w", encoding="utf-8") as f:
-                    for t in tracks:
-                        f.write(t + "\n")
+                    meta = update_current_track_metadata(tracks[idx])
             except Exception as e:
                 pass
-        if os.path.exists(m3u_file):
-            send_mpv_cmd(["loadlist", m3u_file, "replace"])
-            send_mpv_cmd(["set_property", "loop-playlist", "inf"])
-            send_mpv_cmd(["playlist-play-index", idx])
+
+        if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
+            stream_target = resolve_media_path(tracks[idx])
+            send_mpv_cmd(["loadfile", stream_target, "replace"])
             send_mpv_cmd(["set_property", "pause", False])
-            print("Set playlist and playing index:", idx)
+            if meta and meta.get("title"):
+                disp_title = f"{meta['title']} - {meta.get('artist', '')}".strip(" -")
+                send_mpv_cmd(["set_property", "force-media-title", disp_title])
+            print("Playing online track:", tracks[idx])
+        elif tracks:
+            send_mpv_cmd(["set_property", "force-media-title", ""])
+            with open(m3u_file, "w", encoding="utf-8") as f:
+                for t in tracks:
+                    f.write(t + "\n")
+            if os.path.exists(m3u_file):
+                send_mpv_cmd(["loadlist", m3u_file, "replace"])
+                send_mpv_cmd(["set_property", "loop-playlist", "inf"])
+                send_mpv_cmd(["playlist-play-index", idx])
+                send_mpv_cmd(["set_property", "pause", False])
+                print("Set playlist and playing index:", idx)
 
     elif action == "toggle":
         ensure_mpv()
@@ -174,8 +230,9 @@ def main():
                 except Exception:
                     pass
 
-        if (not path or idle) and fallback_file and os.path.exists(fallback_file):
-            send_mpv_cmd(["loadfile", fallback_file, "replace"])
+        if (not path or idle) and fallback_file:
+            stream_target = resolve_media_path(fallback_file)
+            send_mpv_cmd(["loadfile", stream_target, "replace"])
             send_mpv_cmd(["set_property", "pause", False])
             update_current_track_metadata(fallback_file)
             print("Loaded and playing fallback:", fallback_file)
@@ -215,9 +272,9 @@ def main():
 
         has_file = bool(path and not idle)
 
-        if path:
+        if path and not (path.startswith("http://") or path.startswith("https://")):
             update_current_track_metadata(path)
-        elif filename:
+        elif filename and not filename.startswith("videoplayback"):
             update_current_track_metadata(filename)
 
         status = {

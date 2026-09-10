@@ -39,6 +39,53 @@ Scope {
     property var allTracks: []
     property var currentTracks: []
     property int selectedPlaylistIndex: 0
+    property string currentTab: "all"
+    property var ytMusicTracks: []
+    property bool isSearchingYT: false
+    property string lastYTQuery: ""
+
+    Timer {
+        id: ytSearchDebounce
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (win.currentTab === "ytmusic") {
+                win.performYTSearch(win.lastYTQuery);
+            }
+        }
+    }
+
+    Process {
+        id: ytSearchProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr)) {
+                        win.ytMusicTracks = arr;
+                        if (win.currentTab === "ytmusic") {
+                            win.currentTracks = arr;
+                        }
+                    }
+                } catch(e) {
+                    console.log("ytSearchProc error:", e);
+                } finally {
+                    win.isSearchingYT = false;
+                }
+            }
+        }
+        onExited: {
+            win.isSearchingYT = false;
+        }
+    }
+
+    function performYTSearch(q) {
+        win.isSearchingYT = true;
+        ytSearchProc.running = false;
+        ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "search", q ? q : "Trending"];
+        ytSearchProc.running = true;
+    }
 
     property var currentTrack: null
     property bool isPlaying: false
@@ -70,6 +117,7 @@ Scope {
             SpotifyHeader {
                 id: topHeader
                 Layout.fillWidth: true
+                currentTab: win.currentTab
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onSearchRequested: query => win.filterBySearch(query)
@@ -112,6 +160,8 @@ Scope {
                         tracks: win.currentTracks
                         currentTrack: win.currentTrack
                         isPlaying: win.isPlaying
+                        sectionTitle: win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Featured & Popular"
+                        isLoading: win.isSearchingYT
 
                         onTrackPlayRequested: trk => win.playTrack(trk)
                         onTrackDetailsRequested: trk => {
@@ -269,16 +319,32 @@ Scope {
     }
 
     function filterByTab(tab) {
+        win.currentTab = tab;
+        win.showAmberolDetails = false;
         if (tab === "all") {
             win.currentTracks = win.allTracks;
         } else if (tab === "music") {
             win.currentTracks = win.allTracks.filter(t => t.source === "SimpMusic" || t.source === "Downloads");
         } else if (tab === "ado") {
             win.currentTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
+        } else if (tab === "ytmusic") {
+            if (win.ytMusicTracks.length > 0) {
+                win.currentTracks = win.ytMusicTracks;
+            } else {
+                win.performYTSearch("Trending");
+            }
         }
     }
 
     function filterBySearch(q) {
+        if (q && q.trim() !== "") {
+            win.showAmberolDetails = false;
+        }
+        if (win.currentTab === "ytmusic") {
+            win.lastYTQuery = q;
+            ytSearchDebounce.restart();
+            return;
+        }
         if (!q || q.trim() === "") {
             win.currentTracks = win.allTracks;
             return;

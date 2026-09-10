@@ -11,6 +11,8 @@ Rectangle {
     property var tracks: []
     property var currentTrack: null
     property bool isPlaying: false
+    property string sectionTitle: "Featured & Popular"
+    property bool isLoading: false
     signal trackPlayRequested(var trk)
     signal trackDetailsRequested(var trk)
 
@@ -54,7 +56,7 @@ Rectangle {
                     Layout.fillWidth: true
 
                     Text {
-                        text: "Featured & Popular"
+                        text: root.sectionTitle
                         font.family: Theme.fontFamily
                         font.pixelSize: 22
                         font.bold: true
@@ -64,12 +66,29 @@ Rectangle {
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        text: "Show all"
+                        text: root.isLoading ? "Loading..." : (root.tracks ? root.tracks.length + " tracks" : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
                         color: Theme.textSecondary
                     }
+                }
+
+                Text {
+                    visible: root.isLoading
+                    text: "Searching YouTube Music online..."
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 14
+                    font.italic: true
+                    color: Theme.spotifyGreen
+                }
+
+                Text {
+                    visible: !root.isLoading && (!root.tracks || root.tracks.length === 0)
+                    text: "No tracks found. Type in search bar to explore YouTube Music!"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 14
+                    color: Theme.textSecondary
                 }
 
                 // Grid of tracks
