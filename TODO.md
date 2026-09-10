@@ -47,13 +47,22 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - **Bảo mật tối đa (No Browser-Sniffing)**: Tuyệt đối không đọc trộm cookie từ profile trình duyệt. Người dùng chủ động kết nối qua modal Settings Dark Glass (`SettingsModal.qml`), tự động phân giải `SAPISID` và băm `SAPISIDHASH` SHA1 an toàn cục bộ.
     - **Zero Emojis**: 100% icon trên toàn bộ giao diện sử dụng SVG tượng trưng chuẩn hệ thống.
 
-- [ ] **9. Hệ Thống Đa Preset Cho Desktop Lyrics (Preset Lyrics System)**
+- [ ] **9. Hệ Thống Đa Preset Nghệ Thuật & Cử Chỉ Cho Desktop Lyrics (Artistic Presets Suite & Magic Desktop Gestures - Điểm Độc Bản Của Dự Án)**
+  - *Tầm nhìn cốt lõi*: Đây là "vũ khí sát thương độc bản" tạo nên sự khác biệt hoàn toàn giữa Frostify Local và các trình phát nhạc khác trên Linux Wayland (Niri/Hyprland/CachyOS). Triển khai sau khi toàn bộ tính năng cốt lõi (Core Playback & Sync) hoàn thiện.
   - *Kiến trúc*: Quản lý qua file JSON `~/.config/noctalia/frostify_settings.json`.
-  - *Các Preset hỗ trợ*:
-    1. `GachaPop` (Mặc định: lệch dòng sole, gacha pop nảy từ, câu kết thúc rớt sâu +52px và nghiêng 1.8°).
-    2. `SpotifyClassic` (2 dòng căn giữa, dòng đang hát sáng rực, dòng tiếp theo mờ).
-    3. `CinematicFlow` (Chữ trôi ngang với gradient mờ 2 bên).
-    4. `MinimalistPill` (Viên nang kính mờ nhỏ gọn ở góc màn hình).
+  - *Bộ 5 Preset Nghệ Thuật (Artistic Presets)*:
+    1. `GachaPop` (Mặc định hiện tại): Font *Instrument Serif*, lệch dòng sole tự nhiên, câu kết thúc rớt sâu +52px và nghiêng 1.8°, đổ bóng điện ảnh thích ứng màu hình nền.
+    2. `FloatingGlassPill` (MIO / Dynamic Island): Viên nang kính mờ nhỏ gọn, đĩa than mini xoay tròn bên trái, sóng âm mini nhảy múa, chữ chạy karaoke mượt mà.
+    3. `CinematicSubtitle` (Makoto Shinkai): Font sans-serif thanh mảnh (Inter/Satoshi), 2 dòng căn giữa ở đáy màn hình, đổ bóng điện ảnh sâu như phụ đề phim anime chiếu rạp.
+    4. `VerticalCalligraphy` (Thư pháp Đông Á): Chữ xếp dọc từ trên xuống dưới ở góc phải màn hình, mờ dần theo trục dọc tựa như thơ cổ phong hoặc MV Lofi Nhật/Trung.
+    5. `CyberpunkNeon` (Sci-Fi Pulse): Font monospace kỹ thuật số, viền neon phát sáng đập nhẹ theo nhịp bass, hiệu ứng glitch tinh tế khi đổi câu.
+  - *Cử chỉ tương tác trực tiếp trên Desktop (Direct Desktop Gestures)*:
+    - Bấm đúp (Double-click) vào vùng chữ trên desktop để Play / Pause.
+    - Cuộn chuột trên vùng lyric để tăng / giảm âm lượng mượt mà.
+    - Vuốt chuột sang trái / phải để Next / Prev bài hát mà không cần mở app.
+  - *Kéo thả tự do & Ghi nhớ vị trí thông minh (Per-Wallpaper Smart Anchor)*:
+    - Giữ phím `Super` + chuột trái để kéo thả lyric đến bất kỳ vị trí nào trên màn hình.
+    - Tự động lưu tọa độ gắn liền với mã băm của hình nền hiện tại (`frostify_settings.json`), đổi lại hình nền cũ là lyric tự động bay về đúng vị trí đã ghim.
 
 - [ ] **10. Nút Đồng Bộ Nhạc 1-Chạm Từ Điện Thoại Qua ADB (1-Click ADB Phone Sync)**
   - *Công cụ*: Google Platform Tools `/home/apple/.local/bin/adb`.
