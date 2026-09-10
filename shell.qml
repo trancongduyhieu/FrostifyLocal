@@ -39,6 +39,7 @@ Scope {
     property string previousView: "home"
     property var homeMoods: []
     property string selectedMood: "All"
+    property var homeSections: []
     property var homeQuickPicks: []
     property var homeFeaturedPlaylists: []
     property bool isLoadingHome: false
@@ -56,6 +57,7 @@ Scope {
     property var playlists: []
     property var allTracks: []
     property var currentTracks: []
+    property var browsingTracks: []
     property int selectedPlaylistIndex: 0
     property string currentTab: "all"
     property var ytMusicTracks: []
@@ -138,7 +140,7 @@ Scope {
                     var arr = JSON.parse(data);
                     if (Array.isArray(arr)) {
                         win.ytMusicTracks = arr;
-                        win.currentTracks = arr;
+                        win.browsingTracks = arr;
                         win.currentView = "search";
                         mainGrid.sectionTitle = 'Results for "' + (win.lastYTQuery || "Search") + '"';
                     }
@@ -171,12 +173,12 @@ Scope {
         win.currentView = "library";
         if (!q || q.trim() === "") {
             mainGrid.sectionTitle = "Downloads & Local Library";
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
             return;
         }
         mainGrid.sectionTitle = 'Local Search: "' + q + '"';
         var lower = q.toLowerCase();
-        win.currentTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
+        win.browsingTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
     }
 
     Process {
@@ -187,9 +189,11 @@ Scope {
                 try {
                     var res = JSON.parse(data);
                     if (res.moods && Array.isArray(res.moods)) win.homeMoods = res.moods;
+                    if (res.sections && Array.isArray(res.sections)) win.homeSections = res.sections;
                     if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
                     if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
                     win.moodCache["All"] = {
+                        sections: win.homeSections,
                         quick_picks: win.homeQuickPicks,
                         featured_playlists: win.homeFeaturedPlaylists
                     };
@@ -219,10 +223,13 @@ Scope {
                     var res = JSON.parse(data);
                     var qp = (res.quick_picks && Array.isArray(res.quick_picks)) ? res.quick_picks : [];
                     var fp = (res.featured_playlists && Array.isArray(res.featured_playlists)) ? res.featured_playlists : (Array.isArray(res) ? res : []);
+                    var sec = (res.sections && Array.isArray(res.sections)) ? res.sections : [];
                     win.moodCache[win.selectedMood] = {
+                        sections: sec,
                         quick_picks: qp,
                         featured_playlists: fp
                     };
+                    win.homeSections = sec;
                     win.homeQuickPicks = qp;
                     win.homeFeaturedPlaylists = fp;
                 } catch(e) {
@@ -263,7 +270,7 @@ Scope {
                 try {
                     var arr = JSON.parse(data);
                     if (Array.isArray(arr) && arr.length > 0) {
-                        win.currentTracks = arr;
+                        win.browsingTracks = arr;
                         win.currentView = "playlist";
                         mainGrid.sectionTitle = playlistTracksProc.targetTitle;
                     }
@@ -373,11 +380,13 @@ Scope {
         win.selectedMood = title;
         if (win.moodCache[title]) {
             var cachedData = win.moodCache[title];
+            win.homeSections = cachedData.sections || [];
             win.homeQuickPicks = cachedData.quick_picks || [];
             win.homeFeaturedPlaylists = cachedData.featured_playlists || [];
             win.isLoadingHome = false;
             return;
         }
+        win.homeSections = [];
         if (title === "All" || !params) {
             win.loadHomeFeed();
             return;
@@ -544,7 +553,7 @@ Scope {
                     onLibrarySelected: {
                         if (win.currentView !== "library") win.previousView = win.currentView;
                         win.currentView = "library";
-                        win.currentTracks = win.allTracks;
+                        win.browsingTracks = win.allTracks;
                         mainGrid.sectionTitle = "Downloads (Local)";
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
@@ -590,6 +599,7 @@ Scope {
                         Layout.fillHeight: true
                         moods: win.homeMoods
                         selectedMood: win.selectedMood
+                        sections: win.homeSections
                         quickPicks: win.homeQuickPicks
                         featuredPlaylists: win.homeFeaturedPlaylists
                         isLoading: win.isLoadingHome
@@ -605,13 +615,16 @@ Scope {
                         id: mainGrid
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        tracks: win.currentTracks
+                        tracks: win.browsingTracks
                         currentTrack: win.currentTrack
                         isPlaying: win.isPlaying
                         sectionTitle: win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Downloads & Local Library"
                         isLoading: win.isSearchingYT
 
                         onTrackPlayRequested: trk => {
+                            if (win.browsingTracks && win.browsingTracks.length > 0) {
+                                win.currentTracks = win.browsingTracks;
+                            }
                             if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                                 win.playOnlineTrack(trk);
                             } else {
@@ -802,7 +815,10 @@ Scope {
         onLoaded: {
             win.playlists = libLoader.playlists;
             win.allTracks = libLoader.allTracks;
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
+            if (!win.currentTracks || win.currentTracks.length === 0) {
+                win.currentTracks = win.allTracks;
+            }
 
             var restored = false;
             if (sessionFileView.text()) {
@@ -828,13 +844,13 @@ Scope {
 
     function selectPlaylist(pid) {
         if (pid === "all") {
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
         } else if (pid === "simp") {
-            win.currentTracks = win.allTracks.filter(t => t.source === "SimpMusic");
+            win.browsingTracks = win.allTracks.filter(t => t.source === "SimpMusic");
         } else if (pid === "downloads") {
-            win.currentTracks = win.allTracks.filter(t => t.source === "Downloads");
+            win.browsingTracks = win.allTracks.filter(t => t.source === "Downloads");
         } else if (pid === "ado") {
-            win.currentTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
+            win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
         }
     }
 
@@ -842,14 +858,14 @@ Scope {
         win.currentTab = tab;
         win.showAmberolDetails = false;
         if (tab === "all") {
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
         } else if (tab === "music") {
-            win.currentTracks = win.allTracks.filter(t => t.source === "SimpMusic" || t.source === "Downloads");
+            win.browsingTracks = win.allTracks.filter(t => t.source === "SimpMusic" || t.source === "Downloads");
         } else if (tab === "ado") {
-            win.currentTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
+            win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
         } else if (tab === "ytmusic") {
             if (win.ytMusicTracks.length > 0) {
-                win.currentTracks = win.ytMusicTracks;
+                win.browsingTracks = win.ytMusicTracks;
             } else {
                 win.performYTSearch("Trending");
             }
@@ -1040,7 +1056,7 @@ Scope {
         }
         function showLibrary() {
             win.currentView = "library";
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
             mainGrid.sectionTitle = "Downloads (Local)";
         }
         function showHome() {

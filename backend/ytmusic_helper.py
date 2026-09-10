@@ -211,10 +211,128 @@ def get_mood_categories_live():
         return cached.get("categories", DEFAULT_MOOD_PILLS)
     return DEFAULT_MOOD_PILLS
 
+def _normalize_shelf_item(it, shelf_title=""):
+    if not isinstance(it, dict):
+        return None
+
+    # 1. musicResponsiveListItemRenderer
+    if "musicResponsiveListItemRenderer" in it:
+        r = it["musicResponsiveListItemRenderer"]
+        vid = r.get("playlistItemData", {}).get("videoId")
+        cols = r.get("flexColumns", [])
+        title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
+        artist = ""
+        if len(cols) > 1:
+            artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+            artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+        thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+        thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+        if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        if vid and title:
+            return {
+                "id": f"yt_{vid}",
+                "type": "track",
+                "title": title,
+                "name": title,
+                "artist": artist or "YouTube Music",
+                "subtitle": artist or "YouTube Music",
+                "source": "YouTube Music",
+                "path": f"ytdl://{vid}",
+                "videoId": vid,
+                "duration": "--:--",
+                "durationMs": 0,
+                "image": thumb_url
+            }
+
+    # 2. musicTwoRowItemRenderer
+    elif "musicTwoRowItemRenderer" in it:
+        r = it["musicTwoRowItemRenderer"]
+        title = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
+        sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+        thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+        thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+        if "w120" in thumb_url or "w226" in thumb_url:
+            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+
+        nav_ep = r.get("navigationEndpoint", {})
+        watch_ep = nav_ep.get("watchEndpoint", {})
+        browse_ep = nav_ep.get("browseEndpoint", {})
+
+        vid = watch_ep.get("videoId")
+        pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
+
+        if vid and (not pl_id or "listen" in shelf_title.lower() or "favorite" in shelf_title.lower()):
+            return {
+                "id": f"yt_{vid}",
+                "type": "track",
+                "title": title,
+                "name": title,
+                "artist": sub or "YouTube Music",
+                "subtitle": sub or "YouTube Music",
+                "source": "YouTube Music",
+                "path": f"ytdl://{vid}",
+                "videoId": vid,
+                "duration": "--:--",
+                "durationMs": 0,
+                "image": thumb_url
+            }
+        elif pl_id and title:
+            return {
+                "id": pl_id,
+                "type": "playlist",
+                "playlistId": pl_id,
+                "title": title,
+                "subtitle": sub or shelf_title or "Playlist",
+                "image": thumb_url
+            }
+
+    # 3. Parsed item (from parse_mixed_content)
+    elif isinstance(it, dict):
+        vid = it.get("videoId")
+        pl_id = it.get("playlistId") or it.get("browseId") or it.get("audioPlaylistId")
+        title = it.get("title", "")
+        thumbs = it.get("thumbnails", [])
+        thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+        if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+
+        artist = ""
+        if it.get("artists"):
+            artist = ", ".join(a.get("name", "") for a in it.get("artists", []) if isinstance(a, dict))
+        elif it.get("description"):
+            artist = it.get("description")
+
+        if vid and (not pl_id or "song" in str(it.get("videoType", "")).lower() or "atv" in str(it.get("videoType", "")).lower() or "listen" in shelf_title.lower() or "quick" in shelf_title.lower() or "cover" in shelf_title.lower() or "video" in shelf_title.lower() or "trending" in shelf_title.lower() or "favorite" in shelf_title.lower() or "long" in shelf_title.lower()):
+            return {
+                "id": f"yt_{vid}",
+                "type": "track",
+                "title": title,
+                "name": title,
+                "artist": artist or "YouTube Music",
+                "subtitle": artist or "YouTube Music",
+                "source": "YouTube Music",
+                "path": f"ytdl://{vid}",
+                "videoId": vid,
+                "duration": it.get("duration", "--:--"),
+                "durationMs": (it.get("duration_seconds") or 0) * 1000,
+                "image": thumb_url
+            }
+        elif pl_id and title:
+            return {
+                "id": pl_id,
+                "type": "playlist",
+                "playlistId": pl_id,
+                "title": title,
+                "subtitle": artist or shelf_title or "Playlist",
+                "image": thumb_url
+            }
+    return None
+
 def get_personalized_home():
     cached = load_json(HOME_CACHE_FILE, None)
     if cached and (time.time() - cached.get("timestamp", 0)) < 1800:
-        if cached.get("quick_picks") or cached.get("featured_playlists"):
+        if cached.get("sections") and (cached.get("quick_picks") or cached.get("featured_playlists")):
             return cached
 
     yt = get_ytmusic_client()
@@ -239,88 +357,73 @@ def get_personalized_home():
         except Exception as e:
             sys.stderr.write(f"[chip extract error]: {e}\n")
 
-        # 2. Extract sections
-        sections = home_res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+        # 2. Extract initial sections
+        raw_sections = home_res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
 
-        for s in sections:
+        shelves = []
+        for s in raw_sections:
             shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
-            if not shelf:
+            if shelf:
+                header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
+                t = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
+                sub = "".join(r.get("text", "") for r in header.get("strapline", {}).get("runs", []))
+                shelves.append((t, sub, shelf.get("contents", [])))
+
+        # 3. Extract continuation sections (up to 12 continuation shelves)
+        from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
+        from ytmusicapi.continuations import get_continuations
+        from ytmusicapi.parsers.browsing import parse_mixed_content
+
+        section_list = nav(home_res, [*SINGLE_COLUMN_TAB, "sectionListRenderer"], True)
+        if section_list and "continuations" in section_list:
+            try:
+                request_func = lambda additionalParams: yt._send_request("browse", {"browseId": "FEmusic_home"}, additionalParams)
+                conts = get_continuations(section_list, "sectionListContinuation", 12, request_func, parse_mixed_content)
+                for c in conts:
+                    shelves.append((c.get("title", ""), "", c.get("contents", [])))
+            except Exception as e:
+                sys.stderr.write(f"[home continuations error]: {e}\n")
+
+        final_sections = []
+        all_tracks_discovered = []
+        for title, subtitle, items in shelves:
+            if not title or not items or (len(items) <= 1 and "together" in title.lower()):
                 continue
-            header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
-            shelf_title = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
-            items = shelf.get("contents", [])
-
+            norm_items = []
+            track_count = 0
             for it in items:
-                # musicResponsiveListItemRenderer (Quick picks)
-                if "musicResponsiveListItemRenderer" in it:
-                    r = it["musicResponsiveListItemRenderer"]
-                    vid = r.get("playlistItemData", {}).get("videoId")
-                    cols = r.get("flexColumns", [])
-                    title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
-                    artist = ""
-                    if len(cols) > 1:
-                        artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
-                        artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
-                    thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-                    thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
-                    if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-                    if vid and title and len(quick_picks) < 20:
-                        if not any(q.get("videoId") == vid for q in quick_picks):
-                            quick_picks.append({
-                                "id": f"yt_{vid}",
-                                "title": title,
-                                "name": title,
-                                "artist": artist or "YouTube Music",
-                                "source": "YouTube Music",
-                                "path": f"ytdl://{vid}",
-                                "videoId": vid,
-                                "duration": "--:--",
-                                "durationMs": 0,
-                                "image": thumb_url
-                            })
+                norm = _normalize_shelf_item(it, title)
+                if norm:
+                    norm_items.append(norm)
+                    if norm.get("type") == "track":
+                        track_count += 1
+                        if not any(q.get("videoId") == norm.get("videoId") for q in quick_picks) and len(quick_picks) < 24:
+                            quick_picks.append(norm)
+                        if not any(q.get("videoId") == norm.get("videoId") for q in all_tracks_discovered):
+                            all_tracks_discovered.append(norm)
+                    elif norm.get("type") == "playlist":
+                        if not any(p.get("id") == norm.get("id") or p.get("title") == norm.get("title") for p in featured_playlists):
+                            featured_playlists.append(norm)
 
-                # musicTwoRowItemRenderer (Listen again, Mixes, Playlists)
-                elif "musicTwoRowItemRenderer" in it:
-                    r = it["musicTwoRowItemRenderer"]
-                    title = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
-                    sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
-                    thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-                    thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-                    if "w120" in thumb_url or "w226" in thumb_url:
-                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+            if not norm_items:
+                continue
 
-                    nav_ep = r.get("navigationEndpoint", {})
-                    watch_ep = nav_ep.get("watchEndpoint", {})
-                    browse_ep = nav_ep.get("browseEndpoint", {})
+            is_grid = False
+            lower_t = title.lower()
+            if "quick" in lower_t or "cover" in lower_t or "trending" in lower_t or "long" in lower_t:
+                is_grid = True
+            elif "listen again" in lower_t or "video" in lower_t or "favorite" in lower_t or "release" in lower_t or "playlist" in lower_t:
+                is_grid = False
+            elif track_count > len(norm_items) * 0.7:
+                is_grid = True
 
-                    vid = watch_ep.get("videoId")
-                    pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
+            final_sections.append({
+                "title": title,
+                "subtitle": subtitle,
+                "type": "track_grid" if is_grid else "card_carousel",
+                "items": norm_items
+            })
 
-                    # If it has videoId and is in "Listen again", treat as track
-                    if vid and (not pl_id or "listen again" in shelf_title.lower()):
-                        if len(quick_picks) < 20 and not any(q.get("videoId") == vid for q in quick_picks):
-                            quick_picks.append({
-                                "id": f"yt_{vid}",
-                                "title": title,
-                                "name": title,
-                                "artist": sub or "YouTube Music",
-                                "source": "YouTube Music",
-                                "path": f"ytdl://{vid}",
-                                "videoId": vid,
-                                "duration": "--:--",
-                                "durationMs": 0,
-                                "image": thumb_url
-                            })
-                    elif pl_id and title and thumb_url:
-                        if len(featured_playlists) < 18 and not any(p.get("title") == title for p in featured_playlists):
-                            featured_playlists.append({
-                                "id": pl_id,
-                                "playlistId": pl_id,
-                                "title": title,
-                                "subtitle": sub or shelf_title or "Playlist",
-                                "image": thumb_url
-                            })
     except Exception as e:
         sys.stderr.write(f"[personalized home error]: {e}\n")
 
@@ -343,6 +446,8 @@ def get_personalized_home():
         quick_picks = search_ytmusic("Trending Music", limit=12)
 
     cache_online_tracks(quick_picks)
+    if 'all_tracks_discovered' in locals() and all_tracks_discovered:
+        cache_online_tracks(all_tracks_discovered)
 
     # Load all existing cached moods from ~/.cache/frostify/moods/ into preloaded_moods for 0ms QML startup
     preloaded = {}
@@ -350,15 +455,16 @@ def get_personalized_home():
         for f in os.listdir(MOOD_CACHE_DIR):
             if f.endswith(".json"):
                 m_data = load_json(os.path.join(MOOD_CACHE_DIR, f))
-                if m_data and (m_data.get("quick_picks") or m_data.get("featured_playlists")):
+                if m_data and m_data.get("sections") and (m_data.get("quick_picks") or m_data.get("featured_playlists")):
                     m_title = f.split("_")[0]
                     preloaded[m_title] = m_data
 
     res = {
         "timestamp": time.time(),
         "moods": mood_pills,
-        "quick_picks": quick_picks[:16],
-        "featured_playlists": featured_playlists[:40],
+        "sections": final_sections if 'final_sections' in locals() and final_sections else [],
+        "quick_picks": quick_picks[:20],
+        "featured_playlists": featured_playlists[:50],
         "preloaded_moods": preloaded
     }
     save_json(HOME_CACHE_FILE, res)
@@ -525,12 +631,13 @@ def get_mood_feed(params, title=""):
     # Instant cache return (valid for 3 hours)
     cached = load_json(cache_path, None)
     if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
-        if cached.get("quick_picks") or cached.get("featured_playlists"):
+        if cached.get("sections") and (cached.get("quick_picks") or cached.get("featured_playlists")):
             return cached
 
     yt = get_ytmusic_client()
     quick_picks = []
     featured_playlists = []
+    final_sections = []
 
     try:
         # Native personalized mood browse via FEmusic_home with params
@@ -538,15 +645,16 @@ def get_mood_feed(params, title=""):
         body = {"browseId": "FEmusic_home", "params": params}
         res = yt._send_request(endpoint, body)
 
-        # 1. Process initial sections
+        shelves = []
         raw_sections = res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
         for s in raw_sections:
             shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
             if not shelf:
                 continue
             header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
-            shelf_title = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
-            _process_mood_items(shelf.get("contents", []), shelf_title, quick_picks, featured_playlists)
+            t = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
+            sub = "".join(r.get("text", "") for r in header.get("strapline", {}).get("runs", []))
+            shelves.append((t, sub, shelf.get("contents", [])))
 
         # 2. Process continuation sections (SimpMusic continuation scraper for 50+ playlists)
         from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
@@ -559,10 +667,49 @@ def get_mood_feed(params, title=""):
                 request_func = lambda additionalParams: yt._send_request(endpoint, body, additionalParams)
                 conts = get_continuations(section_list, "sectionListContinuation", 10, request_func, parse_mixed_content)
                 for c_sec in conts:
-                    c_title = c_sec.get("title", "")
-                    _process_mood_items(c_sec.get("contents", []), c_title, quick_picks, featured_playlists)
+                    shelves.append((c_sec.get("title", ""), "", c_sec.get("contents", [])))
             except Exception as e:
                 sys.stderr.write(f"[continuations error for {title}]: {e}\n")
+
+        all_tracks_discovered = []
+        for s_title, s_sub, s_items in shelves:
+            if not s_title or not s_items or (len(s_items) <= 1 and "together" in s_title.lower()):
+                continue
+            norm_items = []
+            track_count = 0
+            for it in s_items:
+                norm = _normalize_shelf_item(it, s_title)
+                if norm:
+                    norm_items.append(norm)
+                    if norm.get("type") == "track":
+                        track_count += 1
+                        if not any(q.get("videoId") == norm.get("videoId") for q in quick_picks) and len(quick_picks) < 30:
+                            quick_picks.append(norm)
+                        if not any(q.get("videoId") == norm.get("videoId") for q in all_tracks_discovered):
+                            all_tracks_discovered.append(norm)
+                    elif norm.get("type") == "playlist":
+                        if not any(p.get("id") == norm.get("id") or p.get("title") == norm.get("title") for p in featured_playlists):
+                            featured_playlists.append(norm)
+
+            if not norm_items:
+                continue
+
+            is_grid = False
+            lower_t = s_title.lower()
+            if "quick" in lower_t or "cover" in lower_t or "trending" in lower_t or "long" in lower_t:
+                is_grid = True
+            elif "listen again" in lower_t or "video" in lower_t or "favorite" in lower_t or "release" in lower_t or "playlist" in lower_t or "mix" in lower_t:
+                is_grid = False
+            elif track_count > len(norm_items) * 0.7:
+                is_grid = True
+
+            final_sections.append({
+                "title": s_title,
+                "subtitle": s_sub,
+                "type": "track_grid" if is_grid else "card_carousel",
+                "items": norm_items
+            })
+
     except Exception as e:
         sys.stderr.write(f"[personalized mood browse error for {title}]: {e}\n")
 
@@ -600,9 +747,13 @@ def get_mood_feed(params, title=""):
                 pass
 
     cache_online_tracks(quick_picks)
+    if 'all_tracks_discovered' in locals() and all_tracks_discovered:
+        cache_online_tracks(all_tracks_discovered)
 
     result = {
         "timestamp": time.time(),
+        "title": title,
+        "sections": final_sections,
         "quick_picks": quick_picks[:30],
         "featured_playlists": featured_playlists[:60]
     }
