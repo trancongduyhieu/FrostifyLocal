@@ -71,20 +71,25 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Yêu cầu mỹ thuật*: Tuyệt đối không dùng emoji; dùng icon SVG sắc sảo, hiệu ứng kính mờ (glassmorphism) và ánh sáng phát quang ăn khớp màu hình nền desktop.
 
 - [ ] **13. Thay Đổi Giao Diện Theo Phong Cách MIO (Warm Butter Pastel & Vinyl Player - Đã Chốt Theo Ảnh Đính Kèm)**
-  - *Tham chiếu trực quan*: Thiết kế MIO (`media_1789071007982.png`).
+  - *Tham chiếu trực quan*: Thiết kế MIO [mio_style_reference.png](file:///home/apple/Applications/FrostifyLocal/assets/mio_style_reference.png) (tải từ Dribbble).
   - *Bảng màu*: Butter Yellow Pastel (`#FCEEA7` / `#FDF2B8`) làm điểm nhấn, nền kem ấm (`#FFFDF5`), phân vùng điều khiển than chì tối (`#1E1E1E` / `#191919`).
   - *Đĩa Than Nổi Nghệ Thuật (Vinyl Peek Record)*: Đĩa than đen xoay tròn nhô một nửa ra khỏi bìa Album Art vuông khi đang phát nhạc.
   - *Đường Phân Cách Lượn Sóng Hữu Cơ (Organic Wavy Divider)*: Đường cong mềm mại ngăn cách giữa khu vực nội dung và thanh điều khiển bên dưới.
   - *Thanh Sóng Âm Trực Quan (Soundwave Visualizer)*: Bộ equalizer sóng âm (`||| | | |||`) tích hợp trực tiếp ngay trong thanh player bar cạnh nút Play/Pause.
   - *Tabs Điều Hướng Nghệ Thuật*: Phân nhóm "BY ALBUM", "BY PLAYLIST", "BY ARTIST" kèm avatar nghệ sĩ tròn viền tối giản.
 
-- [ ] **14. Đồng Bộ Lịch Sử Nghe Nhạc Lên YouTube Music (Watch History & Playback Tracking Sync)**
-  - *Mục tiêu*: Gửi lượt nghe thực tế của người dùng từ Frostify Local lên YouTube Music để YouTube tính lượt xem/nghe, kích hoạt lại mục "Listen again" (Nghe lại) và tối ưu hóa thuật toán gợi ý trang chủ.
-  - *Kỹ thuật*: 
-    - Gọi `ytmusicapi.get_song(videoId)` để lấy `playbackTracking`.
-    - Gửi request đến `videostatsPlaybackUrl` và `videostatsWatchtimeUrl` với tham số `cpn`, `c: "WEB_REMIX"` (hoặc dùng hàm `ytmusic.add_history_item(song)`).
-    - Hỗ trợ switch cấu hình bật/tắt đồng bộ (`sendBackToGoogle`) trong Settings.
-  - *Quy trình*: Đang thực hiện phỏng vấn thiết kế chi tiết qua `/grill-me`.
+- [ ] **14. Đồng Bộ Lịch Sử Nghe Nhạc Lên YouTube Music (Watch History & Playback Tracking Sync - Đã Làm Rõ 100% Qua /grill-me)**
+  - *Mục tiêu*: Gửi lượt nghe thực tế từ Frostify Local lên YouTube Music để Google tính lượt xem/nghe, tối ưu hóa thuật toán cá nhân hóa và kích hoạt lại toàn bộ danh sách "Listen again" (Nghe lại).
+  - *Thời điểm kích hoạt (Trigger Threshold)*: Bắt đầu gửi tín hiệu tracking ngay từ những giây đầu tiên (~5 giây đầu khi bắt đầu phát bài hát) theo chuẩn SimpMusic (`initPlayback` với `videostatsPlaybackUrl` và `atrUrl`), tránh chờ quá lâu.
+  - *Phạm vi bài hát (Sync Scope)*:
+    - Bài Online stream: Sử dụng trực tiếp `videoId` có sẵn.
+    - Bài Offline cục bộ (Local MP3/FLAC): Tự động lấy `Title + Artist` tra cứu ngầm trên YouTube Music để tìm `videoId` tương ứng và gửi đồng bộ lên tài khoản Google.
+  - *Phản hồi trực quan trên UI (Instant Reactive Update)*:
+    - Khi bài hát được ghi nhận lịch sử thành công, tự động chèn bài hát vừa nghe lên vị trí đầu tiên của hàng "Listen again" trong bộ nhớ cache QML ngay lập tức (0ms visual feedback) mà không cần chờ tải lại toàn bộ trang.
+  - *Cơ chế dự phòng & Khắc phục rớt mạng (Pending Queue & Self-Healing)*:
+    - Nếu mất mạng hoặc API timeout, lưu tạm bài hát vào `~/.cache/frostify/pending_history.json`.
+    - Tự động quét hàng đợi và gửi bù lên YouTube Music khi có kết nối mạng trở lại hoặc khi chuyển sang bài hát tiếp theo.
+  - *Cấu hình người dùng*: Bổ sung switch bật/tắt đồng bộ (`Sync Playback to Google / sendBackToGoogle`) trong Settings Dark Glass.
 
 - [ ] **15. Mở Rộng Tìm Kiếm Đa Phân Loại: Kệ Album, Nghệ Sĩ & Bài Hát Liên Quan (Categorized Search)**
   - *Hiện trạng*: Tìm kiếm YouTube Music hiện tại chỉ trả về danh sách các bài hát đơn lẻ.
