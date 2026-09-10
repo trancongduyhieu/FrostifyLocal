@@ -46,8 +46,8 @@ Scope {
     property real totalDuration: 0.0
     property real volume: 100.0
 
-    property bool isShuffle: true
-    property bool isRepeat: true
+    property bool isShuffle: false
+    property bool isRepeat: false
     property bool showAmberolDetails: true
 
     Shortcut {
@@ -151,13 +151,67 @@ Scope {
                 onPlayPauseClicked: win.togglePlay()
                 onNextClicked: win.playNext()
                 onPrevClicked: win.playPrev()
-                onToggleShuffle: win.isShuffle = !win.isShuffle
-                onToggleRepeat: win.isRepeat = !win.isRepeat
+                onToggleShuffle: {
+                    win.isShuffle = !win.isShuffle;
+                    win.saveSettings();
+                }
+                onToggleRepeat: {
+                    win.isRepeat = !win.isRepeat;
+                    win.saveSettings();
+                }
                 onSeekRequested: sec => win.seekAudio(sec)
                 onReqVolumeChange: vol => win.setVolume(vol)
                 onOpenDetailsRequested: win.showAmberolDetails = !win.showAmberolDetails
             }
         }
+    }
+
+    Timer {
+        id: delayedSettingsRead
+        interval: 100
+        running: false
+        repeat: false
+        onTriggered: {
+            win.loadSettings();
+        }
+    }
+
+    FileView {
+        id: settingsFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_settings.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            delayedSettingsRead.restart();
+        }
+        onLoadedChanged: {
+            if (loaded) win.loadSettings();
+        }
+        Component.onCompleted: {
+            if (loaded) win.loadSettings();
+        }
+    }
+
+    function loadSettings() {
+        var raw = settingsFileView.text();
+        if (!raw || raw.trim() === "") return;
+        try {
+            var obj = JSON.parse(raw);
+            if (obj.isShuffle !== undefined) win.isShuffle = !!obj.isShuffle;
+            if (obj.isRepeat !== undefined) win.isRepeat = !!obj.isRepeat;
+            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat);
+        } catch(e) {}
+    }
+
+    function saveSettings() {
+        var data = JSON.stringify({
+            isShuffle: win.isShuffle,
+            isRepeat: win.isRepeat
+        });
+        Quickshell.execDetached(["python3", "-c",
+            "import sys, os\np = os.path.expanduser('~/.config/noctalia/frostify_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
+            data
+        ]);
     }
 
     FileView {

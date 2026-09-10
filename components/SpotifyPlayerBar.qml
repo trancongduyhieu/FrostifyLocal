@@ -156,7 +156,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: { root.isShuffle = !root.isShuffle; root.toggleShuffle(); }
+                        onClicked: root.toggleShuffle()
                     }
                 }
 
@@ -248,7 +248,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: { root.isRepeat = !root.isRepeat; root.toggleRepeat(); }
+                        onClicked: root.toggleRepeat()
                     }
                 }
             }
@@ -330,36 +330,6 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
-            // Lyrics button ("MIC")
-            Item {
-                width: 32; height: 32
-                HoverHandler { id: lyricsH }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "MIC"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: root.isLyricsActive ? Theme.spotifyGreen : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
-                    Behavior on color { ColorAnimation { duration: 100 } }
-                }
-
-                Rectangle {
-                    width: 4; height: 4; radius: 2
-                    color: Theme.spotifyGreen
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 2
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isLyricsActive
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openDetailsRequested()
-                }
-            }
 
             // Queue button
             Item {
