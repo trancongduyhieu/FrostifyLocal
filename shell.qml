@@ -150,16 +150,36 @@ Scope {
         }
     }
 
+    FileView {
+        id: sessionFileView
+        path: "/tmp/frostify_current_track.json"
+        watchChanges: true
+    }
+
     // Library Data Loader
     LibraryLoader {
         id: libLoader
         onLoaded: {
-        console.log("WIN GEOMETRY: win.width =", win.width, "win.height =", win.height, "showAmberolDetails =", win.showAmberolDetails, "currentIndex =", (win.showAmberolDetails ? 1 : 0));
-
             win.playlists = libLoader.playlists;
             win.allTracks = libLoader.allTracks;
             win.currentTracks = win.allTracks;
-            if (!win.currentTrack && win.allTracks.length > 0) {
+
+            var restored = false;
+            if (sessionFileView.text()) {
+                try {
+                    var sData = JSON.parse(sessionFileView.text());
+                    if (sData.path) {
+                        var found = win.allTracks.find(t => t.path === sData.path || (t.filename && sData.path.endsWith(t.filename)));
+                        if (found) {
+                            win.currentTrack = found;
+                            win.totalDuration = (found.durationMs || 0) / 1000.0;
+                            restored = true;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            if (!restored && !win.currentTrack && win.allTracks.length > 0) {
                 // Default to first track
                 win.currentTrack = win.allTracks[0];
                 win.totalDuration = (win.allTracks[0].durationMs || 0) / 1000.0;
@@ -321,12 +341,18 @@ Scope {
         target: "frostify"
         function openWindow() {
             win.visible = true;
+            statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+            statusProcess.running = true;
         }
         function closeWindow() {
             win.visible = false;
         }
         function toggle() {
             win.visible = !win.visible;
+            if (win.visible) {
+                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.running = true;
+            }
         }
     }
 

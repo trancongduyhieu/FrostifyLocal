@@ -82,15 +82,6 @@ def update_current_track_metadata(file_path):
     if not file_path:
         return
     try:
-        # Check if already up to date
-        if os.path.exists(LAST_PATH_FILE):
-            try:
-                with open(LAST_PATH_FILE, "r", encoding="utf-8") as f:
-                    if f.read().strip() == file_path:
-                        return
-            except Exception:
-                pass
-
         app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         lib_json = os.path.join(app_dir, "library.json")
         art_url = ""
@@ -116,8 +107,11 @@ def update_current_track_metadata(file_path):
         }
         with open("/tmp/frostify_current_track.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
-        with open(LAST_PATH_FILE, "w", encoding="utf-8") as f:
-            f.write(file_path)
+
+        session_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
+        os.makedirs(os.path.dirname(session_file), exist_ok=True)
+        with open(session_file, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
     except Exception:
         pass
 

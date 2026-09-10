@@ -33,29 +33,64 @@ import sqlite3
 def scan_library():
     tracks = []
 
-    # Build videoId mapping from SimpMusic Database
+    # Build mapping from SimpMusic Database
     db_path = os.path.join(HOME, "Music", "SimpMusic", "extracted", "Music Database")
-    video_map = {}
+    title_artist_map = {}
+    title_map = {}
+    import re
     if os.path.exists(db_path):
         try:
             conn = sqlite3.connect(db_path)
             c = conn.cursor()
-            rows = c.execute("SELECT title, videoId FROM song WHERE videoId IS NOT NULL").fetchall()
-            for t_title, v_id in rows:
-                if t_title and v_id:
-                    video_map[t_title.strip().lower()] = v_id
+            rows = c.execute("SELECT title, artistName, videoId, thumbnails FROM song WHERE videoId IS NOT NULL").fetchall()
+            for t_title, a_name, v_id, thumb_json in rows:
+                if not t_title or not v_id:
+                    continue
+                t_clean = t_title.strip().lower()
+                thumb_url = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+                artists = []
+                if a_name:
+                    try:
+                        parsed_a = json.loads(a_name)
+                        if isinstance(parsed_a, list):
+                            artists = [str(x).strip().lower() for x in parsed_a]
+                        else:
+                            artists = [str(parsed_a).strip().lower()]
+                    except Exception:
+                        artists = [a_name.strip().lower()]
+                for art in artists:
+                    title_artist_map[(t_clean, art)] = thumb_url
+                title_map[t_clean] = thumb_url
             conn.close()
         except Exception as e:
             print("DB read error:", e)
 
     def find_thumbnail(title_str, artist_str):
         lower_t = title_str.strip().lower()
-        if lower_t in video_map:
-            return f"https://i.ytimg.com/vi/{video_map[lower_t]}/hqdefault.jpg"
-        # Fuzzy search
-        for db_t, db_v in video_map.items():
-            if lower_t in db_t or db_t in lower_t:
-                return f"https://i.ytimg.com/vi/{db_v}/hqdefault.jpg"
+        lower_a = artist_str.strip().lower()
+
+        # 1. Exact title + artist match
+        if (lower_t, lower_a) in title_artist_map:
+            return title_artist_map[(lower_t, lower_a)]
+
+        for sub_a in [x.strip() for x in re.split(r'[,&/]', lower_a)]:
+            if (lower_t, sub_a) in title_artist_map:
+                return title_artist_map[(lower_t, sub_a)]
+
+        # 2. Exact title match
+        if lower_t in title_map:
+            return title_map[lower_t]
+
+        # 3. Cleaned title match (without brackets/extra notes)
+        c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
+        if c_title in title_map:
+            return title_map[c_title]
+
+        # 4. Strict fuzzy match (only for long titles >= 5 chars)
+        if len(c_title) >= 5:
+            for db_t, url in title_map.items():
+                if len(db_t) >= 5 and (c_title == db_t or c_title.startswith(db_t) or db_t.startswith(c_title)):
+                    return url
         return ""
     
     # 1. Scan SimpMusic
