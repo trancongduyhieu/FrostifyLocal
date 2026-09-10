@@ -77,9 +77,15 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - Lệnh sync: `adb pull -a /storage/emulated/0/Music/SimpMusic/. ~/Music/SimpMusic/Tracks/`.
 5. **Cấu hình & Tinh chỉnh Preset (Item 4 & 9)**:
    - File cấu hình: `~/.config/noctalia/frostify_settings.json`.
-   - Hỗ trợ chọn Preset: `GachaPop`, `SpotifyClassic`, `CinematicFlow`, `MinimalistPill`.
-   - Tùy chọn màu sắc: `Auto (Wallpaper Adaptive)` vs `Manual Color Picker`.
-6. **Mã nguồn tham khảo SimpMusic**:
+   - Lưu trữ trạng thái người dùng: `isShuffle`, `isRepeat`, preset lyrics, chế độ màu.
+   - `shell.qml` nạp tự động qua `FileView` và timer `delayedSettingsRead` (100ms) để bảo đảm Quickshell async read hoàn tất trước khi parse JSON.
+   - Khi click Shuffle / Repeat trong `components/SpotifyPlayerBar.qml`, chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`. Tuyệt đối không gán đè thuộc tính cục bộ làm phá vỡ reactive property binding.
+   - Nút "MIC" đã được xóa bỏ hoàn toàn khỏi player bar để giữ giao diện tối giản chuẩn Spotify.
+6. **Cơ Chế Đồng Bộ Màu Sắc Tức Thì Với Noctalia Bar (Zero-Lag Palette Sync)**:
+   - File hook: `~/.config/noctalia/apply_theme.sh`.
+   - `palette_extractor.py` chạy ngầm song song (`&`) ngay từ đầu để xuất `frostify_palette.json` trong ~0.3s.
+   - `~/.config/quickshell/noctalia-shell/Commons/Color.qml`: `frostifyPaletteWatcher` gọi `reload()` trước và dùng `delayedFrostifyTimer` (200ms) để đọc dữ liệu khi đĩa đã nạp xong, giúp Waybar và Desktop Lyrics đổi màu đồng bộ 100% ngay từ lần đổi hình nền đầu tiên.
+7. **Mã nguồn tham khảo SimpMusic**:
    - Vị trí clone: `/home/apple/Applications/SimpMusic/`.
    - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete) và Albums Detail View.
 

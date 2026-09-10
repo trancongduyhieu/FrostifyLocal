@@ -4,11 +4,7 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
 
 ---
 
-## Danh Sách 12 Hạng Mục Đã Chốt Phương Án Triển Khai
-
-- [ ] **1. Waybar / Status Bar Phong Cách Game Gacha & Anime (Tách riêng bên Noctalia)**
-  - *Phạm vi*: Nằm bên repo `noctalia-shell` (`/etc/xdg/quickshell/noctalia-shell` hoặc cấu hình Waybar), **không** viết vào repo `FrostifyLocal`.
-  - *Tích hợp*: Giao tiếp qua socket `/tmp/frostify_mpv.sock` để lấy trạng thái bài hát, mini waveform và đĩa xoay.
+## Danh Sách Các Hạng Mục Tiếp Theo Đang Triển Khai
 
 - [ ] **2. Sửa Thanh Trượt Âm Lượng & Thời Lượng (Draggable Scrubbing)**
   - *Hiện trạng*: Chỉ click-to-seek, không kéo rê được cục tròn (thumb).
