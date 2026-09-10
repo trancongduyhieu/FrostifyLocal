@@ -285,11 +285,6 @@ def main():
 
         has_file = bool(path and not idle)
 
-        if path and not (path.startswith("http://") or path.startswith("https://")):
-            update_current_track_metadata(path)
-        elif filename and not filename.startswith("videoplayback"):
-            update_current_track_metadata(filename)
-
         status = {
             "is_playing": (pause is False) and has_file,
             "is_paused": (pause is True) and has_file,

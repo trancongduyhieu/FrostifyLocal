@@ -209,79 +209,157 @@ def get_mood_categories_live():
     cached = load_json(MOOD_CATS_FILE, None)
     if cached and (time.time() - cached.get("timestamp", 0)) < 86400:
         return cached.get("categories", DEFAULT_MOOD_PILLS)
-
-    yt = get_ytmusic_client()
-    try:
-        cats = yt.get_mood_categories()
-        moments = cats.get("Moods & moments", [])
-        if moments:
-            pills = [{"title": "All", "params": ""}]
-            for m in moments:
-                title = m.get("title", "")
-                params = m.get("params", "")
-                if title and params:
-                    pills.append({"title": title, "params": params})
-            save_json(MOOD_CATS_FILE, {"timestamp": time.time(), "categories": pills})
-            return pills
-    except Exception as e:
-        sys.stderr.write(f"[get_mood_categories_live error]: {e}\n")
     return DEFAULT_MOOD_PILLS
 
 def get_personalized_home():
     yt = get_ytmusic_client()
-    seed_vid = get_recent_seed_track()
-    mood_pills = get_mood_categories_live()
-
     quick_picks = []
+    featured_playlists = []
+    dynamic_moods = []
+
     try:
-        radio = yt.get_watch_playlist(seed_vid, limit=16)
-        raw_tracks = radio.get("tracks", [])
-        for t in raw_tracks[:12]:
-            norm = normalize_track(t)
-            if norm:
-                quick_picks.append(norm)
+        home_res = yt._send_request("browse", {"browseId": "FEmusic_home"})
+
+        # 1. Extract dynamic mood chips directly from user's account home
+        try:
+            from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
+            chip_cloud = nav(home_res, [*SINGLE_COLUMN_TAB, "sectionListRenderer", "header", "chipCloudRenderer", "chips"], True)
+            if chip_cloud:
+                for c in chip_cloud:
+                    chip = c.get("chipCloudChipRenderer", {})
+                    chip_title = "".join(r.get("text", "") for r in chip.get("text", {}).get("runs", []))
+                    chip_params = chip.get("navigationEndpoint", {}).get("browseEndpoint", {}).get("params", "")
+                    if chip_title and chip_params:
+                        dynamic_moods.append({"title": chip_title, "params": chip_params})
+        except Exception as e:
+            sys.stderr.write(f"[chip extract error]: {e}\n")
+
+        # 2. Extract sections
+        sections = home_res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+
+        for s in sections:
+            shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
+            if not shelf:
+                continue
+            header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
+            shelf_title = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
+            items = shelf.get("contents", [])
+
+            for it in items:
+                # musicResponsiveListItemRenderer (Quick picks)
+                if "musicResponsiveListItemRenderer" in it:
+                    r = it["musicResponsiveListItemRenderer"]
+                    vid = r.get("playlistItemData", {}).get("videoId")
+                    cols = r.get("flexColumns", [])
+                    title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
+                    artist = ""
+                    if len(cols) > 1:
+                        artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                        artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+                    thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                    thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+                    if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                    if vid and title and len(quick_picks) < 20:
+                        if not any(q.get("videoId") == vid for q in quick_picks):
+                            quick_picks.append({
+                                "id": f"yt_{vid}",
+                                "title": title,
+                                "name": title,
+                                "artist": artist or "YouTube Music",
+                                "source": "YouTube Music",
+                                "path": f"ytdl://{vid}",
+                                "videoId": vid,
+                                "duration": "--:--",
+                                "durationMs": 0,
+                                "image": thumb_url
+                            })
+
+                # musicTwoRowItemRenderer (Listen again, Mixes, Playlists)
+                elif "musicTwoRowItemRenderer" in it:
+                    r = it["musicTwoRowItemRenderer"]
+                    title = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
+                    sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+                    thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                    thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+                    if "w120" in thumb_url or "w226" in thumb_url:
+                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+
+                    nav_ep = r.get("navigationEndpoint", {})
+                    watch_ep = nav_ep.get("watchEndpoint", {})
+                    browse_ep = nav_ep.get("browseEndpoint", {})
+
+                    vid = watch_ep.get("videoId")
+                    pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
+
+                    # If it has videoId and is in "Listen again", treat as track
+                    if vid and (not pl_id or "listen again" in shelf_title.lower()):
+                        if len(quick_picks) < 20 and not any(q.get("videoId") == vid for q in quick_picks):
+                            quick_picks.append({
+                                "id": f"yt_{vid}",
+                                "title": title,
+                                "name": title,
+                                "artist": sub or "YouTube Music",
+                                "source": "YouTube Music",
+                                "path": f"ytdl://{vid}",
+                                "videoId": vid,
+                                "duration": "--:--",
+                                "durationMs": 0,
+                                "image": thumb_url
+                            })
+                    elif pl_id and title and thumb_url:
+                        if len(featured_playlists) < 18 and not any(p.get("title") == title for p in featured_playlists):
+                            featured_playlists.append({
+                                "id": pl_id,
+                                "playlistId": pl_id,
+                                "title": title,
+                                "subtitle": sub or shelf_title or "Playlist",
+                                "image": thumb_url
+                            })
     except Exception as e:
-        sys.stderr.write(f"[quick picks error]: {e}\n")
+        sys.stderr.write(f"[personalized home error]: {e}\n")
+
+    mood_pills = [{"title": "All", "params": ""}] + (dynamic_moods if dynamic_moods else DEFAULT_MOOD_PILLS[1:])
+    save_json(MOOD_CATS_FILE, {"timestamp": time.time(), "categories": mood_pills})
+
+    # Fallback for quick picks if empty
+    if not quick_picks:
+        seed_vid = get_recent_seed_track()
+        try:
+            radio = yt.get_watch_playlist(seed_vid, limit=16)
+            for t in radio.get("tracks", [])[:12]:
+                norm = normalize_track(t)
+                if norm:
+                    quick_picks.append(norm)
+        except Exception:
+            pass
 
     if not quick_picks:
-        quick_picks = search_ytmusic("Trending Vietnam Pop", limit=12)
+        quick_picks = search_ytmusic("Trending Music", limit=12)
 
     cache_online_tracks(quick_picks)
 
-    featured_playlists = []
-    try:
-        home_sections = yt.get_home(limit=4)
-        for sec in home_sections:
-            title = sec.get("title", "")
-            if "short" in title.lower() or "video" in title.lower():
-                continue
-            contents = sec.get("contents", [])
-            for item in contents[:8]:
-                pl_id = item.get("playlistId") or item.get("browseId")
-                item_title = item.get("title", "")
-                desc = item.get("description") or title
-                thumbs = item.get("thumbnails", [])
-                thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-                if "w120" in thumb_url or "w226" in thumb_url:
-                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-
-                if item_title and thumb_url:
-                    featured_playlists.append({
-                        "id": pl_id or f"pl_{len(featured_playlists)}",
-                        "playlistId": pl_id,
-                        "title": item_title,
-                        "subtitle": desc,
-                        "image": thumb_url
-                    })
-    except Exception as e:
-        sys.stderr.write(f"[featured playlists error]: {e}\n")
-
     res = {
         "moods": mood_pills,
-        "quick_picks": quick_picks,
+        "quick_picks": quick_picks[:12],
         "featured_playlists": featured_playlists[:14]
     }
     save_json(HOME_CACHE_FILE, res)
+
+    # Pre-warm top moods in background thread for 0ms disk cache hits
+    def _prewarm():
+        for pill in mood_pills[1:6]:
+            p = pill.get("params")
+            t = pill.get("title")
+            if p and t != "All":
+                try:
+                    get_mood_feed(p, t)
+                except Exception:
+                    pass
+
+    import threading
+    threading.Thread(target=_prewarm, daemon=True).start()
+
     return res
 
 def get_radio(video_id, limit=30):
@@ -304,6 +382,9 @@ def get_radio(video_id, limit=30):
         return []
 
 def get_mood_feed(params, title=""):
+    if not params or title == "All":
+        return get_personalized_home()
+
     os.makedirs(MOOD_CACHE_DIR, exist_ok=True)
     slug = re.sub(r'[^a-zA-Z0-9_-]', '_', f"{title}_{params[:16]}" if params else title)
     cache_path = os.path.join(MOOD_CACHE_DIR, f"{slug}.json")
@@ -315,22 +396,109 @@ def get_mood_feed(params, title=""):
             return cached
 
     yt = get_ytmusic_client()
-    playlists = []
     quick_picks = []
+    featured_playlists = []
 
-    # 1. Try official mood playlists
-    if params:
+    try:
+        # Native personalized mood browse via FEmusic_home with params
+        res = yt._send_request("browse", {"browseId": "FEmusic_home", "params": params})
+        sections = res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+
+        for s in sections:
+            shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
+            if not shelf:
+                continue
+            header = shelf.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
+            shelf_title = "".join(r.get("text", "") for r in header.get("title", {}).get("runs", []))
+            items = shelf.get("contents", [])
+
+            for it in items:
+                # Case 1: musicResponsiveListItemRenderer (Quick picks for this mood)
+                if "musicResponsiveListItemRenderer" in it:
+                    r = it["musicResponsiveListItemRenderer"]
+                    vid = r.get("playlistItemData", {}).get("videoId")
+                    cols = r.get("flexColumns", [])
+                    title_text = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
+                    artist = ""
+                    if len(cols) > 1:
+                        artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                        artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+                    thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                    thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
+                    if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                    if vid and title_text and len(quick_picks) < 24:
+                        if not any(q.get("videoId") == vid for q in quick_picks):
+                            quick_picks.append({
+                                "id": f"yt_{vid}",
+                                "title": title_text,
+                                "name": title_text,
+                                "artist": artist or "YouTube Music",
+                                "source": "YouTube Music",
+                                "path": f"ytdl://{vid}",
+                                "videoId": vid,
+                                "duration": "--:--",
+                                "durationMs": 0,
+                                "image": thumb_url
+                            })
+
+                # Case 2: musicTwoRowItemRenderer (Listen again, Mixes, Playlists)
+                elif "musicTwoRowItemRenderer" in it:
+                    r = it["musicTwoRowItemRenderer"]
+                    t_text = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
+                    sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+                    thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                    thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+                    if "w120" in thumb_url or "w226" in thumb_url:
+                        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+
+                    nav_ep = r.get("navigationEndpoint", {})
+                    watch_ep = nav_ep.get("watchEndpoint", {})
+                    browse_ep = nav_ep.get("browseEndpoint", {})
+
+                    vid = watch_ep.get("videoId")
+                    pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
+
+                    # If watchEndpoint has videoId and is in "Listen again", it's a personalized track!
+                    if vid and (not pl_id or "listen again" in shelf_title.lower()):
+                        if len(quick_picks) < 24 and not any(q.get("videoId") == vid for q in quick_picks):
+                            quick_picks.append({
+                                "id": f"yt_{vid}",
+                                "title": t_text,
+                                "name": t_text,
+                                "artist": sub or "YouTube Music",
+                                "source": "YouTube Music",
+                                "path": f"ytdl://{vid}",
+                                "videoId": vid,
+                                "duration": "--:--",
+                                "durationMs": 0,
+                                "image": thumb_url
+                            })
+                    elif pl_id and t_text and thumb_url:
+                        if len(featured_playlists) < 18 and not any(p.get("title") == t_text for p in featured_playlists):
+                            featured_playlists.append({
+                                "id": pl_id,
+                                "playlistId": pl_id,
+                                "title": t_text,
+                                "subtitle": sub or shelf_title or "Playlist",
+                                "image": thumb_url
+                            })
+    except Exception as e:
+        sys.stderr.write(f"[personalized mood browse error for {title}]: {e}\n")
+
+    # If featured_playlists has fewer than 6, supplement from official mood playlists
+    if len(featured_playlists) < 6 and params:
         try:
             raw_playlists = yt.get_mood_playlists(params)
-            for item in raw_playlists[:16]:
+            for item in raw_playlists[:12]:
                 pl_id = item.get("playlistId")
                 pl_title = item.get("title", "")
                 thumbs = item.get("thumbnails", [])
                 thumb_url = thumbs[-1].get("url", "") if thumbs else ""
                 if "w120" in thumb_url or "w226" in thumb_url:
                     thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-                if pl_id and pl_title:
-                    playlists.append({
+                if pl_id and pl_title and not any(p.get("title") == pl_title for p in featured_playlists):
+                    featured_playlists.append({
                         "id": pl_id,
                         "playlistId": pl_id,
                         "title": pl_title,
@@ -338,11 +506,11 @@ def get_mood_feed(params, title=""):
                         "image": thumb_url
                     })
         except Exception as e:
-            sys.stderr.write(f"[mood playlist error for {title}]: {e}\n")
+            sys.stderr.write(f"[mood playlist fallback error for {title}]: {e}\n")
 
-    # 2. Extract quick picks from top playlists
-    if playlists:
-        for pl in playlists[:2]:
+    # If quick_picks is empty, extract from top playlist
+    if not quick_picks and featured_playlists:
+        for pl in featured_playlists[:2]:
             try:
                 top_tracks = get_playlist_tracks(pl["playlistId"], limit=12)
                 if top_tracks:
@@ -351,43 +519,15 @@ def get_mood_feed(params, title=""):
             except Exception:
                 pass
 
-    # 3. Fallback search if mood API 404s or returned empty (GUARANTEE NON-EMPTY FEED)
-    query = title if title else "Relax"
-    if not quick_picks:
-        try:
-            quick_picks = search_ytmusic(f"{query} songs", limit=12)
-        except Exception as e:
-            sys.stderr.write(f"[mood fallback tracks error]: {e}\n")
-
-    if not playlists:
-        try:
-            search_pls = yt.search(f"{query} playlist", filter="playlists", limit=12)
-            for item in search_pls:
-                pl_id = item.get("browseId")
-                pl_title = item.get("title", "")
-                thumbs = item.get("thumbnails", [])
-                thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-                if "w120" in thumb_url or "w226" in thumb_url:
-                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
-                if pl_id and pl_title:
-                    playlists.append({
-                        "id": pl_id,
-                        "playlistId": pl_id,
-                        "title": pl_title,
-                        "subtitle": item.get("itemCount") or "Playlist",
-                        "image": thumb_url
-                    })
-        except Exception as e:
-            sys.stderr.write(f"[mood fallback playlists error]: {e}\n")
-
     cache_online_tracks(quick_picks)
-    res = {
+
+    result = {
         "timestamp": time.time(),
-        "quick_picks": quick_picks,
-        "featured_playlists": playlists
+        "quick_picks": quick_picks[:12],
+        "featured_playlists": featured_playlists[:14]
     }
-    save_json(cache_path, res)
-    return res
+    save_json(cache_path, result)
+    return result
 
 def get_playlist_tracks(playlist_id, limit=50):
     if not playlist_id:
@@ -439,6 +579,16 @@ def search_ytmusic(query, limit=20):
         return tracks
     except Exception as e:
         sys.stderr.write(f"[ytmusic search error]: {e}\n")
+        return []
+
+def get_search_suggestions(query):
+    if not query or not query.strip():
+        return []
+    try:
+        yt = get_ytmusic_client()
+        return yt.get_search_suggestions(query.strip())
+    except Exception as e:
+        sys.stderr.write(f"[get_search_suggestions error]: {e}\n")
         return []
 
 def resolve_stream_url(video_id):
@@ -516,6 +666,11 @@ if __name__ == "__main__":
     elif cmd == "search":
         q = sys.argv[2] if len(sys.argv) > 2 else "Trending"
         res = search_ytmusic(q)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "suggestions" and len(sys.argv) > 2:
+        q = sys.argv[2]
+        res = get_search_suggestions(q)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "get_url":

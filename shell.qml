@@ -35,12 +35,18 @@ Scope {
 
     readonly property string appDir: Quickshell.env("HOME") + "/Applications/FrostifyLocal"
 
-    property string currentView: "home" // "home" or "library"
+    property string currentView: "home" // "home", "library", "playlist", "search"
+    property string previousView: "home"
     property var homeMoods: []
     property string selectedMood: "All"
     property var homeQuickPicks: []
     property var homeFeaturedPlaylists: []
     property bool isLoadingHome: false
+
+    property real trackChangeTimestamp: 0
+    property var moodCache: ({})
+    property string pendingSearchQuery: ""
+    property string pendingSearchMode: "online"
 
     property bool isAuthLoggedIn: false
     property string authAccountName: ""
@@ -66,6 +72,62 @@ Scope {
         }
     }
 
+    Timer {
+        id: suggestionsDebounce
+        interval: 200
+        repeat: false
+        onTriggered: {
+            if (win.pendingSearchMode === "online") {
+                win.fetchSearchSuggestions(win.pendingSearchQuery);
+            } else {
+                win.filterLocalSuggestions(win.pendingSearchQuery);
+            }
+        }
+    }
+
+    Process {
+        id: searchSuggestionsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr)) {
+                        topHeader.suggestions = arr;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    function fetchSearchSuggestions(q) {
+        if (!q || q.trim() === "") {
+            topHeader.suggestions = [];
+            return;
+        }
+        searchSuggestionsProc.running = false;
+        searchSuggestionsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "suggestions", q.trim()];
+        searchSuggestionsProc.running = true;
+    }
+
+    function filterLocalSuggestions(q) {
+        if (!q || q.trim() === "") {
+            topHeader.suggestions = [];
+            return;
+        }
+        var lower = q.toLowerCase();
+        var matches = [];
+        for (var i = 0; i < win.allTracks.length; i++) {
+            var t = win.allTracks[i];
+            var name = t.name || t.title || "";
+            if (name.toLowerCase().includes(lower) && matches.indexOf(name) === -1) {
+                matches.push(name);
+                if (matches.length >= 8) break;
+            }
+        }
+        topHeader.suggestions = matches;
+    }
+
     Process {
         id: ytSearchProc
         stdout: SplitParser {
@@ -75,9 +137,9 @@ Scope {
                     var arr = JSON.parse(data);
                     if (Array.isArray(arr)) {
                         win.ytMusicTracks = arr;
-                        if (win.currentTab === "ytmusic") {
-                            win.currentTracks = arr;
-                        }
+                        win.currentTracks = arr;
+                        win.currentView = "search";
+                        mainGrid.sectionTitle = 'Results for "' + (win.lastYTQuery || "Search") + '"';
                     }
                 } catch(e) {
                     console.log("ytSearchProc error:", e);
@@ -93,9 +155,27 @@ Scope {
 
     function performYTSearch(q) {
         win.isSearchingYT = true;
+        if (win.currentView !== "search" && win.currentView !== "playlist") {
+            win.previousView = win.currentView;
+        }
+        win.currentView = "search";
+        win.lastYTQuery = q || "Trending";
+        mainGrid.sectionTitle = 'Results for "' + win.lastYTQuery + '"';
         ytSearchProc.running = false;
-        ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "search", q ? q : "Trending"];
+        ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "search", win.lastYTQuery];
         ytSearchProc.running = true;
+    }
+
+    function filterLocalSearch(q) {
+        win.currentView = "library";
+        if (!q || q.trim() === "") {
+            mainGrid.sectionTitle = "Downloads & Local Library";
+            win.currentTracks = win.allTracks;
+            return;
+        }
+        mainGrid.sectionTitle = 'Local Search: "' + q + '"';
+        var lower = q.toLowerCase();
+        win.currentTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
     }
 
     Process {
@@ -108,6 +188,10 @@ Scope {
                     if (res.moods && Array.isArray(res.moods)) win.homeMoods = res.moods;
                     if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
                     if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
+                    win.moodCache["All"] = {
+                        quick_picks: win.homeQuickPicks,
+                        featured_playlists: win.homeFeaturedPlaylists
+                    };
                 } catch(e) {
                     console.log("homeProc parse error:", e);
                 } finally {
@@ -127,9 +211,14 @@ Scope {
             onRead: data => {
                 try {
                     var res = JSON.parse(data);
-                    if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
-                    if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
-                    else if (Array.isArray(res)) win.homeFeaturedPlaylists = res;
+                    var qp = (res.quick_picks && Array.isArray(res.quick_picks)) ? res.quick_picks : [];
+                    var fp = (res.featured_playlists && Array.isArray(res.featured_playlists)) ? res.featured_playlists : (Array.isArray(res) ? res : []);
+                    win.moodCache[win.selectedMood] = {
+                        quick_picks: qp,
+                        featured_playlists: fp
+                    };
+                    win.homeQuickPicks = qp;
+                    win.homeFeaturedPlaylists = fp;
                 } catch(e) {
                     console.log("moodProc error:", e);
                 } finally {
@@ -169,7 +258,7 @@ Scope {
                     var arr = JSON.parse(data);
                     if (Array.isArray(arr) && arr.length > 0) {
                         win.currentTracks = arr;
-                        win.currentView = "library";
+                        win.currentView = "playlist";
                         mainGrid.sectionTitle = playlistTracksProc.targetTitle;
                     }
                 } catch(e) {
@@ -276,6 +365,13 @@ Scope {
 
     function selectMood(title, params) {
         win.selectedMood = title;
+        if (win.moodCache[title]) {
+            var cachedData = win.moodCache[title];
+            win.homeQuickPicks = cachedData.quick_picks || [];
+            win.homeFeaturedPlaylists = cachedData.featured_playlists || [];
+            win.isLoadingHome = false;
+            return;
+        }
         if (title === "All" || !params) {
             win.loadHomeFeed();
             return;
@@ -288,6 +384,7 @@ Scope {
 
     function playOnlineTrack(trk) {
         if (!trk) return;
+        win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
@@ -311,7 +408,10 @@ Scope {
 
     function loadPlaylistTracks(pl) {
         if (!pl || !pl.playlistId) return;
-        win.currentView = "library";
+        if (win.currentView !== "search" && win.currentView !== "playlist") {
+            win.previousView = win.currentView;
+        }
+        win.currentView = "playlist";
         mainGrid.sectionTitle = pl.title || "Playlist";
         win.isSearchingYT = true;
         playlistTracksProc.running = false;
@@ -365,7 +465,42 @@ Scope {
                 currentView: win.currentView
 
                 onTabSelected: tab => win.filterByTab(tab)
-                onSearchRequested: query => win.filterBySearch(query)
+
+                onBackRequested: {
+                    if (win.currentView === "playlist" || win.currentView === "search") {
+                        win.currentView = (win.previousView && win.previousView !== win.currentView) ? win.previousView : "home";
+                    } else if (win.currentView === "library" && win.previousView === "home") {
+                        win.currentView = "home";
+                    } else {
+                        win.currentView = "home";
+                    }
+                }
+
+                onSearchRequested: (query, mode) => {
+                    win.pendingSearchQuery = query;
+                    win.pendingSearchMode = mode;
+                    if (!query || query.trim() === "") {
+                        topHeader.suggestions = [];
+                        if (mode === "offline") {
+                            win.currentTracks = win.allTracks;
+                        }
+                        return;
+                    }
+                    suggestionsDebounce.restart();
+                    if (mode === "offline") {
+                        win.filterLocalSearch(query);
+                    }
+                }
+
+                onSearchSubmitted: (query, mode) => {
+                    if (mode === "online" || win.currentView === "home" || win.currentView === "search" || win.currentView === "playlist") {
+                        if (query && query.trim().length > 0) {
+                            win.performYTSearch(query.trim());
+                        }
+                    } else {
+                        win.filterLocalSearch(query);
+                    }
+                }
             }
 
             // Main Content Area: 3-Column Desktop Layout (SimpMusic Optimized)
@@ -390,10 +525,12 @@ Scope {
                     visible: !win.showAmberolDetails || win.width >= 900
 
                     onHomeSelected: {
+                        if (win.currentView !== "home") win.previousView = win.currentView;
                         win.currentView = "home";
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onLibrarySelected: {
+                        if (win.currentView !== "library") win.previousView = win.currentView;
                         win.currentView = "library";
                         win.currentTracks = win.allTracks;
                         mainGrid.sectionTitle = "Downloads (Local)";
@@ -403,6 +540,7 @@ Scope {
                         settingsModal.visible = true;
                     }
                     onPlaylistSelected: (idx, pl) => {
+                        if (win.currentView !== "library") win.previousView = win.currentView;
                         win.currentView = "library";
                         win.selectedPlaylistIndex = idx;
                         win.selectPlaylist(pl.id);
@@ -447,7 +585,7 @@ Scope {
                         isLoading: win.isSearchingYT
 
                         onTrackPlayRequested: trk => {
-                            if (trk && trk.path && trk.path.startsWith("ytdl://")) {
+                            if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                                 win.playOnlineTrack(trk);
                             } else {
                                 win.playTrack(trk);
@@ -606,6 +744,7 @@ Scope {
         watchChanges: true
         onFileChanged: {
             reload();
+            if (Date.now() - win.trackChangeTimestamp < 3000) return;
             try {
                 var raw = text();
                 if (!raw || raw.trim() === "") return;
@@ -708,6 +847,7 @@ Scope {
 
     function playTrack(trk) {
         if (!trk) return;
+        win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
@@ -812,8 +952,8 @@ Scope {
                     if (s.time_pos !== undefined && s.time_pos > 0) win.currentTime = s.time_pos;
                     if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
 
-                    // Sync track from filename if playing
-                    if (s.filename && win.allTracks.length > 0) {
+                    // Sync track from filename if playing (suppressed during track change transitions)
+                    if (Date.now() - win.trackChangeTimestamp > 3000 && s.filename && win.allTracks.length > 0) {
                         if (!win.currentTrack || (win.currentTrack.path && !win.currentTrack.path.endsWith(s.filename))) {
                             var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
                             if (matched) win.currentTrack = matched;
