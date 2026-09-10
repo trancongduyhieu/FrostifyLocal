@@ -159,9 +159,32 @@ def main():
             print("Set playlist and playing index:", idx)
 
     elif action == "toggle":
-        is_paused = get_mpv_property("pause")
-        send_mpv_cmd(["set_property", "pause", not is_paused])
-        print("Toggled pause to:", not is_paused)
+        ensure_mpv()
+        path = get_mpv_property("path")
+        idle = get_mpv_property("idle-active")
+        fallback_file = sys.argv[2] if len(sys.argv) > 2 else ""
+
+        if not fallback_file:
+            session_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
+            if os.path.exists(session_file):
+                try:
+                    with open(session_file, "r", encoding="utf-8") as f:
+                        sess_data = json.load(f)
+                        fallback_file = sess_data.get("path", "")
+                except Exception:
+                    pass
+
+        if (not path or idle) and fallback_file and os.path.exists(fallback_file):
+            send_mpv_cmd(["loadfile", fallback_file, "replace"])
+            send_mpv_cmd(["set_property", "pause", False])
+            update_current_track_metadata(fallback_file)
+            print("Loaded and playing fallback:", fallback_file)
+        elif not path or idle:
+            print("MPV is idle and no track found")
+        else:
+            is_paused = get_mpv_property("pause")
+            send_mpv_cmd(["set_property", "pause", not is_paused])
+            print("Toggled pause to:", not is_paused)
 
     elif action == "pause":
         send_mpv_cmd(["set_property", "pause", True])
@@ -188,6 +211,9 @@ def main():
         filename = get_mpv_property("filename") or ""
         path = get_mpv_property("path") or ""
         vol = get_mpv_property("volume") or 100
+        idle = get_mpv_property("idle-active")
+
+        has_file = bool(path and not idle)
 
         if path:
             update_current_track_metadata(path)
@@ -195,11 +221,11 @@ def main():
             update_current_track_metadata(filename)
 
         status = {
-            "is_playing": (pause is False),
-            "is_paused": (pause is True),
-            "time_pos": round(time_pos, 1),
-            "duration": round(duration, 1),
-            "filename": filename,
+            "is_playing": (pause is False) and has_file,
+            "is_paused": (pause is True) and has_file,
+            "time_pos": round(time_pos, 1) if has_file else 0.0,
+            "duration": round(duration, 1) if has_file else 0.0,
+            "filename": filename if has_file else "",
             "volume": vol
         }
         print(json.dumps(status))

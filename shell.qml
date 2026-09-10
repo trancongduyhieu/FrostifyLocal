@@ -21,6 +21,16 @@ Scope {
             win.visible = false;
         }
 
+        onVisibleChanged: {
+            if (win.visible) {
+                if (!statusProcess.running) {
+                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.running = true;
+                }
+                Qt.callLater(function() { amberolView.updateActiveLyric(true); });
+            }
+        }
+
         property var activeLyrics: amberolView.activeLyrics
 
     readonly property string appDir: Quickshell.env("HOME") + "/Applications/FrostifyLocal"
@@ -184,6 +194,11 @@ Scope {
                 win.currentTrack = win.allTracks[0];
                 win.totalDuration = (win.allTracks[0].durationMs || 0) / 1000.0;
             }
+
+            if (!statusProcess.running) {
+                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.running = true;
+            }
         }
     }
 
@@ -234,8 +249,8 @@ Scope {
                 paths.push(win.currentTracks[i].path);
             }
         }
-        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)];
-        playerCmd.running = true;
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)]);
+        pollTimer.restart();
     }
 
     function togglePlay() {
@@ -243,9 +258,11 @@ Scope {
             win.playTrack(win.currentTracks[0]);
             return;
         }
-        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "toggle"];
-        playerCmd.running = true;
+        if (!win.currentTrack) return;
+        var targetPath = win.currentTrack.path || "";
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "toggle", targetPath]);
         win.isPlaying = !win.isPlaying;
+        pollTimer.restart();
     }
 
     function playNext() {
@@ -277,14 +294,12 @@ Scope {
 
     function seekAudio(sec) {
         win.currentTime = sec;
-        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)];
-        playerCmd.running = true;
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
     }
 
     function setVolume(vol) {
         win.volume = vol;
-        playerCmd.command = ["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)];
-        playerCmd.running = true;
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
     }
 
     Process {
@@ -341,8 +356,11 @@ Scope {
         target: "frostify"
         function openWindow() {
             win.visible = true;
-            statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
-            statusProcess.running = true;
+            if (!statusProcess.running) {
+                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.running = true;
+            }
+            Qt.callLater(function() { amberolView.updateActiveLyric(true); });
         }
         function closeWindow() {
             win.visible = false;
@@ -350,8 +368,11 @@ Scope {
         function toggle() {
             win.visible = !win.visible;
             if (win.visible) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
-                statusProcess.running = true;
+                if (!statusProcess.running) {
+                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.running = true;
+                }
+                Qt.callLater(function() { amberolView.updateActiveLyric(true); });
             }
         }
     }

@@ -18,14 +18,40 @@ Rectangle {
     property real currentTime: 0.0
     property bool isPlaying: false
     property var activeLyrics: []
+    property int currentLyricIndex: -1
 
     readonly property bool isCompact: root.width < 720
 
     signal closeRequested()
     signal seekRequested(real seconds)
 
+    function updateActiveLyric(forceScroll) {
+        if (!activeLyrics || activeLyrics.length === 0) {
+            currentLyricIndex = -1;
+            return;
+        }
+        var cur = root.currentTime;
+        var found = -1;
+        for (var i = 0; i < activeLyrics.length; i++) {
+            var t = activeLyrics[i].time;
+            var nextT = (i + 1 < activeLyrics.length) ? activeLyrics[i + 1].time : 999999;
+            if (cur >= t && cur < nextT) {
+                found = i;
+                break;
+            }
+        }
+        if (found !== -1) {
+            var changed = (currentLyricIndex !== found);
+            currentLyricIndex = found;
+            if (changed || forceScroll) {
+                lyricsView.positionViewAtIndex(found, ListView.Center);
+            }
+        }
+    }
+
     function fetchLyrics() {
         activeLyrics = [];
+        currentLyricIndex = -1;
         var songTitle = (track && (track.title || track.name)) ? (track.title || track.name) : "";
         if (songTitle !== "") {
             console.log("Fetching lyrics for track:", songTitle);
@@ -36,12 +62,19 @@ Rectangle {
     }
 
     onTrackChanged: fetchLyrics()
-    onVisibleChanged: if (visible) fetchLyrics()
+    onCurrentTimeChanged: updateActiveLyric(false)
+    onActiveLyricsChanged: Qt.callLater(function() { updateActiveLyric(true); })
+    onVisibleChanged: {
+        if (visible) {
+            fetchLyrics();
+            Qt.callLater(function() { updateActiveLyric(true); });
+        }
+    }
     
     onWidthChanged: console.log("AmberolDetailView width:", width, "isCompact:", isCompact)
     Component.onCompleted: {
         console.log("AmberolDetailView COMPLETED width:", width, "height:", height, "isCompact:", isCompact)
-        fetchLyrics()
+        fetchLyrics();
     }
 
 
@@ -54,6 +87,7 @@ Rectangle {
                     var arr = JSON.parse(data);
                     root.activeLyrics = arr;
                     console.log("AmberolDetailView loaded lyrics count:", arr.length);
+                    Qt.callLater(function() { root.updateActiveLyric(true); });
                 } catch(e) {
                     console.log("Parse error:", e);
                     root.activeLyrics = [];
@@ -338,17 +372,7 @@ Rectangle {
                             width: Math.max(100, lyricsView.width - 24)
                             height: Math.max(38, lyricTxt.paintedHeight + 16)
 
-                            property bool isCurrentLine: {
-                                if (!root.activeLyrics || root.activeLyrics.length === 0) return false;
-                                var nextTime = (index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : 999999;
-                                return root.currentTime >= modelData.time && root.currentTime < nextTime;
-                            }
-
-                            onIsCurrentLineChanged: {
-                                if (isCurrentLine) {
-                                    lyricsView.positionViewAtIndex(index, ListView.Center);
-                                }
-                            }
+                            property bool isCurrentLine: index === root.currentLyricIndex
 
                             HoverHandler { id: lineHover }
 
@@ -387,6 +411,8 @@ Rectangle {
                                 onClicked: {
                                     if (modelData && modelData.time !== undefined) {
                                         root.seekRequested(modelData.time);
+                                        root.currentLyricIndex = index;
+                                        lyricsView.positionViewAtIndex(index, ListView.Center);
                                     }
                                 }
                             }
