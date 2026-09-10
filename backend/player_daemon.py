@@ -76,6 +76,51 @@ def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
     return res.get("data")
 
+LAST_PATH_FILE = "/tmp/frostify_last_path"
+
+def update_current_track_metadata(file_path):
+    if not file_path:
+        return
+    try:
+        # Check if already up to date
+        if os.path.exists(LAST_PATH_FILE):
+            try:
+                with open(LAST_PATH_FILE, "r", encoding="utf-8") as f:
+                    if f.read().strip() == file_path:
+                        return
+            except Exception:
+                pass
+
+        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        lib_json = os.path.join(app_dir, "library.json")
+        art_url = ""
+        title = ""
+        artist = ""
+        if os.path.exists(lib_json):
+            with open(lib_json, "r", encoding="utf-8") as f:
+                tracks = json.load(f)
+                for t in tracks:
+                    p = t.get("path", "")
+                    fn = t.get("filename", "")
+                    if p == file_path or (fn and file_path.endswith(fn)):
+                        art_url = t.get("image", "")
+                        title = t.get("title", "") or t.get("name", "")
+                        artist = t.get("artist", "")
+                        break
+
+        meta = {
+            "title": title,
+            "artist": artist,
+            "artUrl": art_url,
+            "path": file_path
+        }
+        with open("/tmp/frostify_current_track.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+        with open(LAST_PATH_FILE, "w", encoding="utf-8") as f:
+            f.write(file_path)
+    except Exception:
+        pass
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: player_daemon.py [play <path> | pause | resume | toggle | seek <sec> | stop | status]")
@@ -85,6 +130,7 @@ def main():
 
     if action == "play" and len(sys.argv) > 2:
         file_path = sys.argv[2]
+        update_current_track_metadata(file_path)
         send_mpv_cmd(["loadfile", file_path, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
@@ -104,6 +150,8 @@ def main():
         if len(sys.argv) > 3:
             try:
                 tracks = json.loads(sys.argv[3])
+                if len(tracks) > idx:
+                    update_current_track_metadata(tracks[idx])
                 with open(m3u_file, "w", encoding="utf-8") as f:
                     for t in tracks:
                         f.write(t + "\n")
@@ -144,7 +192,13 @@ def main():
         time_pos = get_mpv_property("time-pos") or 0.0
         duration = get_mpv_property("duration") or 0.0
         filename = get_mpv_property("filename") or ""
+        path = get_mpv_property("path") or ""
         vol = get_mpv_property("volume") or 100
+
+        if path:
+            update_current_track_metadata(path)
+        elif filename:
+            update_current_track_metadata(filename)
 
         status = {
             "is_playing": (pause is False),
