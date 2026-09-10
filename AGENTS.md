@@ -1,4 +1,4 @@
-# AGENT.md - Frostify Local Pair-Programming Guide
+# AGENTS.md - Frostify Local Pair-Programming Guide
 
 Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, quy chuẩn mã nguồn, các quyết định thiết kế cốt lõi và hướng dẫn vận hành dự án **Frostify Local** dành cho các AI Agent / Assistant trong các session làm việc tiếp theo.
 
@@ -52,8 +52,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 │   ├── Theme.qml                   # Hệ thống token màu, kích thước bo góc, padding
 │   ├── TrackCard.qml               # Card hiển thị từng bài hát trong grid
 │   └── TrackRow.qml                # Dòng hiển thị bài hát trong danh sách hàng đợi
-├── AGENT.md                        # File này (chỉ dẫn dành cho AI)
-├── AGENTS.md                       # Bản sao đồng bộ của AGENT.md
+├── AGENTS.md                       # File này (chỉ dẫn chuẩn dành cho AI)
 └── TODO.md                         # Danh sách tính năng và lộ trình phát triển đã chốt
 ```
 
