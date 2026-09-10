@@ -188,10 +188,10 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Tip: Open music.youtube.com in Firefox -> F12 -> Network -> Click any request -> Copy 'Cookie' header and paste here. Your credentials remain 100% local."
+                    text: "1-Click Sync: If you use the SimpMusic Utils browser extension, click 'Sync to Frostify (1-Click)' in the extension, or click 'Paste from Clipboard' below."
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
-                    color: "#777777"
+                    color: "#888888"
                     wrapMode: Text.Wrap
                 }
             }
@@ -209,17 +209,48 @@ Rectangle {
 
             Item { Layout.fillHeight: true }
 
-            // Action Buttons
+            // Action Buttons with Clean Typography (No emoji, No distracting icons)
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
                 visible: !root.isLoggedIn
 
+                // 1-Click Paste from Clipboard button
+                Rectangle {
+                    height: 38
+                    radius: 19
+                    color: pasteH.hovered ? "#333333" : "#242424"
+                    border.color: "#3a3a3a"
+                    border.width: 1
+                    Layout.preferredWidth: pasteTxt.implicitWidth + 32
+
+                    HoverHandler { id: pasteH }
+
+                    Text {
+                        id: pasteTxt
+                        anchors.centerIn: parent
+                        text: "Paste from Clipboard"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: Theme.textPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            authInput.selectAll();
+                            authInput.paste();
+                        }
+                    }
+                }
+
                 Item { Layout.fillWidth: true }
 
                 Rectangle {
                     height: 38
-                    width: 100
+                    width: 90
                     radius: 19
                     color: cancelH.hovered ? "#333333" : "#242424"
 

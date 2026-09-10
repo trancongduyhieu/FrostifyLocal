@@ -30,12 +30,23 @@ Rectangle {
             width: 24
             height: 24
 
+            SpotifyIcon {
+                anchors.centerIn: parent
+                visible: mouseArea.containsMouse || row.isCurrentTrack
+                source: (row.isCurrentTrack && row.isPlaying)
+                        ? "../assets/icons/media-playback-pause-symbolic.svg"
+                        : "../assets/icons/media-playback-start-symbolic.svg"
+                iconSize: 14
+                color: row.isCurrentTrack ? Theme.spotifyGreen : Theme.textPrimary
+            }
+
             Text {
                 anchors.centerIn: parent
-                text: mouseArea.containsMouse ? (row.isCurrentTrack && row.isPlaying ? "⏸" : "▶") : (row.isCurrentTrack ? "▶" : String(row.indexNumber))
-                color: row.isCurrentTrack ? "#c084fc" : "#71717a"
-                font.pixelSize: mouseArea.containsMouse || row.isCurrentTrack ? 14 : 12
-                font.bold: row.isCurrentTrack
+                visible: !mouseArea.containsMouse && !row.isCurrentTrack
+                text: String(row.indexNumber)
+                color: Theme.textSecondary
+                font.pixelSize: 12
+                font.family: Theme.fontFamily
             }
         }
 

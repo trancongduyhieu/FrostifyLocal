@@ -129,6 +129,7 @@ Scope {
                     var res = JSON.parse(data);
                     if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
                     if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
+                    else if (Array.isArray(res)) win.homeFeaturedPlaylists = res;
                 } catch(e) {
                     console.log("moodProc error:", e);
                 } finally {
@@ -173,8 +174,13 @@ Scope {
                     }
                 } catch(e) {
                     console.log("playlistTracksProc error:", e);
+                } finally {
+                    win.isSearchingYT = false;
                 }
             }
+        }
+        onExited: {
+            win.isSearchingYT = false;
         }
     }
 
@@ -260,6 +266,11 @@ Scope {
         win.currentTime = 0.0;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
+        win.showAmberolDetails = true;
+
+        if (!win.currentTracks || win.currentTracks.length === 0) {
+            win.currentTracks = [trk];
+        }
 
         var streamPath = trk.path || ("ytdl://" + trk.videoId);
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath]);
@@ -274,6 +285,9 @@ Scope {
 
     function loadPlaylistTracks(pl) {
         if (!pl || !pl.playlistId) return;
+        win.currentView = "library";
+        mainGrid.sectionTitle = pl.title || "Playlist";
+        win.isSearchingYT = true;
         playlistTracksProc.running = false;
         playlistTracksProc.targetTitle = pl.title || "Playlist";
         playlistTracksProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "playlist", pl.playlistId];
@@ -294,7 +308,7 @@ Scope {
 
     property bool isShuffle: false
     property bool isRepeat: false
-    property bool showAmberolDetails: true
+    property bool showAmberolDetails: false
 
     Shortcut {
         sequence: "F11"
@@ -355,6 +369,8 @@ Scope {
                     }
                     onLibrarySelected: {
                         win.currentView = "library";
+                        win.currentTracks = win.allTracks;
+                        mainGrid.sectionTitle = "Downloads (Local)";
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onSettingsRequested: {
@@ -541,6 +557,17 @@ Scope {
     }
 
     FileView {
+        id: authChangeFileView
+        path: "/tmp/frostify_auth_changed"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            win.checkAuthStatus();
+            win.loadHomeFeed();
+        }
+    }
+
+    FileView {
         id: sessionFileView
         path: "/tmp/frostify_current_track.json"
         watchChanges: true
@@ -571,9 +598,7 @@ Scope {
         onLoaded: {
             win.playlists = libLoader.playlists;
             win.allTracks = libLoader.allTracks;
-            if (win.currentView === "library") {
-                win.currentTracks = win.allTracks;
-            }
+            win.currentTracks = win.allTracks;
 
             var restored = false;
             if (sessionFileView.text()) {
@@ -588,12 +613,6 @@ Scope {
                         }
                     }
                 } catch(e) {}
-            }
-
-            if (!restored && !win.currentTrack && win.allTracks.length > 0) {
-                // Default to first track
-                win.currentTrack = win.allTracks[0];
-                win.totalDuration = (win.allTracks[0].durationMs || 0) / 1000.0;
             }
 
             if (!statusProcess.running) {
@@ -813,6 +832,17 @@ Scope {
         }
         function closeSettings() {
             settingsModal.visible = false;
+        }
+        function showLibrary() {
+            win.currentView = "library";
+            win.currentTracks = win.allTracks;
+            mainGrid.sectionTitle = "Downloads (Local)";
+        }
+        function showHome() {
+            win.currentView = "home";
+        }
+        function selectMood(title: string, params: string) {
+            win.selectMood(title, params);
         }
     }
 

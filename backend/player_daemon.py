@@ -40,7 +40,8 @@ def ensure_mpv():
         "--audio-buffer=0.2",
         "--title=frostify-audio",
         "--loop-playlist=inf",
-        "--gapless-audio=yes"
+        "--gapless-audio=yes",
+        "--ytdl-format=bestaudio/best"
     ]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
@@ -86,9 +87,21 @@ def resolve_media_path(file_path):
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import ytmusic_helper
             vid = file_path.replace("ytdl://", "")
-            res = ytmusic_helper.resolve_stream_url(vid)
-            if res and res.get("stream_url"):
-                return res["stream_url"]
+            if "watch?v=" in vid:
+                vid = vid.split("watch?v=")[1].split("&")[0]
+
+            # Instant cache lookup
+            cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
+            cached = cache.get(vid)
+            if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
+                return cached.get("stream_url")
+
+            # In background, warm up the cache for fast seek
+            import threading
+            threading.Thread(target=ytmusic_helper.resolve_stream_url, args=(vid,), daemon=True).start()
+
+            # Return direct watch URL for instant MPV playback without blocking Python
+            return f"https://www.youtube.com/watch?v={vid}"
         except Exception as e:
             sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
     return file_path

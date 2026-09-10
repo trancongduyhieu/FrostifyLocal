@@ -74,7 +74,9 @@ def get_auth_status():
             return {"logged_in": False, "error": str(e)}
 
 def save_auth(raw_text):
-    raw_text = raw_text.strip()
+    if isinstance(raw_text, dict):
+        raw_text = "; ".join(f"{k}={v}" for k, v in raw_text.items())
+    raw_text = str(raw_text).strip()
     if not raw_text:
         return {"success": False, "error": "Empty input"}
 
@@ -122,6 +124,11 @@ def save_auth(raw_text):
         test_client.get_home(limit=1)
 
         os.replace(temp_file, AUTH_FILE)
+        try:
+            with open("/tmp/frostify_auth_changed", "w") as f:
+                f.write(str(time.time()))
+        except Exception:
+            pass
         return {"success": True, "message": "Connected successfully to YouTube Music"}
     except Exception as e:
         if os.path.exists(AUTH_FILE + ".tmp"):
@@ -133,9 +140,13 @@ def logout():
     if os.path.exists(AUTH_FILE):
         try:
             os.remove(AUTH_FILE)
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        except Exception:
+            pass
+    try:
+        with open("/tmp/frostify_auth_changed", "w") as f:
+            f.write(str(time.time()))
+    except Exception:
+        pass
     return {"success": True}
 
 def normalize_track(item):
@@ -287,26 +298,67 @@ def get_mood_feed(params):
                     "subtitle": item.get("description") or "Playlist",
                     "image": thumb_url
                 })
-        return playlists
+
+        # Extract mood quick picks from the top mood playlist tracks
+        quick_picks = []
+        if playlists:
+            top_pl_id = playlists[0]["playlistId"]
+            try:
+                top_tracks = get_playlist_tracks(top_pl_id, limit=12)
+                if top_tracks:
+                    quick_picks = top_tracks
+            except Exception:
+                pass
+
+        if not quick_picks and playlists and len(playlists) > 1:
+            try:
+                top_tracks = get_playlist_tracks(playlists[1]["playlistId"], limit=12)
+                if top_tracks:
+                    quick_picks = top_tracks
+            except Exception:
+                pass
+
+        return {
+            "quick_picks": quick_picks,
+            "featured_playlists": playlists
+        }
     except Exception as e:
         sys.stderr.write(f"[get_mood_feed error]: {e}\n")
-        return []
+        return {"quick_picks": [], "featured_playlists": []}
 
 def get_playlist_tracks(playlist_id, limit=50):
-    yt = get_ytmusic_client()
-    try:
-        pl = yt.get_playlist(playlist_id, limit=limit)
-        raw_tracks = pl.get("tracks", [])
-        tracks = []
-        for t in raw_tracks:
-            norm = normalize_track(t)
-            if norm:
-                tracks.append(norm)
-        cache_online_tracks(tracks)
-        return tracks
-    except Exception as e:
-        sys.stderr.write(f"[get_playlist_tracks error]: {e}\n")
+    if not playlist_id:
         return []
+    yt = get_ytmusic_client()
+    raw_tracks = []
+
+    # Radio and automix playlists have IDs starting with RD or VLRD
+    if playlist_id.startswith("RD") or playlist_id.startswith("VLRD"):
+        try:
+            res = yt.get_watch_playlist(playlistId=playlist_id, limit=limit)
+            raw_tracks = res.get("tracks", [])
+        except Exception as e:
+            sys.stderr.write(f"[get_watch_playlist for {playlist_id} error]: {e}\n")
+
+    if not raw_tracks:
+        try:
+            pl = yt.get_playlist(playlist_id, limit=limit)
+            raw_tracks = pl.get("tracks", [])
+        except Exception as e:
+            # Fallback to watch playlist if standard get_playlist throws
+            try:
+                res = yt.get_watch_playlist(playlistId=playlist_id, limit=limit)
+                raw_tracks = res.get("tracks", [])
+            except Exception as e2:
+                sys.stderr.write(f"[get_playlist_tracks error for {playlist_id}]: {e} | {e2}\n")
+
+    tracks = []
+    for t in raw_tracks:
+        norm = normalize_track(t)
+        if norm:
+            tracks.append(norm)
+    cache_online_tracks(tracks)
+    return tracks
 
 def search_ytmusic(query, limit=20):
     if not query or not query.strip():

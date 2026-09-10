@@ -84,12 +84,6 @@ Rectangle {
                     iconSize: 18
                     color: "#000000"
                 }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.playRequested(root.track)
-                }
             }
         }
 
@@ -123,7 +117,7 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        z: 1
+        z: 20
         onClicked: root.playRequested(root.track)
     }
 }
