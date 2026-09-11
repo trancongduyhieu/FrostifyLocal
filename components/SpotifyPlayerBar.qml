@@ -20,6 +20,7 @@ Rectangle {
     property bool isScrubbingProgress: false
     property real scrubTime: 0.0
     property bool isScrubbingVolume: false
+    property bool isLoadingAudio: false
 
     signal playPauseClicked()
     signal nextClicked()
@@ -197,12 +198,23 @@ Rectangle {
                     Behavior on scale { NumberAnimation { duration: 100 } }
                     HoverHandler { id: playHover }
 
+                    // SimpMusic Circular Spinner when loading audio stream
+                    CircularSpinner {
+                        anchors.centerIn: parent
+                        size: 18
+                        strokeWidth: 2.2
+                        color: "#000000"
+                        running: root.isLoadingAudio
+                        visible: root.isLoadingAudio
+                    }
+
                     SpotifyIcon {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: root.isPlaying ? 0 : 1
                         source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                         iconSize: 16
                         color: "#000000"
+                        visible: !root.isLoadingAudio
                     }
 
                     MouseArea {

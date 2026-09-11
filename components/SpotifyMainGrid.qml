@@ -16,6 +16,7 @@ Rectangle {
     signal trackPlayRequested(var trk)
     signal trackDetailsRequested(var trk)
     signal trackContextMenuRequested(var trk, real globalX, real globalY)
+    signal playAllRequested()
     signal shufflePlayRequested()
     signal batchDeleteRequested(var paths)
     signal createPlaylistRequested(var tracks)
@@ -142,12 +143,51 @@ Rectangle {
                     visible: root.isDownloadsView || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
                     spacing: 12
 
-                    // Shuffle Play Button
+                    // Play All (From 1st Track) Button
+                    Rectangle {
+                        height: 36
+                        width: playRow.implicitWidth + 24
+                        radius: 18
+                        color: playH.hovered ? "#1ed760" : Theme.spotifyGreen
+                        scale: playH.hovered ? 1.03 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+
+                        RowLayout {
+                            id: playRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            SpotifyIcon {
+                                source: "../assets/icons/media-playback-start-symbolic.svg"
+                                iconSize: 15
+                                color: "#000000"
+                            }
+
+                            Text {
+                                text: "Phát"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#000000"
+                            }
+                        }
+
+                        HoverHandler { id: playH }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.playAllRequested()
+                        }
+                    }
+
+                    // Shuffle Play Button (Secondary Glass Style)
                     Rectangle {
                         height: 36
                         width: shuffleRow.implicitWidth + 24
                         radius: 18
-                        color: shufH.hovered ? "#1ed760" : Theme.spotifyGreen
+                        color: shufH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                        border.color: Qt.rgba(1, 1, 1, 0.15)
+                        border.width: 1
                         scale: shufH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
@@ -159,7 +199,7 @@ Rectangle {
                             SpotifyIcon {
                                 source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                                 iconSize: 15
-                                color: "#000000"
+                                color: "#ffffff"
                             }
 
                             Text {
@@ -167,7 +207,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
-                                color: "#000000"
+                                color: "#ffffff"
                             }
                         }
 

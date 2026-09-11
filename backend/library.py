@@ -54,7 +54,7 @@ def extract_embedded_cover(file_path):
         return out_thumb
 
     try:
-        cmd = ["ffmpeg", "-y", "-i", file_path, "-an", "-vcodec", "copy", out_thumb]
+        cmd = ["ffmpeg", "-y", "-i", file_path, "-an", "-frames:v", "1", "-update", "1", out_thumb]
         res = subprocess.run(cmd, capture_output=True, timeout=3)
         if res.returncode == 0 and os.path.exists(out_thumb) and os.path.getsize(out_thumb) > 1000:
             return out_thumb

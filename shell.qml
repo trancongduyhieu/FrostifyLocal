@@ -44,6 +44,8 @@ Scope {
     property var homeFeaturedPlaylists: []
     property bool isLoadingHome: false
     property string activePlaylistId: ""
+    property string playingPlaylistId: ""
+    property bool isLoadingAudio: false
 
     property real trackChangeTimestamp: 0
     property var moodCache: ({})
@@ -479,6 +481,7 @@ Scope {
         win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
+        win.isLoadingAudio = true;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
         win.showAmberolDetails = true;
@@ -694,6 +697,7 @@ Scope {
                     currentTrack: win.currentTrack
                     isPlaying: win.isPlaying
                     activePlaylistId: win.activePlaylistId
+                    playingPlaylistId: win.playingPlaylistId
                     selectedIndex: win.selectedPlaylistIndex
                     currentView: win.currentView
 
@@ -779,10 +783,32 @@ Scope {
                         sectionTitle: win.mainSectionTitle
                         isLoading: win.isSearchingYT
 
+                        onPlayAllRequested: {
+                            if (!mainGrid.sortedTracks || mainGrid.sortedTracks.length === 0) return;
+                            win.currentTracks = mainGrid.sortedTracks.slice();
+                            if (win.currentView === "playlist") {
+                                win.playingPlaylistId = win.activePlaylistId;
+                            } else {
+                                win.playingPlaylistId = "";
+                            }
+                            var first = win.currentTracks[0];
+                            if (first) {
+                                if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
+                                    win.playOnlineTrack(first, false);
+                                } else {
+                                    win.playTrack(first);
+                                }
+                            }
+                        }
                         onTrackPlayRequested: trk => {
                             if (win.isContextMenuActive) return;
                             if (win.browsingTracks && win.browsingTracks.length > 0) {
                                 win.currentTracks = win.browsingTracks;
+                            }
+                            if (win.currentView === "playlist") {
+                                win.playingPlaylistId = win.activePlaylistId;
+                            } else {
+                                win.playingPlaylistId = "";
                             }
                             if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                                 win.playOnlineTrack(trk, false);
@@ -825,6 +851,7 @@ Scope {
                 Layout.fillWidth: true
                 currentTrack: win.currentTrack
                 isPlaying: win.isPlaying
+                isLoadingAudio: win.isLoadingAudio
                 currentTime: win.currentTime
                 totalDuration: win.totalDuration
                 volume: win.volume
@@ -995,7 +1022,9 @@ Scope {
         onLoaded: {
             win.playlists = (libLoader.playlists || []).concat(win.customPlaylists || []);
             win.allTracks = libLoader.allTracks;
-            win.browsingTracks = win.allTracks;
+            if (win.currentView === "library" || !win.browsingTracks || win.browsingTracks.length === 0) {
+                win.browsingTracks = win.allTracks;
+            }
             if (!win.currentTracks || win.currentTracks.length === 0) {
                 win.currentTracks = win.allTracks;
             }
@@ -1092,6 +1121,7 @@ Scope {
         win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
+        win.isLoadingAudio = false;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
 
@@ -1291,6 +1321,11 @@ Scope {
             shuffled[j] = temp;
         }
         win.currentTracks = shuffled;
+        if (win.currentView === "playlist") {
+            win.playingPlaylistId = win.activePlaylistId;
+        } else {
+            win.playingPlaylistId = "";
+        }
         var firstTrk = shuffled[0];
         if (firstTrk && ((firstTrk.path && firstTrk.path.startsWith("ytdl://")) || firstTrk.videoId)) {
             win.playOnlineTrack(firstTrk, false);
@@ -1419,7 +1454,10 @@ Scope {
                 try {
                     var s = JSON.parse(data);
                     if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
-                    if (s.time_pos !== undefined && s.time_pos > 0) win.currentTime = s.time_pos;
+                    if (s.time_pos !== undefined && s.time_pos > 0) {
+                        win.currentTime = s.time_pos;
+                        win.isLoadingAudio = false;
+                    }
                     if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
 
                     // Sync track from filename if playing (cold start recovery only when currentTrack is null)

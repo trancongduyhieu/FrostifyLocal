@@ -8,10 +8,23 @@ Item {
     property var downloadTasks: ({}) // videoId -> task object
     property var tasksList: []
     onDownloadTasksChanged: root.tasksList = root.getTasksList()
-    property int activeDownloadsCount: 0
+    
+    readonly property int activeTasksCount: {
+        var cnt = 0;
+        if (root.downloadTasks) {
+            for (var k in root.downloadTasks) {
+                var st = root.downloadTasks[k].state;
+                if (st === 1 || st === 2) cnt++;
+            }
+        }
+        return cnt;
+    }
+
+    property int activeDownloadsCount: activeTasksCount
     property int batchTotal: 0
     property int batchCompleted: 0
     property var activeQueue: []
+    property var lastTaskStates: ({})
 
     signal taskEnqueued(var task)
     signal taskStarted(var task)
@@ -65,7 +78,6 @@ Item {
             eta: "--"
         };
         root.downloadTasks = updated;
-        root.activeDownloadsCount++;
 
         Quickshell.execDetached([
             "python3", win.appDir + "/backend/download_manager.py", "add",
@@ -94,6 +106,9 @@ Item {
     }
 
     function clearCompleted() {
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/download_manager.py", "clear_completed"
+        ]);
         var updated = {};
         for (var k in root.downloadTasks) {
             var t = root.downloadTasks[k];
@@ -102,6 +117,46 @@ Item {
             }
         }
         root.downloadTasks = updated;
+        root.tasksList = root.getTasksList();
+    }
+
+    function syncFromStatusFile() {
+        var txt = statusFileView.text();
+        if (!txt || txt.trim() === "") return;
+        try {
+            var data = JSON.parse(txt);
+            if (!data) return;
+
+            if (data.tasks) {
+                var prevStates = root.lastTaskStates || {};
+                var newStates = {};
+                var tasks = data.tasks;
+
+                for (var vid in tasks) {
+                    var t = tasks[vid];
+                    var prevState = prevStates[vid];
+                    newStates[vid] = t.state;
+
+                    // Detect completion event
+                    if (t.state === 3 && prevState !== 3) {
+                        root.taskCompleted(vid, t.title || "", t.path || "");
+                    } else if (t.state === 4 && prevState !== 4) {
+                        root.taskFailed(vid, t.title || "", t.error || "");
+                    }
+                }
+
+                root.lastTaskStates = newStates;
+                root.downloadTasks = Object.assign({}, tasks);
+                root.tasksList = root.getTasksList();
+            }
+
+            if (data.batch_total !== undefined) {
+                root.batchTotal = data.batch_total;
+            }
+            if (data.batch_completed !== undefined) {
+                root.batchCompleted = data.batch_completed;
+            }
+        } catch(e) {}
     }
 
     function handleEvent(line) {
@@ -122,7 +177,6 @@ Item {
                 if (data.progress !== undefined) existing.progress = data.progress;
                 updated[vid] = existing;
                 root.downloadTasks = updated;
-                if (data.active_count !== undefined) root.activeDownloadsCount = data.active_count;
                 if (data.batch_total !== undefined) root.batchTotal = data.batch_total;
                 root.taskStarted(existing);
             }
@@ -155,7 +209,6 @@ Item {
                     };
                 }
                 root.downloadTasks = updated;
-                if (data.active_count !== undefined) root.activeDownloadsCount = data.active_count;
                 root.taskCompleted(vid, data.title || "", data.path || "");
             }
             else if (evt === "task_failed") {
@@ -166,18 +219,35 @@ Item {
                     updated[vid].error = data.error || "Failed";
                 }
                 root.downloadTasks = updated;
-                if (data.active_count !== undefined) root.activeDownloadsCount = data.active_count;
                 root.taskFailed(vid, data.title || "", data.error || "");
             }
             else if (evt === "status_dump") {
                 if (data.tasks) {
                     root.downloadTasks = Object.assign({}, data.tasks);
                 }
-                if (data.active_count !== undefined) {
-                    root.activeDownloadsCount = data.active_count;
-                }
             }
         } catch(e) {}
+    }
+
+    FileView {
+        id: statusFileView
+        path: "/tmp/frostify_download_status.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            root.syncFromStatusFile();
+        }
+    }
+
+    Timer {
+        id: statusPollTimer
+        interval: 250
+        repeat: true
+        running: true
+        onTriggered: {
+            statusFileView.reload();
+            root.syncFromStatusFile();
+        }
     }
 
     Process {

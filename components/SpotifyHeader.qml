@@ -276,9 +276,9 @@ Rectangle {
             Layout.preferredHeight: 34
             Layout.preferredWidth: dlRow.implicitWidth + 24
             radius: 17
-            readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeDownloadsCount > 0
-            color: dlMouse.containsMouse ? Qt.rgba(0.14, 0.14, 0.18, 0.95) : Qt.rgba(0.08, 0.08, 0.11, 0.85)
-            border.color: hasActive ? Qt.rgba(0, 200, 83, 0.6) : (dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.12))
+            readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
+            color: dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04)
+            border.color: hasActive ? Qt.rgba(30, 215, 96, 0.4) : (dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08))
             border.width: 1
             visible: true
 
@@ -287,13 +287,14 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 8
 
-                DownloadingSpinner {
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
+                CircularSpinner {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
                     visible: downloadQueuePill.hasActive
                     running: downloadQueuePill.hasActive
-                    color: "#00c853"
-                    iconSize: 14
+                    color: Theme.spotifyGreen
+                    size: 14
+                    strokeWidth: 2
                 }
 
                 SpotifyIcon {
@@ -305,9 +306,9 @@ Rectangle {
 
                 Text {
                     text: downloadQueuePill.hasActive
-                          ? ("Downloading (" + (downloadManager ? downloadManager.activeDownloadsCount : 0) + ")")
+                          ? ("Downloading (" + (downloadManager ? downloadManager.activeTasksCount : 0) + ")")
                           : "Downloads"
-                    color: downloadQueuePill.hasActive ? "#00c853" : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                    color: downloadQueuePill.hasActive ? Theme.spotifyGreen : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

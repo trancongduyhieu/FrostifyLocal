@@ -937,6 +937,18 @@
   },
   {
     "id": 79,
+    "title": "Earrings",
+    "name": "Earrings",
+    "artist": "Downloaded",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/Earrings.m4a",
+    "filename": "Earrings.m4a",
+    "duration": "--:--",
+    "image": "https://i.ytimg.com/vi/BI9HQCzpDgQ/hqdefault.jpg",
+    "mtime": 1789119784
+  },
+  {
+    "id": 80,
     "title": "NIGHT DANCER - (320 Kbps)",
     "name": "NIGHT DANCER - (320 Kbps)",
     "artist": "Will Stetson",
@@ -948,7 +960,19 @@
     "mtime": 1788945013
   },
   {
-    "id": 80,
+    "id": 81,
+    "title": "you're not entitled to love.",
+    "name": "you're not entitled to love.",
+    "artist": "Downloaded",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/you're not entitled to love..m4a",
+    "filename": "you're not entitled to love..m4a",
+    "duration": "--:--",
+    "image": "https://i.ytimg.com/vi/HzsrVvoHURk/hqdefault.jpg",
+    "mtime": 1789120707
+  },
+  {
+    "id": 82,
     "title": "ĐỊA NGỤC TRẦN GIAN PHẠM KỲ OFFICIAL MV",
     "name": "ĐỊA NGỤC TRẦN GIAN PHẠM KỲ OFFICIAL MV",
     "artist": "Downloaded",
@@ -960,7 +984,7 @@
     "mtime": 1788945022
   },
   {
-    "id": 81,
+    "id": 83,
     "title": "Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix - (320 Kbps)",
     "name": "Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix - (320 Kbps)",
     "artist": "Địa Ngục Trần Gian (Thazh x Đông Remix)",
@@ -972,7 +996,19 @@
     "mtime": 1788945014
   },
   {
-    "id": 82,
+    "id": 84,
+    "title": "死神 ⧸ 米津玄師　- 梓川 (cover)",
+    "name": "死神 ⧸ 米津玄師　- 梓川 (cover)",
+    "artist": "Downloaded",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/死神 ⧸ 米津玄師　- 梓川 (cover).m4a",
+    "filename": "死神 ⧸ 米津玄師　- 梓川 (cover).m4a",
+    "duration": "--:--",
+    "image": "/home/apple/.cache/frostify/thumbnails/4fa318dca2a0a4cba705187adc03327c.jpg",
+    "mtime": 1789120436
+  },
+  {
+    "id": 85,
     "title": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "name": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "artist": "Downloaded",
@@ -984,7 +1020,7 @@
     "mtime": 1789113873
   },
   {
-    "id": 83,
+    "id": 86,
     "title": "西楼别序 (prod.htingale)",
     "name": "西楼别序 (prod.htingale)",
     "artist": "Downloaded",

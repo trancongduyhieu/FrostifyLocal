@@ -15,6 +15,7 @@ Rectangle {
     property int selectedIndex: 0
     property string currentView: "home"
     property string activePlaylistId: ""
+    property string playingPlaylistId: ""
     property var currentTrack: null
     property bool isPlaying: false
     property string sidebarTab: "playlists" // "playlists" or "queue"
@@ -370,6 +371,7 @@ Rectangle {
                             readonly property bool isCustom: !!modelData.isCustom || String(modelData.id || "").startsWith("custom_pl_")
                             readonly property bool isLocal: isCustom || !!modelData.isLocal || !modelData.playlistId
                             readonly property bool isSelected: (modelData.id && modelData.id === root.activePlaylistId) || (modelData.playlistId && modelData.playlistId === root.activePlaylistId)
+                            readonly property bool isCurrentlyPlaying: (modelData.id && modelData.id === root.playingPlaylistId) || (modelData.playlistId && modelData.playlistId === root.playingPlaylistId)
 
                             color: isSelected ? Theme.bgHighlight : (plH.hovered ? Theme.bgCardHover : "transparent")
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -421,7 +423,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: plItem.isSelected ? Theme.spotifyGreen : (plH.hovered ? "#ffffff" : Theme.textPrimary)
+                                        color: plItem.isCurrentlyPlaying ? Theme.spotifyGreen : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
                                         elide: Text.ElideRight
                                     }
 
@@ -440,7 +442,7 @@ Rectangle {
                                     Layout.preferredWidth: 16
                                     Layout.alignment: Qt.AlignVCenter
                                     spacing: 2
-                                    visible: plItem.isSelected && root.isPlaying
+                                    visible: plItem.isCurrentlyPlaying && root.isPlaying
 
                                     Repeater {
                                         model: 3
@@ -452,7 +454,7 @@ Rectangle {
                                             anchors.bottom: parent.bottom
 
                                             SequentialAnimation on height {
-                                                running: plItem.isSelected && root.isPlaying
+                                                running: plItem.isCurrentlyPlaying && root.isPlaying
                                                 loops: Animation.Infinite
                                                 NumberAnimation { to: index === 0 ? 14 : (index === 1 ? 7 : 13); duration: 240 + index * 90; easing.type: Easing.InOutQuad }
                                                 NumberAnimation { to: index === 0 ? 6 : (index === 1 ? 14 : 5); duration: 240 + index * 90; easing.type: Easing.InOutQuad }

@@ -160,6 +160,19 @@ class DownloadManager:
             "active_count": len(self.active_downloads) + len(self.queue)
         })
 
+    def clear_completed(self):
+        with self.lock:
+            self.tasks = {
+                vid: t for vid, t in self.tasks.items()
+                if t.get("state") in (STATE_PREPARING, STATE_DOWNLOADING)
+            }
+        self.emit_event({
+            "event": "completed_cleared",
+            "tasks": self.tasks,
+            "queue_len": len(self.queue),
+            "active_count": len(self.active_downloads) + len(self.queue)
+        })
+
     def _worker_loop(self):
         while self.running:
             task = None
@@ -415,6 +428,8 @@ def run_daemon():
                                         )
                                     elif action == "cancel":
                                         manager.cancel(cmd.get("videoId"))
+                                    elif action == "clear_completed":
+                                        manager.clear_completed()
                                     elif action == "status":
                                         with manager.lock:
                                             resp = {
@@ -492,6 +507,33 @@ def client_enqueue(video_id, title="Track", artist="Artist", thumbnail=""):
         print(json.dumps({"success": False, "error": str(e)}))
         return False
 
+def client_clear_completed():
+    """CLI client helper to clear completed downloads"""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if "tasks" in data:
+                data["tasks"] = {vid: t for vid, t in data["tasks"].items() if t.get("state") in (STATE_PREPARING, STATE_DOWNLOADING)}
+            with open(STATUS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    if os.path.exists(SOCKET_PATH):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(SOCKET_PATH)
+            payload = {"action": "clear_completed"}
+            s.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+            s.close()
+            print(json.dumps({"success": True, "action": "clear_completed"}))
+            return True
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            return False
+    return True
+
 def get_status():
     if os.path.exists(STATUS_FILE):
         try:
@@ -513,6 +555,8 @@ if __name__ == "__main__":
             a = sys.argv[4] if len(sys.argv) > 4 else "Artist"
             thumb = sys.argv[5] if len(sys.argv) > 5 else ""
             client_enqueue(vid, t, a, thumb)
+        elif cmd in ("clear", "clear_completed"):
+            client_clear_completed()
         elif cmd == "status":
             get_status()
         elif cmd == "test_download":
