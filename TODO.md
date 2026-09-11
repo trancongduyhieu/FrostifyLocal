@@ -36,9 +36,23 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
       5. *Xóa khỏi hàng đợi / Xóa thư viện*: "Remove from queue" (khi click trong tab Queue của Sidebar) hoặc "Delete from library" (với bài local) hiển thị chữ đỏ cảnh báo.
     - Tích hợp kết nối sự kiện chuột phải trên toàn bộ các điểm chạm: `TrackCard.qml`, `TrackRow.qml`, `SpotifyMainGrid.qml`, `HomeFeedView.qml` (QuickPicks Grid, Section Carousel Cards, Fallback Grid), và `SpotifySidebar.qml` (Queue tab).
 
-- [ ] **7. Hoàn Thiện Tính Năng Album (Interactive Albums từ SimpMusic)**
-  - *Hiện trạng*: Bấm vào Album không có phản hồi dù hiện dấu cộng.
-  - *Giải pháp (học từ SimpMusic)*: Bấm vào Album Card sẽ mở trang hiển thị danh sách toàn bộ bài hát thuộc Album đó; có nút "Play All" để phát từ đầu và nút "Add Album to Queue".
+- [x] **7. Hoàn Thiện Tính Năng Album (Interactive Albums từ SimpMusic - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Metadata & Normalization**:
+      - `backend/ytmusic_helper.py`: Bổ sung hàm `get_album_details(browse_id)` bóc tách đầy đủ cấu trúc album (ID, browseId, title, artist, year, type, trackCount, duration, ảnh phân giải cao 544x544 `w544-h544-l90-rj`, và mô tả Wikipedia/ghi chú album) kèm danh sách toàn bộ bài hát đã chuẩn hóa. Thêm endpoint CLI `album <browse_id>` và `search_albums <query>`.
+      - `backend/library.py`: Bổ sung trích xuất tag `album` và `year` từ metadata ffprobe; hàm `get_grouped_albums()` phân nhóm toàn bộ bài hát cục bộ theo album thực tế hoặc danh mục đĩa đơn nghệ sĩ. Thêm endpoint CLI `albums`.
+    - **Giao diện Hero Album Banner & Toolbar (`components/SpotifyMainGrid.qml`)**:
+      - Bìa album lớn 160x160 với bóng đổ sâu điện ảnh và gradient fallback khi đang tải.
+      - Huy hiệu loại phát hành động (`ALBUM` / `SINGLE` / `EP`), tiêu đề album lớn 26px đậm, phụ đề đầy đủ `Nghệ sĩ • Năm • Số bài hát • Thời lượng tổng` và mô tả album rút gọn.
+      - Cụm 4 nút hành động bo tròn chuẩn SimpMusic / Spotify Desktop:
+        1. `[ ▶ Phát ]`: Bắt đầu phát toàn bộ album tuần tự từ bài đầu tiên (track index 0).
+        2. `[ 🔀 Phát ngẫu nhiên ]`: Xáo trộn và phát toàn bộ album.
+        3. `[ + Hàng đợi ]`: Thêm toàn bộ các bài hát trong album vào cuối hàng đợi phát hiện tại (`win.currentTracks`).
+        4. `[ 📥 Tải Album ]`: Tự động nạp hàng loạt bài hát trong album vào daemon tải nhạc `download_manager.py` (chỉ hiển thị cho album online).
+      - **Downloads Sub-Tab Switcher**: Bộ lọc hai chế độ `[ Bài hát (N) ]` | `[ Albums (N) ]` trong tab Downloads, cho phép duyệt và mở nhanh toàn bộ album đã lưu trong máy.
+    - **Home Feed & Shell State Routing**:
+      - `components/HomeFeedView.qml`: Nhận diện và điều hướng click card album sang chế độ xem chi tiết album.
+      - `shell.qml`: Điều phối các tác vụ `loadAlbumDetails()`, `addTracksToQueue()`, `downloadEntireAlbum()`, `refreshLocalAlbums()` và nút quay lại (Back) dọn dẹp view sạch sẽ.
 
 - [x] **8. Phát Nhạc Trực Tuyến & Bóc Tách Thuật Toán Gợi Ý SimpMusic (Online Streaming & Personalized Feed - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*: 

@@ -302,6 +302,49 @@ Scope {
     }
 
     Process {
+        id: albumDetailsProc
+        property string targetTitle: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res && res.tracks && Array.isArray(res.tracks)) {
+                        win.currentAlbumMetadata = res.metadata || null;
+                        win.browsingTracks = res.tracks;
+                        win.currentView = "playlist";
+                        win.mainSectionTitle = (res.metadata && res.metadata.title) ? res.metadata.title : albumDetailsProc.targetTitle;
+                        mainGrid.sectionTitle = win.mainSectionTitle;
+                        mainGrid.albumMetadata = win.currentAlbumMetadata;
+                    }
+                } catch(e) {
+                    console.log("albumDetailsProc error:", e);
+                } finally {
+                    win.isSearchingYT = false;
+                }
+            }
+        }
+        onExited: {
+            win.isSearchingYT = false;
+        }
+    }
+
+    Process {
+        id: localAlbumsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr)) {
+                        win.localAlbums = arr;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
         id: authStatusProc
         stdout: SplitParser {
             splitMarker: "\n"
@@ -533,10 +576,78 @@ Scope {
         win.playOnlineTrack(trk, true);
     }
 
+    property var currentAlbumMetadata: null
+    property var localAlbums: []
+
+    function refreshLocalAlbums() {
+        localAlbumsProc.running = false;
+        localAlbumsProc.command = ["python3", "-u", win.appDir + "/backend/library.py", "albums"];
+        localAlbumsProc.running = true;
+    }
+
+    function addTracksToQueue(tracks) {
+        if (!tracks || tracks.length === 0) return;
+        var cur = win.currentTracks ? win.currentTracks.slice() : [];
+        for (var i = 0; i < tracks.length; i++) {
+            cur.push(tracks[i]);
+        }
+        win.currentTracks = cur;
+    }
+
+    function downloadEntireAlbum(tracks) {
+        if (!tracks || tracks.length === 0) return;
+        for (var i = 0; i < tracks.length; i++) {
+            var t = tracks[i];
+            if (typeof downloadManager !== "undefined" && downloadManager) {
+                downloadManager.enqueueDownload(t);
+            }
+        }
+    }
+
+    function loadAlbumDetails(alb) {
+        if (!alb) return;
+        var albId = alb.browseId || alb.playlistId || alb.id || "";
+        win.activePlaylistId = albId;
+        if (win.currentView !== "search" && win.currentView !== "playlist") {
+            win.previousView = win.currentView;
+        }
+        win.currentView = "playlist";
+        win.mainSectionTitle = alb.title || alb.name || "Album";
+        mainGrid.sectionTitle = win.mainSectionTitle;
+
+        // If local album:
+        if (alb.isLocal || (alb.tracks && alb.tracks.length > 0 && String(albId).startsWith("local_alb_"))) {
+            win.currentAlbumMetadata = alb;
+            mainGrid.albumMetadata = alb;
+            win.browsingTracks = alb.tracks || [];
+            win.isSearchingYT = false;
+            return;
+        }
+
+        win.currentAlbumMetadata = null;
+        mainGrid.albumMetadata = null;
+        win.browsingTracks = [];
+        win.isSearchingYT = true;
+
+        albumDetailsProc.running = false;
+        albumDetailsProc.targetTitle = alb.title || alb.name || "Album";
+        albumDetailsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "album", albId];
+        albumDetailsProc.running = true;
+    }
+
     function loadPlaylistTracks(pl) {
         if (!pl) return;
         var pid = pl.playlistId || pl.id || pl.browseId || "";
         if (!pid) return;
+
+        // Check if Album
+        if (String(pid).startsWith("MPREb_") || pl.type === "album" || (pl.isLocal && String(pid).startsWith("local_alb_"))) {
+            win.loadAlbumDetails(pl);
+            return;
+        }
+
+        win.currentAlbumMetadata = null;
+        mainGrid.albumMetadata = null;
         win.activePlaylistId = pid;
         if (win.currentView !== "search" && win.currentView !== "playlist") {
             win.previousView = win.currentView;
@@ -606,6 +717,7 @@ Scope {
         win.loadHomeFeed();
         win.checkAuthStatus();
         win.loadCustomPlaylists();
+        win.refreshLocalAlbums();
     }
 
     // Master Container with Spotify Dark Aesthetic
@@ -633,6 +745,8 @@ Scope {
                 }
 
                 onBackRequested: {
+                    win.currentAlbumMetadata = null;
+                    mainGrid.albumMetadata = null;
                     if (win.currentView === "playlist" || win.currentView === "search") {
                         win.currentView = (win.previousView && win.previousView !== win.currentView) ? win.previousView : "home";
                     } else if (win.currentView === "library" && win.previousView === "home") {
@@ -710,9 +824,13 @@ Scope {
                     onLibrarySelected: {
                         if (win.currentView !== "library") win.previousView = win.currentView;
                         win.currentView = "library";
+                        win.currentAlbumMetadata = null;
+                        mainGrid.albumMetadata = null;
+                        mainGrid.downloadsSubTab = "tracks";
                         win.browsingTracks = win.allTracks;
                         win.mainSectionTitle = "Downloads";
                         mainGrid.sectionTitle = "Downloads";
+                        win.refreshLocalAlbums();
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onSettingsRequested: {
@@ -782,6 +900,12 @@ Scope {
                         isPlaying: win.isPlaying
                         sectionTitle: win.mainSectionTitle
                         isLoading: win.isSearchingYT
+                        albumMetadata: win.currentAlbumMetadata
+                        localAlbums: win.localAlbums
+
+                        onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
+                        onDownloadAlbumRequested: trks => win.downloadEntireAlbum(trks)
+                        onAlbumSelected: alb => win.loadAlbumDetails(alb)
 
                         onPlayAllRequested: {
                             if (!mainGrid.sortedTracks || mainGrid.sortedTracks.length === 0) return;
@@ -802,6 +926,10 @@ Scope {
                         }
                         onTrackPlayRequested: trk => {
                             if (win.isContextMenuActive) return;
+                            if (trk && (trk.type === "album" || (trk.browseId && String(trk.browseId).startsWith("MPREb_")))) {
+                                win.loadAlbumDetails(trk);
+                                return;
+                            }
                             if (win.browsingTracks && win.browsingTracks.length > 0) {
                                 win.currentTracks = win.browsingTracks;
                             }
@@ -1048,6 +1176,7 @@ Scope {
                 statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
                 statusProcess.running = true;
             }
+            win.refreshLocalAlbums();
         }
     }
 

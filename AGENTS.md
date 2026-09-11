@@ -122,6 +122,15 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - `components/SpotifyMainGrid.qml`: Thêm nút chính `[ ▶ Phát ]` bo góc tròn màu Spotify Green để bắt đầu phát playlist từ bài đầu tiên (track index 0), kết hợp cùng nút phụ `[ 🔀 Phát ngẫu nhiên ]` dạng kính mờ.
 13. **Xóa Bài Hát Cục Bộ Vĩnh Viễn (Safe Permanent Local File Deletion)**:
     - Context Menu chuột phải hỗ trợ "Xóa khỏi thư viện" (`deleteTrack`). Xóa vĩnh viễn tệp âm thanh trên đĩa cứng (`os.remove`) và đồng bộ ngay vào `library.json`, ngăn chặn tình trạng bài hát xuất hiện lại sau khi khởi động lại app.
+14. **Hệ Thống Album Tương Tác Đa Tầng (Interactive Albums Suite - Item 7)**:
+    - **Backend API**:
+      - `backend/ytmusic_helper.py`: `get_album_details(browse_id)` bóc tách metadata (ID, browseId, title, artist, year, type, trackCount, duration, ảnh phân giải cao 544x544 `w544-h544-l90-rj`, description) và chuẩn hóa danh sách `tracks`. Endpoint CLI: `python3 backend/ytmusic_helper.py album <browse_id>` và `search_albums <query>`.
+      - `backend/library.py`: Quét tag `album` và `year` từ ffprobe, phân nhóm album cục bộ qua `get_grouped_albums()`. Endpoint CLI: `python3 backend/library.py albums`.
+    - **Giao Diện QML**:
+      - `components/SpotifyMainGrid.qml`: Hero Album Banner với ảnh bìa 160x160, badge `ALBUM` / `SINGLE`, tiêu đề 26px đậm, phụ đề thời lượng và mô tả.
+      - Toolbar cụm 4 nút: `[ ▶ Phát ]`, `[ 🔀 Phát ngẫu nhiên ]`, `[ + Hàng đợi ]`, `[ 📥 Tải Album ]`.
+      - Sub-tab Switcher: `[ Bài hát (N) ]` | `[ Albums (N) ]` trong tab Downloads.
+      - `components/HomeFeedView.qml`: Tự động nhận diện `type === "album"` hoặc `MPREb_` khi click card để chuyển vào chế độ xem chi tiết album.
 
 ---
 

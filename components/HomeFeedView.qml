@@ -340,7 +340,7 @@ Rectangle {
                                                 var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
                                                 root.trackContextMenuRequested(modelData, pt.x, pt.y);
                                             } else {
-                                                if (modelData.type === "playlist") {
+                                                if (modelData.type === "playlist" || modelData.type === "album" || (modelData.browseId && String(modelData.browseId).startsWith("MPREb_"))) {
                                                     root.playlistSelected(modelData);
                                                 } else {
                                                     root.trackPlayRequested(modelData);
@@ -461,7 +461,9 @@ Rectangle {
                                                     var pt = cCard.mapToItem(null, mouse.x, mouse.y);
                                                     root.trackContextMenuRequested(modelData, pt.x, pt.y);
                                                 } else {
-                                                    if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
+                                                    if (modelData.type === "album" || (modelData.browseId && String(modelData.browseId).startsWith("MPREb_")) || (modelData.playlistId && String(modelData.playlistId).startsWith("MPREb_"))) {
+                                                        root.playlistSelected(modelData);
+                                                    } else if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
                                                         root.trackPlayRequested(modelData);
                                                     } else {
                                                         root.playlistSelected(modelData);

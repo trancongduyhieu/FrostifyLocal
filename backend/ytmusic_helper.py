@@ -760,6 +760,64 @@ def get_mood_feed(params, title=""):
     save_json(cache_path, result)
     return result
 
+def get_album_details(browse_id):
+    if not browse_id:
+        return {"metadata": {}, "tracks": []}
+    clean_id = browse_id
+    if clean_id.startswith("VL"):
+        clean_id = clean_id[2:]
+
+    yt = get_ytmusic_client()
+    try:
+        alb = yt.get_album(clean_id)
+        if not alb:
+            return {"metadata": {}, "tracks": []}
+
+        thumbs = alb.get("thumbnails", [])
+        alb_thumb = thumbs[-1].get("url", "") if thumbs else ""
+        if "w60" in alb_thumb or "w120" in alb_thumb or "w226" in alb_thumb:
+            alb_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', alb_thumb)
+
+        artists = alb.get("artists", [])
+        artist_name = ", ".join(a.get("name", "") for a in artists if isinstance(a, dict)) if artists else "Unknown Artist"
+        if not artist_name:
+            artist_name = "Unknown Artist"
+
+        tracks = []
+        raw_tracks = alb.get("tracks", [])
+        for t in raw_tracks:
+            if not t.get("thumbnails") and alb_thumb:
+                t["thumbnails"] = [{"url": alb_thumb}]
+            norm = normalize_track(t)
+            if norm:
+                if not norm.get("album"):
+                    norm["album"] = alb.get("title", "")
+                tracks.append(norm)
+
+        if tracks:
+            cache_online_tracks(tracks)
+
+        meta = {
+            "id": clean_id,
+            "browseId": clean_id,
+            "title": alb.get("title", "Album"),
+            "name": alb.get("title", "Album"),
+            "artist": artist_name,
+            "year": str(alb.get("year", "") or ""),
+            "type": alb.get("type", "Album"),
+            "trackCount": alb.get("trackCount", len(tracks)),
+            "duration": alb.get("duration", ""),
+            "image": alb_thumb,
+            "description": alb.get("description", "")
+        }
+        return {
+            "metadata": meta,
+            "tracks": tracks
+        }
+    except Exception as e:
+        sys.stderr.write(f"[get_album_details error for {clean_id}]: {e}\n")
+        return {"metadata": {}, "tracks": []}
+
 def get_playlist_tracks(playlist_id, limit=50):
     if not playlist_id:
         return []
@@ -773,24 +831,9 @@ def get_playlist_tracks(playlist_id, limit=50):
 
     # Case 1: Album browseId (starts with MPREb_)
     if clean_id.startswith("MPREb_") or playlist_id.startswith("MPREb_"):
-        try:
-            alb = yt.get_album(clean_id)
-            thumbs = alb.get("thumbnails", [])
-            alb_thumb = thumbs[-1].get("url", "") if thumbs else ""
-            if "w120" in alb_thumb or "w226" in alb_thumb:
-                alb_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', alb_thumb)
-
-            for t in alb.get("tracks", []):
-                if not t.get("thumbnails") and alb_thumb:
-                    t["thumbnails"] = [{"url": alb_thumb}]
-                norm = normalize_track(t)
-                if norm:
-                    tracks.append(norm)
-            if tracks:
-                cache_online_tracks(tracks)
-                return tracks
-        except Exception as e:
-            sys.stderr.write(f"[get_album error for {clean_id}]: {e}\n")
+        res = get_album_details(clean_id)
+        if res and res.get("tracks"):
+            return res["tracks"]
 
     # Case 2: Radio and automix playlists (RD or VLRD)
     if playlist_id.startswith("RD") or playlist_id.startswith("VLRD") or clean_id.startswith("RD"):
@@ -861,6 +904,36 @@ def search_ytmusic(query, limit=20):
         return tracks
     except Exception as e:
         sys.stderr.write(f"[ytmusic search error]: {e}\n")
+        return []
+
+def search_albums(query, limit=10):
+    if not query or not query.strip():
+        return []
+    try:
+        ytm = get_ytmusic_client()
+        raw = ytm.search(query.strip(), filter="albums")
+        albums = []
+        for item in raw[:limit]:
+            thumbs = item.get("thumbnails", [])
+            thumb_url = thumbs[-1].get("url", "") if thumbs else ""
+            if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+            artists = item.get("artists", [])
+            art_name = ", ".join(a.get("name", "") for a in artists if isinstance(a, dict)) if artists else "Unknown Artist"
+            bid = item.get("browseId", "")
+            albums.append({
+                "id": bid,
+                "browseId": bid,
+                "type": "album",
+                "title": item.get("title", ""),
+                "name": item.get("title", ""),
+                "artist": art_name,
+                "year": str(item.get("year", "") or ""),
+                "image": thumb_url
+            })
+        return albums
+    except Exception as e:
+        sys.stderr.write(f"[search_albums error]: {e}\n")
         return []
 
 def get_search_suggestions(query):
@@ -1101,6 +1174,16 @@ if __name__ == "__main__":
     elif cmd == "playlist" and len(sys.argv) > 2:
         pl_id = sys.argv[2]
         res = get_playlist_tracks(pl_id)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "album" and len(sys.argv) > 2:
+        alb_id = sys.argv[2]
+        res = get_album_details(alb_id)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "search_albums" and len(sys.argv) > 2:
+        q = sys.argv[2]
+        res = search_albums(q)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "search":

@@ -58,6 +58,10 @@ def get_file_metadata(file_path):
                     meta["title"] = v.strip()
                 elif k_lower in ("artist", "author", "album_artist") and v and not meta["artist"]:
                     meta["artist"] = v.strip()
+                elif k_lower == "album" and v and not meta.get("album"):
+                    meta["album"] = v.strip()
+                elif k_lower in ("date", "year") and v and not meta.get("year"):
+                    meta["year"] = v.strip()[:4]
     except Exception:
         pass
     return meta
@@ -219,12 +223,16 @@ def scan_library():
                     mtime = 0
 
                 dur = file_meta.get("duration", "--:--")
+                alb_name = file_meta.get("album", "") or ""
+                yr_val = file_meta.get("year", "") or ""
 
                 tracks.append({
                     "id": len(tracks) + 1,
                     "title": title.strip(),
                     "name": title.strip(),
                     "artist": artist.strip(),
+                    "album": alb_name,
+                    "year": yr_val,
                     "source": "Downloads",
                     "path": full_path,
                     "filename": f,
@@ -353,6 +361,61 @@ def batch_delete_tracks(paths):
             return False
     return True
 
+def get_grouped_albums():
+    if not os.path.exists(OUT_JSON):
+        scan_library()
+    try:
+        with open(OUT_JSON, "r", encoding="utf-8") as f:
+            tracks = json.load(f)
+    except Exception:
+        tracks = []
+
+    albums_map = {}
+    for t in tracks:
+        alb_name = (t.get("album") or "").strip()
+        art_name = (t.get("artist") or "Downloaded").strip()
+        if not alb_name:
+            alb_name = f"{art_name} - Singles"
+        
+        key = alb_name
+        if key not in albums_map:
+            alb_id = f"local_alb_{hashlib.md5(key.encode('utf-8')).hexdigest()[:12]}"
+            albums_map[key] = {
+                "id": alb_id,
+                "browseId": alb_id,
+                "type": "album",
+                "isLocal": True,
+                "title": key,
+                "name": key,
+                "artist": art_name,
+                "year": t.get("year", ""),
+                "image": t.get("image", ""),
+                "tracks": []
+            }
+        albums_map[key]["tracks"].append(t)
+        if not albums_map[key]["image"] and t.get("image"):
+            albums_map[key]["image"] = t.get("image")
+
+    albums = []
+    for k, v in albums_map.items():
+        v["trackCount"] = len(v["tracks"])
+        dur_secs = 0
+        for trk in v["tracks"]:
+            dur_str = trk.get("duration", "0:00")
+            parts = dur_str.split(":")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                dur_secs += int(parts[0]) * 60 + int(parts[1])
+        if dur_secs > 0:
+            m = dur_secs // 60
+            s = dur_secs % 60
+            v["duration"] = f"{m} mins, {s} secs" if m > 0 else f"{s} secs"
+        else:
+            v["duration"] = f"{len(v['tracks'])} songs"
+        albums.append(v)
+
+    albums.sort(key=lambda a: a["title"].lower())
+    return albums
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "delete":
         p = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -361,5 +424,7 @@ if __name__ == "__main__":
         delete_track(p, fn, t)
     elif len(sys.argv) > 1 and sys.argv[1] == "batch_delete" and len(sys.argv) > 2:
         batch_delete_tracks(sys.argv[2])
+    elif len(sys.argv) > 1 and sys.argv[1] == "albums":
+        print(json.dumps(get_grouped_albums(), ensure_ascii=False))
     else:
         scan_library()

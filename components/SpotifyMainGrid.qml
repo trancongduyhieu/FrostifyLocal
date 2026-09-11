@@ -18,8 +18,15 @@ Rectangle {
     signal trackContextMenuRequested(var trk, real globalX, real globalY)
     signal playAllRequested()
     signal shufflePlayRequested()
+    signal addAlbumToQueueRequested(var tracks)
+    signal downloadAlbumRequested(var tracks)
+    signal albumSelected(var album)
     signal batchDeleteRequested(var paths)
     signal createPlaylistRequested(var tracks)
+
+    property var albumMetadata: null
+    property string downloadsSubTab: "tracks" // "tracks", "albums"
+    property var localAlbums: []
 
     readonly property bool isDownloadsView: root.sectionTitle.includes("Download") || (typeof win !== "undefined" && win && win.currentView === "library")
     readonly property bool isPlaylistView: typeof win !== "undefined" && win && win.currentView === "playlist"
@@ -115,8 +122,163 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 14
 
+                // Hero Album Banner (When viewing an Album or detailed Playlist)
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    spacing: 24
+                    visible: root.albumMetadata !== null
+
+                    // 1. Large Cover Art (160x160) with elegant shadow and subtle glow
+                    Rectangle {
+                        Layout.preferredWidth: 160
+                        Layout.preferredHeight: 160
+                        radius: 8
+                        color: "#242424"
+                        clip: true
+
+                        Image {
+                            id: albumHeroCover
+                            anchors.fill: parent
+                            source: {
+                                if (!root.albumMetadata || !root.albumMetadata.image) return "";
+                                var s = root.albumMetadata.image;
+                                return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                            }
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: !albumHeroCover.visible || albumHeroCover.status !== Image.Ready
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "#3a2255" }
+                                GradientStop { position: 1.0; color: "#1a1a1a" }
+                            }
+                            SpotifyIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/media-optical-audio-symbolic.svg"
+                                iconSize: 54
+                                color: Qt.rgba(1, 1, 1, 0.25)
+                            }
+                        }
+                    }
+
+                    // 2. Album Details & Metadata Column
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 8
+
+                        // Badge: ALBUM / SINGLE / EP
+                        Rectangle {
+                            height: 22
+                            width: badgeText.implicitWidth + 14
+                            radius: 4
+                            color: Qt.rgba(1, 1, 1, 0.12)
+
+                            Text {
+                                id: badgeText
+                                anchors.centerIn: parent
+                                text: (root.albumMetadata && root.albumMetadata.type ? root.albumMetadata.type : "ALBUM").toUpperCase()
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+                        }
+
+                        // Album Title (Big & Bold)
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name || "") : ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 26
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                            maximumLineCount: 2
+                            wrapMode: Text.Wrap
+                        }
+
+                        // Subtitle: Artist • Year • Track count • Duration
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: root.albumMetadata ? (root.albumMetadata.artist || "Unknown Artist") : ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+
+                            Text {
+                                visible: root.albumMetadata && !!root.albumMetadata.year
+                                text: "•"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                            }
+
+                            Text {
+                                visible: root.albumMetadata && !!root.albumMetadata.year
+                                text: root.albumMetadata ? root.albumMetadata.year : ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                color: Theme.textSecondary
+                            }
+
+                            Text {
+                                text: "•"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                            }
+
+                            Text {
+                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + " bài hát"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                color: Theme.textSecondary
+                            }
+
+                            Text {
+                                visible: root.albumMetadata && !!root.albumMetadata.duration
+                                text: "•"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                            }
+
+                            Text {
+                                visible: root.albumMetadata && !!root.albumMetadata.duration
+                                text: root.albumMetadata ? root.albumMetadata.duration : ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                color: Theme.textSecondary
+                            }
+                        }
+
+                        // Optional short description if available
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            visible: root.albumMetadata && !!root.albumMetadata.description
+                            text: root.albumMetadata ? root.albumMetadata.description : ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Theme.textMuted
+                            elide: Text.ElideRight
+                            maximumLineCount: 2
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+
+                // Standard Section Header (When NOT in Album Hero mode)
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.albumMetadata === null
 
                     Text {
                         text: root.sectionTitle
@@ -126,9 +288,67 @@ Rectangle {
                         color: Theme.textPrimary
                     }
 
+                    // Downloads Sub-tab Switcher: [ Bài hát ] | [ Albums ]
+                    RowLayout {
+                        visible: root.isDownloadsView
+                        Layout.leftMargin: 16
+                        spacing: 8
+
+                        Rectangle {
+                            height: 28
+                            width: dlTrkText.implicitWidth + 20
+                            radius: 14
+                            color: root.downloadsSubTab === "tracks" ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
+                            border.color: root.downloadsSubTab === "tracks" ? "#ffffff" : Qt.rgba(1, 1, 1, 0.15)
+                            border.width: 1
+
+                            Text {
+                                id: dlTrkText
+                                anchors.centerIn: parent
+                                text: "Bài hát (" + (root.sortedTracks ? root.sortedTracks.length : 0) + ")"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: root.downloadsSubTab === "tracks"
+                                color: root.downloadsSubTab === "tracks" ? "#ffffff" : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.downloadsSubTab = "tracks"
+                            }
+                        }
+
+                        Rectangle {
+                            height: 28
+                            width: dlAlbText.implicitWidth + 20
+                            radius: 14
+                            color: root.downloadsSubTab === "albums" ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
+                            border.color: root.downloadsSubTab === "albums" ? "#ffffff" : Qt.rgba(1, 1, 1, 0.15)
+                            border.width: 1
+
+                            Text {
+                                id: dlAlbText
+                                anchors.centerIn: parent
+                                text: "Albums (" + (root.localAlbums ? root.localAlbums.length : 0) + ")"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: root.downloadsSubTab === "albums"
+                                color: root.downloadsSubTab === "albums" ? "#ffffff" : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.downloadsSubTab = "albums"
+                            }
+                        }
+                    }
+
                     Item { Layout.fillWidth: true }
 
                     Text {
+                        visible: !root.isDownloadsView
                         text: root.isLoading ? "Loading..." : (root.sortedTracks ? root.sortedTracks.length + " tracks" : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
@@ -216,6 +436,86 @@ Rectangle {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.shufflePlayRequested()
+                        }
+                    }
+
+                    // Add All to Queue Button
+                    Rectangle {
+                        height: 36
+                        width: queueRow.implicitWidth + 24
+                        radius: 18
+                        visible: root.albumMetadata !== null || root.isPlaylistView
+                        color: qH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                        border.color: Qt.rgba(1, 1, 1, 0.15)
+                        border.width: 1
+                        scale: qH.hovered ? 1.03 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+
+                        RowLayout {
+                            id: queueRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            SpotifyIcon {
+                                source: "../assets/icons/list-add-symbolic.svg"
+                                iconSize: 15
+                                color: "#ffffff"
+                            }
+
+                            Text {
+                                text: "Hàng đợi"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+                        }
+
+                        HoverHandler { id: qH }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.addAlbumToQueueRequested(root.sortedTracks)
+                        }
+                    }
+
+                    // Download Entire Album Button
+                    Rectangle {
+                        height: 36
+                        width: dlAlbRow.implicitWidth + 24
+                        radius: 18
+                        visible: root.albumMetadata !== null && (!root.albumMetadata.isLocal)
+                        color: dlAlbH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                        border.color: Qt.rgba(1, 1, 1, 0.15)
+                        border.width: 1
+                        scale: dlAlbH.hovered ? 1.03 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+
+                        RowLayout {
+                            id: dlAlbRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            SpotifyIcon {
+                                source: "../assets/icons/download-symbolic.svg"
+                                iconSize: 15
+                                color: "#ffffff"
+                            }
+
+                            Text {
+                                text: "Tải Album"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+                        }
+
+                        HoverHandler { id: dlAlbH }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.downloadAlbumRequested(root.sortedTracks)
                         }
                     }
 
@@ -540,10 +840,132 @@ Rectangle {
                     color: Theme.textSecondary
                 }
 
+                // Local Albums Grid (when in Downloads view and Albums sub-tab is selected)
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 16
+                    visible: root.isDownloadsView && root.downloadsSubTab === "albums" && root.albumMetadata === null
+
+                    Repeater {
+                        model: root.localAlbums
+
+                        Rectangle {
+                            width: 176
+                            height: 250
+                            radius: Theme.radiusCard
+                            color: albCardMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: width
+                                    radius: 6
+                                    color: "#282828"
+                                    clip: true
+
+                                    Image {
+                                        id: albImg
+                                        anchors.fill: parent
+                                        source: {
+                                            if (!modelData || !modelData.image) return "";
+                                            var s = modelData.image;
+                                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                                        }
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                    }
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        visible: !albImg.visible || albImg.status !== Image.Ready
+                                        gradient: Gradient {
+                                            GradientStop { position: 0.0; color: "#333333" }
+                                            GradientStop { position: 1.0; color: "#181818" }
+                                        }
+                                        SpotifyIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/media-optical-audio-symbolic.svg"
+                                            iconSize: 42
+                                            color: Qt.rgba(1, 1, 1, 0.25)
+                                        }
+                                    }
+
+                                    // Play Album Button on Hover
+                                    Rectangle {
+                                        width: 38
+                                        height: 38
+                                        radius: 19
+                                        color: Theme.spotifyGreen
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        anchors.margins: 6
+                                        visible: albCardMouse.containsMouse
+
+                                        SpotifyIcon {
+                                            anchors.centerIn: parent
+                                            anchors.horizontalCenterOffset: 1
+                                            source: "../assets/icons/media-playback-start-symbolic.svg"
+                                            iconSize: 16
+                                            color: "#000000"
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (modelData.tracks && modelData.tracks.length > 0) {
+                                                    root.trackPlayRequested(modelData.tracks[0]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.title || modelData.name || "Album"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (modelData.artist || "Unknown") + " • " + (modelData.trackCount || 0) + " bài"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    color: Theme.textSecondary
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+
+                                Item { Layout.fillHeight: true }
+                            }
+
+                            MouseArea {
+                                id: albCardMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.albumSelected(modelData)
+                            }
+                        }
+                    }
+                }
+
                 // Grid of tracks
                 Flow {
                     Layout.fillWidth: true
                     spacing: 16
+                    visible: !(root.isDownloadsView && root.downloadsSubTab === "albums" && root.albumMetadata === null)
 
                     Repeater {
                         model: root.sortedTracks
