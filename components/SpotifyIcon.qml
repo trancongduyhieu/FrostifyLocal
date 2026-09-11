@@ -23,6 +23,7 @@ Item {
     MultiEffect {
         anchors.fill: rawIcon
         source: rawIcon
+        brightness: 1.0
         colorization: 1.0
         colorizationColor: root.color
         Behavior on colorizationColor { ColorAnimation { duration: 100 } }

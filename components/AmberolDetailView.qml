@@ -562,7 +562,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
                         Layout.maximumWidth: 320
-                        Layout.preferredHeight: 76
+                        Layout.preferredHeight: 96
                         Layout.alignment: Qt.AlignHCenter
                         radius: 8
                         color: "#161618"
@@ -571,10 +571,10 @@ Rectangle {
 
                         GridLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
+                            anchors.margins: 12
                             columns: 2
-                            rowSpacing: 8
-                            columnSpacing: 12
+                            rowSpacing: 10
+                            columnSpacing: 16
 
                             // 1. Codec
                             ColumnLayout {
@@ -682,7 +682,7 @@ Rectangle {
                                     SpotifyIcon {
                                         source: "../assets/icons/eye-symbolic.svg"
                                         iconSize: 13
-                                        color: Theme.textSecondary
+                                        color: "#ffffff"
                                     }
                                     Text {
                                         text: root.songDetails ? root.songDetails.viewsStr : "--"
@@ -718,7 +718,7 @@ Rectangle {
                                     SpotifyIcon {
                                         source: "../assets/icons/thumb-down-symbolic.svg"
                                         iconSize: 13
-                                        color: Theme.textMuted
+                                        color: "#ffffff"
                                     }
                                     Text {
                                         text: root.songDetails ? root.songDetails.dislikesStr : "--"
@@ -864,7 +864,7 @@ Rectangle {
                                 SpotifyIcon {
                                     source: "../assets/icons/radio-symbolic.svg"
                                     iconSize: 13
-                                    color: Theme.spotifyGreen
+                                    color: "#ffffff"
                                 }
 
                                 Text {

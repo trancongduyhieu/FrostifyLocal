@@ -135,9 +135,11 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
 - [x] **20. Pure Visual Skeleton Shimmer Lazy Loading (Tải Lười Dạng Khung Xương Xung Nhịp - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:
     - **Loại bỏ triệt để dòng chữ Loading thô**: Xóa sạch toàn bộ các dòng chữ text nhàm chán như "Searching YouTube Music...", "Loading...", "Đang tạo đài phát...".
-    - **Component SkeletonTrackRow**: Tạo mới `components/SkeletonTrackRow.qml` với hiệu ứng xung nhịp thở mượt mà (`SequentialAnimation` độ mờ từ `0.25` đến `0.70`), mô phỏng chân thực thumbnail 40x40/48x48, thanh tiêu đề bài hát, thanh phụ đề nghệ sĩ và thanh thời lượng. Hỗ trợ thuộc tính `isCompact` cho hàng đợi sidebar.
-    - **Lưới Chính (SpotifyMainGrid)**: Hiển thị 8 dòng skeleton track row nhịp nhàng khi chuyển danh sách, bấm album, hoặc tìm kiếm.
-    - **Hàng Đợi Bên Cạnh (SpotifySidebar Queue)**: Khi bấm phát bài hát mới và hệ thống đang tải danh sách Automix Radio (`radioProc.running = true`), hàng đợi hiển thị bài hát hiện tại kèm huy hiệu `Queue (1+)` và 5 dòng skeleton thu nhỏ bên dưới. Khi radio tải xong, toàn bộ bài hát tự động xuất hiện mượt mà mà không làm giật lag hay gây cảm giác ứng dụng bị đơ.
+    - **Lưới Chính Chuẩn Card Vuông (`components/SkeletonTrackCard.qml`)**: Tạo mới component card khung xương dạng thẻ vuông (176x250 px) đồng bộ 1:1 với `TrackCard.qml`. Khi tải playlist hoặc tìm kiếm trong `SpotifyMainGrid.qml`, hiển thị lưới `Flow` gồm 10 thẻ vuông xung nhịp thở mượt mà (`SequentialAnimation` độ mờ từ `0.25` đến `0.70`), khắc phục triệt để tình trạng lệch bố cục danh sách ngang.
+    - **Hàng Đợi Sidebar Dạng Dòng Ngang (`components/SkeletonTrackRow.qml`)**: Component dạng dòng ngang thu nhỏ với hiệu ứng thở nhịp nhàng. Khi bấm phát bài hát mới và hệ thống đang tải Automix Radio (`radioProc.running = true`), hàng đợi hiển thị bài hiện tại kèm huy hiệu `Queue (1+)` và 5 dòng skeleton thu nhỏ bên dưới, khi radio tải xong các bài thật xuất hiện tự nhiên không giật lag.
+    - **Cân Đối Tọa Độ Thẻ Audio Specs & Chuẩn Hóa Icon Trắng Sáng**:
+      - Mở rộng chiều cao thẻ Audio Engine Specs trong `components/AmberolDetailView.qml` lên 96px, căn lề đối xứng 12px và khoảng cách hàng 10px, xóa bỏ hoàn toàn hiện tượng dòng thông số `44.1 kHz / Stereo` bị xệ chạm đáy.
+      - Chuẩn hóa toàn bộ 12 file icon hệ thống sang màu trắng tinh (`fill="#ffffff"`) và bổ sung `MultiEffect.brightness: 1.0` vào `components/SpotifyIcon.qml`, giúp icon luôn sáng rõ nét trên nền tối.
 
 - [x] **17. Con Quay Loading Trực Tuyến (SimpMusic Circular Buffer Indicator - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:

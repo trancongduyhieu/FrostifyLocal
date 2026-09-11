@@ -823,25 +823,27 @@ Rectangle {
                     }
                 }
 
-                // Skeleton Lazy Loading Rows (Pure Visual Shimmer, No Clunky Text)
-                ColumnLayout {
+                // Skeleton Lazy Loading Grid (Pure Visual Shimmer, Matching TrackCard 176x250 Grid)
+                Flow {
                     Layout.fillWidth: true
-                    spacing: 4
+                    spacing: 16
                     visible: root.isLoading
 
                     Repeater {
                         model: [
-                            { tw: 220, sw: 130 },
-                            { tw: 170, sw: 100 },
-                            { tw: 240, sw: 150 },
-                            { tw: 190, sw: 110 },
-                            { tw: 210, sw: 140 },
-                            { tw: 160, sw: 95 },
-                            { tw: 250, sw: 160 },
-                            { tw: 180, sw: 120 }
+                            { tw: 120, sw: 80 },
+                            { tw: 140, sw: 95 },
+                            { tw: 110, sw: 75 },
+                            { tw: 130, sw: 85 },
+                            { tw: 125, sw: 90 },
+                            { tw: 135, sw: 80 },
+                            { tw: 115, sw: 70 },
+                            { tw: 145, sw: 100 },
+                            { tw: 120, sw: 85 },
+                            { tw: 130, sw: 75 }
                         ]
 
-                        SkeletonTrackRow {
+                        SkeletonTrackCard {
                             titleWidth: modelData.tw
                             subtitleWidth: modelData.sw
                         }
@@ -981,7 +983,7 @@ Rectangle {
                 Flow {
                     Layout.fillWidth: true
                     spacing: 16
-                    visible: !(root.isDownloadsView && root.downloadsSubTab === "albums" && root.albumMetadata === null)
+                    visible: !root.isLoading && !(root.isDownloadsView && root.downloadsSubTab === "albums" && root.albumMetadata === null)
 
                     Repeater {
                         model: root.sortedTracks
