@@ -34,6 +34,34 @@ import hashlib
 THUMB_DIR = os.path.join(HOME, ".cache", "frostify", "thumbnails")
 os.makedirs(THUMB_DIR, exist_ok=True)
 
+def get_file_metadata(file_path):
+    """Extract metadata (title, artist, duration) from audio file using ffprobe."""
+    meta = {"title": "", "artist": "", "duration": "--:--", "duration_sec": 0.0}
+    try:
+        cmd = [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_format", file_path
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        if res.returncode == 0 and res.stdout:
+            data = json.loads(res.stdout).get("format", {})
+            dur = float(data.get("duration", 0))
+            if dur > 0:
+                m = int(dur // 60)
+                s = int(dur % 60)
+                meta["duration"] = f"{m}:{s:02d}"
+                meta["duration_sec"] = dur
+            tags = data.get("tags", {})
+            for k, v in tags.items():
+                k_lower = k.lower()
+                if k_lower == "title" and v and not meta["title"]:
+                    meta["title"] = v.strip()
+                elif k_lower in ("artist", "author", "album_artist") and v and not meta["artist"]:
+                    meta["artist"] = v.strip()
+    except Exception:
+        pass
+    return meta
+
 def extract_embedded_cover(file_path):
     """Extract embedded album art from audio file using ffmpeg and cache it."""
     if not file_path or not os.path.exists(file_path):
@@ -110,20 +138,16 @@ def scan_library():
             if (lower_t, sub_a) in title_artist_map:
                 return title_artist_map[(lower_t, sub_a)]
 
-        # 2. Exact title match
-        if lower_t in title_map:
+        # 2. Exact title match ONLY when artist is generic/unknown
+        if lower_a in ("", "downloaded", "simpmusic", "unknown") and lower_t in title_map:
             return title_map[lower_t]
 
         # 3. Cleaned title match (without brackets/extra notes)
-        c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
-        if c_title in title_map:
-            return title_map[c_title]
+        if lower_a in ("", "downloaded", "simpmusic", "unknown"):
+            c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
+            if c_title in title_map:
+                return title_map[c_title]
 
-        # 4. Strict fuzzy match (only for long titles >= 5 chars)
-        if len(c_title) >= 5:
-            for db_t, url in title_map.items():
-                if len(db_t) >= 5 and (c_title == db_t or c_title.startswith(db_t) or db_t.startswith(c_title)):
-                    return url
         return ""
     
     # 1. Scan SimpMusic
@@ -138,9 +162,11 @@ def scan_library():
                     artist = "SimpMusic"
                     title = base
                 
-                thumb = find_thumbnail(title, artist)
+                # Priority 1: Real embedded album art inside file
+                thumb = extract_embedded_cover(full_path)
+                # Priority 2: SimpMusic DB thumbnail match
                 if not thumb:
-                    thumb = extract_embedded_cover(full_path)
+                    thumb = find_thumbnail(title, artist)
 
                 try:
                     mtime = int(os.path.getmtime(full_path))
@@ -166,20 +192,33 @@ def scan_library():
             if f.endswith((".mp3", ".m4a", ".opus", ".flac")):
                 full_path = os.path.join(DOWNLOADS_DIR, f)
                 base = os.path.splitext(f)[0]
-                if " - " in base:
-                    artist, title = base.split(" - ", 1)
-                else:
-                    artist = "Downloaded"
-                    title = base
                 
-                thumb = find_thumbnail(title, artist)
+                # Extract accurate ID3 / MP4 tags
+                file_meta = get_file_metadata(full_path)
+                title = file_meta.get("title", "")
+                artist = file_meta.get("artist", "")
+
+                if not title or not artist:
+                    if " - " in base:
+                        f_artist, f_title = base.split(" - ", 1)
+                        if not artist: artist = f_artist.strip()
+                        if not title: title = f_title.strip()
+                    else:
+                        if not title: title = base.strip()
+                        if not artist: artist = "Downloaded"
+                
+                # Priority 1: Real embedded album art inside file
+                thumb = extract_embedded_cover(full_path)
+                # Priority 2: SimpMusic DB thumbnail match
                 if not thumb:
-                    thumb = extract_embedded_cover(full_path)
+                    thumb = find_thumbnail(title, artist)
 
                 try:
                     mtime = int(os.path.getmtime(full_path))
                 except Exception:
                     mtime = 0
+
+                dur = file_meta.get("duration", "--:--")
 
                 tracks.append({
                     "id": len(tracks) + 1,
@@ -189,7 +228,7 @@ def scan_library():
                     "source": "Downloads",
                     "path": full_path,
                     "filename": f,
-                    "duration": "--:--",
+                    "duration": dur,
                     "image": thumb,
                     "mtime": mtime
                 })
