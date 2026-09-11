@@ -1067,14 +1067,25 @@ Scope {
 
     function insertTrackPlayNext(trk) {
         if (!trk) return;
-        if (!win.currentTracks || win.currentTracks.length === 0) {
-            win.currentTracks = [trk];
-            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
-            else win.playTrack(trk);
+
+        // If currently playing track is selected, do not duplicate or restart
+        if (win.isSameTrack(trk, win.currentTrack)) {
             return;
         }
+
+        if (!win.currentTracks || win.currentTracks.length === 0) {
+            if (win.currentTrack) {
+                win.currentTracks = [win.currentTrack, trk];
+            } else {
+                win.currentTracks = [trk];
+                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
+                else win.playTrack(trk);
+            }
+            return;
+        }
+
         var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-        var insertAt = (curIdx >= 0) ? (curIdx + 1) : 0;
+        var insertAt = (curIdx >= 0) ? (curIdx + 1) : 1;
         var updated = win.currentTracks.slice();
         var dupIdx = updated.findIndex(t => win.isSameTrack(t, trk));
         if (dupIdx >= 0) {
@@ -1088,9 +1099,13 @@ Scope {
     function appendTrackToQueue(trk) {
         if (!trk) return;
         if (!win.currentTracks || win.currentTracks.length === 0) {
-            win.currentTracks = [trk];
-            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
-            else win.playTrack(trk);
+            if (win.currentTrack) {
+                win.currentTracks = [win.currentTrack, trk];
+            } else {
+                win.currentTracks = [trk];
+                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
+                else win.playTrack(trk);
+            }
             return;
         }
         var updated = win.currentTracks.slice();
@@ -1114,14 +1129,28 @@ Scope {
 
     function deleteLocalTrack(trk) {
         if (!trk) return;
-        win.removeTrackFromQueue(trk);
         var p = trk.path || "";
-        if (p) {
-            win.allTracks = win.allTracks.filter(t => t.path !== p);
-            win.browsingTracks = win.browsingTracks.filter(t => t.path !== p);
-            if (!p.startsWith("ytdl://")) {
-                Quickshell.execDetached(["rm", "-f", p]);
-            }
+        var fn = trk.filename || "";
+        var title = trk.title || trk.name || "";
+
+        // If the deleted track is currently playing, advance to next
+        if (win.isSameTrack(win.currentTrack, trk)) {
+            win.playNext();
+        }
+
+        // Remove from queue
+        win.removeTrackFromQueue(trk);
+
+        // Immediately update reactive arrays for 0ms UI update
+        win.allTracks = win.allTracks.filter(t => !win.isSameTrack(t, trk));
+        win.browsingTracks = win.browsingTracks.filter(t => !win.isSameTrack(t, trk));
+
+        // Call backend/library.py to delete file, delete .lrc, and update library.json permanently
+        if (!p.startsWith("ytdl://") && (p || fn || title)) {
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/library.py", "delete",
+                p, fn, title
+            ]);
         }
     }
 

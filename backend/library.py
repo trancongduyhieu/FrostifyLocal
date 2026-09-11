@@ -149,5 +149,79 @@ def scan_library():
     print(f"Scanned {len(tracks)} tracks into {OUT_JSON}")
     return tracks
 
+def delete_track(path="", filename="", title=""):
+    deleted_files = []
+
+    # 1. Determine candidate file paths
+    candidate_paths = []
+    if path and not path.startswith("ytdl://"):
+        candidate_paths.append(path)
+    if filename:
+        candidate_paths.append(os.path.join(SIMP_DIR, filename))
+        candidate_paths.append(os.path.join(DOWNLOADS_DIR, filename))
+
+    for cp in candidate_paths:
+        if os.path.exists(cp):
+            try:
+                os.remove(cp)
+                deleted_files.append(cp)
+            except Exception as e:
+                print(f"Error removing file {cp}: {e}", file=sys.stderr)
+
+            # Also check and remove associated .lrc
+            lrc_path = os.path.splitext(cp)[0] + ".lrc"
+            if os.path.exists(lrc_path):
+                try:
+                    os.remove(lrc_path)
+                    deleted_files.append(lrc_path)
+                except Exception:
+                    pass
+
+    # 2. Update library.json atomically
+    if os.path.exists(OUT_JSON):
+        try:
+            with open(OUT_JSON, "r", encoding="utf-8") as f:
+                tracks = json.load(f)
+
+            def should_remove(t):
+                t_path = t.get("path", "")
+                t_fn = t.get("filename", "")
+                t_title = t.get("title", "") or t.get("name", "")
+                if path and t_path == path:
+                    return True
+                if filename and (t_fn == filename or t_path.endswith(filename)):
+                    return True
+                if title and t_title and t_title.lower() == title.lower():
+                    return True
+                return False
+
+            new_tracks = [t for t in tracks if not should_remove(t)]
+            for i, t in enumerate(new_tracks):
+                t["id"] = i + 1
+
+            tmp_json = OUT_JSON + ".tmp"
+            with open(tmp_json, "w", encoding="utf-8") as f:
+                json.dump(new_tracks, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_json, OUT_JSON)
+
+            print(json.dumps({
+                "success": True,
+                "deleted_files": deleted_files,
+                "remaining_tracks": len(new_tracks)
+            }))
+            return True
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            return False
+    else:
+        print(json.dumps({"success": True, "deleted_files": deleted_files, "remaining_tracks": 0}))
+        return True
+
 if __name__ == "__main__":
-    scan_library()
+    if len(sys.argv) > 1 and sys.argv[1] == "delete":
+        p = sys.argv[2] if len(sys.argv) > 2 else ""
+        fn = sys.argv[3] if len(sys.argv) > 3 else ""
+        t = sys.argv[4] if len(sys.argv) > 4 else ""
+        delete_track(p, fn, t)
+    else:
+        scan_library()

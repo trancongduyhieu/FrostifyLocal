@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import "."
 
 Rectangle {
-    id: root
+    id: headerRoot
     height: 64
     color: "transparent"
     z: 100
@@ -40,8 +40,8 @@ Rectangle {
                 width: 34
                 height: 34
                 radius: 17
-                color: root.canGoBack && prevNavM.containsMouse ? "#282828" : "#181818"
-                opacity: root.canGoBack ? 1.0 : 0.4
+                color: headerRoot.canGoBack && prevNavM.containsMouse ? "#282828" : "#181818"
+                opacity: headerRoot.canGoBack ? 1.0 : 0.4
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Behavior on opacity { NumberAnimation { duration: 100 } }
 
@@ -49,17 +49,17 @@ Rectangle {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 14
-                    color: root.canGoBack ? "#ffffff" : Theme.textMuted
+                    color: headerRoot.canGoBack ? "#ffffff" : Theme.textMuted
                 }
 
                 MouseArea {
                     id: prevNavM
                     anchors.fill: parent
-                    hoverEnabled: root.canGoBack
-                    cursorShape: root.canGoBack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    hoverEnabled: headerRoot.canGoBack
+                    cursorShape: headerRoot.canGoBack ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
-                        if (root.canGoBack) {
-                            root.backRequested();
+                        if (headerRoot.canGoBack) {
+                            headerRoot.backRequested();
                         }
                     }
                 }
@@ -126,16 +126,16 @@ Rectangle {
                         selectByMouse: true
 
                         onTextChanged: {
-                            root.searchRequested(text, root.searchMode);
+                            headerRoot.searchRequested(text, headerRoot.searchMode);
                         }
 
                         onAccepted: {
-                            root.suggestions = [];
-                            root.searchSubmitted(text, root.searchMode);
+                            headerRoot.suggestions = [];
+                            headerRoot.searchSubmitted(text, headerRoot.searchMode);
                         }
 
                         Text {
-                            text: root.currentView === "library" ? "Search downloads & local library..." : "Search songs, albums, artists..."
+                            text: headerRoot.currentView === "library" ? "Search downloads & local library..." : "Search songs, albums, artists..."
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             color: Theme.textSecondary
@@ -163,8 +163,8 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 searchInput.text = "";
-                                root.suggestions = [];
-                                root.searchRequested("", root.searchMode);
+                                headerRoot.suggestions = [];
+                                headerRoot.searchRequested("", headerRoot.searchMode);
                             }
                         }
                     }
@@ -179,7 +179,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: Math.min(suggestionsList.contentHeight + 12, 280)
-                visible: searchInput.activeFocus && root.suggestions && root.suggestions.length > 0
+                visible: searchInput.activeFocus && headerRoot.suggestions && headerRoot.suggestions.length > 0
                 color: "#18181c"
                 radius: 12
                 border.color: "#323238"
@@ -191,7 +191,7 @@ Rectangle {
                     id: suggestionsList
                     anchors.fill: parent
                     anchors.margins: 6
-                    model: root.suggestions
+                    model: headerRoot.suggestions
                     spacing: 2
                     boundsBehavior: Flickable.StopAtBounds
 
@@ -210,7 +210,7 @@ Rectangle {
                             spacing: 10
 
                             SpotifyIcon {
-                                source: root.searchMode === "online" ? "../assets/icons/system-search-symbolic.svg" : "../assets/icons/audio-only-symbolic.svg"
+                                source: headerRoot.searchMode === "online" ? "../assets/icons/system-search-symbolic.svg" : "../assets/icons/audio-only-symbolic.svg"
                                 iconSize: 14
                                 color: sugArea.containsMouse ? "#ffffff" : Theme.textMuted
                             }
@@ -234,8 +234,8 @@ Rectangle {
                             onClicked: {
                                 var val = modelData;
                                 searchInput.text = val;
-                                root.suggestions = [];
-                                root.searchSubmitted(val, root.searchMode);
+                                headerRoot.suggestions = [];
+                                headerRoot.searchSubmitted(val, headerRoot.searchMode);
                             }
                         }
                     }

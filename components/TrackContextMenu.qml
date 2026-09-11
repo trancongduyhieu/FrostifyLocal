@@ -5,6 +5,7 @@ import QtQuick.Controls.Basic
 Item {
     id: root
     anchors.fill: parent
+    enabled: isOpen
     visible: opacity > 0
     opacity: isOpen ? 1 : 0
     z: 9999
@@ -39,11 +40,17 @@ Item {
         root.isOpen = false;
     }
 
-    // Dismiss backdrop
+    // Dismiss backdrop - completely absorbs press, release, and click
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: root.closeMenu()
+        preventStealing: true
+        onPressed: mouse => {
+            mouse.accepted = true;
+            root.closeMenu();
+        }
+        onReleased: mouse => mouse.accepted = true
+        onClicked: mouse => mouse.accepted = true
     }
 
     // Context Menu Card
@@ -69,7 +76,10 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: true
             onPressed: mouse => mouse.accepted = true
+            onReleased: mouse => mouse.accepted = true
+            onClicked: mouse => mouse.accepted = true
         }
 
         Column {
@@ -145,8 +155,9 @@ Item {
                 text: "Play next"
                 iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                 onClicked: {
+                    var t = root.track;
                     root.closeMenu();
-                    root.playNextRequested(root.track);
+                    if (t) root.playNextRequested(t);
                 }
             }
 
@@ -155,8 +166,9 @@ Item {
                 text: "Add to queue"
                 iconSource: "../assets/icons/view-queue-symbolic.svg"
                 onClicked: {
+                    var t = root.track;
                     root.closeMenu();
-                    root.addToQueueRequested(root.track);
+                    if (t) root.addToQueueRequested(t);
                 }
             }
 
@@ -165,8 +177,9 @@ Item {
                 text: "Start radio"
                 iconSource: "../assets/icons/radio-symbolic.svg"
                 onClicked: {
+                    var t = root.track;
                     root.closeMenu();
-                    root.startRadioRequested(root.track);
+                    if (t) root.startRadioRequested(t);
                 }
             }
 
@@ -183,11 +196,14 @@ Item {
                 text: isLocal ? "Open containing folder" : "Download track"
                 iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : "../assets/icons/download-symbolic.svg"
                 onClicked: {
+                    var t = root.track;
+                    var local = isLocal;
                     root.closeMenu();
-                    if (isLocal) {
-                        root.openFolderRequested(root.track);
+                    if (!t) return;
+                    if (local) {
+                        root.openFolderRequested(t);
                     } else {
-                        root.downloadTrackRequested(root.track);
+                        root.downloadTrackRequested(t);
                     }
                 }
             }
@@ -208,11 +224,14 @@ Item {
                 iconColor: "#ff5252"
                 iconSource: "../assets/icons/user-trash-symbolic.svg"
                 onClicked: {
+                    var t = root.track;
+                    var isQ = root.isQueueItem;
                     root.closeMenu();
-                    if (root.isQueueItem) {
-                        root.removeFromQueueRequested(root.track);
+                    if (!t) return;
+                    if (isQ) {
+                        root.removeFromQueueRequested(t);
                     } else {
-                        root.deleteTrackRequested(root.track);
+                        root.deleteTrackRequested(t);
                     }
                 }
             }
@@ -262,7 +281,14 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: itemBtn.clicked()
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            onPressed: mouse => mouse.accepted = true
+            onReleased: mouse => mouse.accepted = true
+            onClicked: mouse => {
+                mouse.accepted = true;
+                itemBtn.clicked();
+            }
         }
     }
 }
