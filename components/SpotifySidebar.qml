@@ -25,6 +25,7 @@ Rectangle {
     signal playlistSelected(int index, var pl)
     signal onlinePlaylistSelected(var pl)
     signal trackSelected(var trk)
+    signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
 
     ColumnLayout {
         anchors.fill: parent
@@ -629,7 +630,15 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.trackSelected(modelData)
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pt = qItem.mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(modelData, pt.x, pt.y, true);
+                                    } else {
+                                        root.trackSelected(modelData);
+                                    }
+                                }
                             }
                         }
                     }

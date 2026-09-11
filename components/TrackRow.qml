@@ -16,8 +16,11 @@ Rectangle {
     property string trackPath: ""
     property bool isCurrentTrack: false
     property bool isPlaying: false
+    property var rawTrack: null
+    property bool isQueueItem: false
 
     signal trackClicked()
+    signal contextMenuRequested(var track, real globalX, real globalY, bool isQueue)
 
     RowLayout {
         anchors.fill: parent
@@ -97,7 +100,25 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onDoubleClicked: row.trackClicked()
-        onClicked: row.trackClicked()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                var pt = row.mapToItem(null, mouse.x, mouse.y);
+                row.contextMenuRequested(row.rawTrack || {
+                    title: row.trackTitle,
+                    name: row.trackTitle,
+                    artist: row.trackArtist,
+                    path: row.trackPath,
+                    source: row.trackSource
+                }, pt.x, pt.y, row.isQueueItem);
+            } else {
+                row.trackClicked();
+            }
+        }
+        onDoubleClicked: mouse => {
+            if (mouse.button === Qt.LeftButton) {
+                row.trackClicked();
+            }
+        }
     }
 }

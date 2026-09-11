@@ -868,9 +868,167 @@ def resolve_stream_url(video_id):
 
     return None
 
+PENDING_HISTORY_FILE = os.path.expanduser("~/.cache/frostify/pending_history.json")
+LOCAL_YT_MAPPINGS_FILE = os.path.expanduser("~/.cache/frostify/local_yt_mappings.json")
+
+def resolve_video_id_for_track(video_id, title="", artist=""):
+    """If video_id is valid, return it. If local song, lookup via Title + Artist on YTMusic"""
+    if video_id and not video_id.startswith("/") and not os.path.isabs(video_id) and not video_id.startswith("file://"):
+        vid = video_id.replace("ytdl://", "")
+        if "watch?v=" in vid:
+            vid = vid.split("watch?v=")[1].split("&")[0]
+        if len(vid) == 11:
+            return vid
+
+    clean_title = (title or "").strip()
+    clean_artist = (artist or "").strip()
+    if not clean_title:
+        return None
+
+    cache_key = f"{clean_title}|||{clean_artist}".lower()
+    mappings = load_json(LOCAL_YT_MAPPINGS_FILE, {})
+    if cache_key in mappings:
+        return mappings[cache_key]
+
+    try:
+        yt = get_ytmusic_client()
+        query = f"{clean_title} {clean_artist}".strip()
+        results = yt.search(query, filter="songs", limit=1)
+        if results and "videoId" in results[0]:
+            found_id = results[0]["videoId"]
+            mappings[cache_key] = found_id
+            save_json(LOCAL_YT_MAPPINGS_FILE, mappings)
+            return found_id
+    except Exception as e:
+        sys.stderr.write(f"[resolve_video_id_for_track error]: {e}\n")
+    return None
+
+def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
+    """
+    SimpMusic adaptation: sends playback tracking and watchtime to YouTube Music
+    so that Google Account records it in Watch History and updates personalized shelves.
+    """
+    vid = resolve_video_id_for_track(video_id, title, artist)
+    if not vid:
+        return {"success": False, "error": "Could not resolve videoId for tracking"}
+
+    if not os.path.exists(AUTH_FILE):
+        return {"success": False, "error": "Not logged in to Google Account"}
+
+    def _execute_tracking(target_vid, p_id=None):
+        import string
+        import random
+        try:
+            yt = get_ytmusic_client()
+            song = yt.get_song(target_vid)
+            pt = song.get("playbackTracking")
+            if not pt:
+                return False
+
+            playback_url = pt.get("videostatsPlaybackUrl", {}).get("baseUrl")
+            watchtime_url = pt.get("videostatsWatchtimeUrl", {}).get("baseUrl")
+            atr_url = pt.get("atrUrl", {}).get("baseUrl")
+            if not playback_url or not watchtime_url:
+                return False
+
+            cpn = "".join(random.choices(string.ascii_letters + string.digits + "-_", k=16))
+            now_ms = str(int(time.time() * 1000))
+            headers = {
+                "X-Goog-Event-Time": now_ms,
+                "X-Goog-Request-Time": now_ms,
+            }
+
+            # 1. Playback ping
+            p1 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn}
+            if p_id:
+                p1["list"] = p_id
+                p1["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+            yt._session.get(playback_url, params=p1, headers=headers, timeout=10)
+
+            # 2. Watchtime initial ping (st=0, et=5.54)
+            p2 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn, "st": "0", "et": "5.54"}
+            if p_id:
+                p2["list"] = p_id
+                p2["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+            yt._session.get(watchtime_url, params=p2, headers=headers, timeout=10)
+
+            # 3. Background delay 5s -> atr -> delay 0.5s -> second watchtime (12.xx seconds)
+            def _async_follow_up():
+                try:
+                    time.sleep(5.0)
+                    if atr_url:
+                        p_atr = {"cpn": cpn}
+                        if p_id:
+                            p_atr["list"] = p_id
+                            p_atr["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+                        now_atr = str(int(time.time() * 1000))
+                        yt._session.post(atr_url, params=p_atr, headers={
+                            "X-Goog-Event-Time": now_atr,
+                            "X-Goog-Request-Time": now_atr
+                        }, timeout=10)
+
+                    time.sleep(0.5)
+                    sec_watch = round(random.uniform(12.0, 13.5), 2)
+                    p3 = {
+                        "ver": "2",
+                        "c": "WEB_REMIX",
+                        "cpn": cpn,
+                        "st": "0,5.54",
+                        "et": f"5.54,{sec_watch}"
+                    }
+                    if p_id:
+                        p3["list"] = p_id
+                        p3["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+                    now_final = str(int(time.time() * 1000))
+                    yt._session.get(watchtime_url, params=p3, headers={
+                        "X-Goog-Event-Time": now_final,
+                        "X-Goog-Request-Time": now_final
+                    }, timeout=10)
+                except Exception as ex:
+                    sys.stderr.write(f"[async tracking follow-up error]: {ex}\n")
+
+            import threading
+            threading.Thread(target=_async_follow_up, daemon=True).start()
+            return True
+        except Exception as e:
+            sys.stderr.write(f"[execute_tracking error]: {e}\n")
+            return False
+
+    def _flush_pending():
+        pending = load_json(PENDING_HISTORY_FILE, [])
+        if pending and isinstance(pending, list):
+            remaining = []
+            for item in pending:
+                t_vid = item.get("videoId")
+                if t_vid:
+                    ok = _execute_tracking(t_vid, item.get("playlistId"))
+                    if not ok:
+                        remaining.append(item)
+            save_json(PENDING_HISTORY_FILE, remaining)
+
+    import threading
+    threading.Thread(target=_flush_pending, daemon=True).start()
+
+    success = _execute_tracking(vid, playlist_id)
+    if not success:
+        pending = load_json(PENDING_HISTORY_FILE, [])
+        if not isinstance(pending, list):
+            pending = []
+        pending.append({
+            "videoId": vid,
+            "title": title,
+            "artist": artist,
+            "playlistId": playlist_id,
+            "timestamp": int(time.time())
+        })
+        save_json(PENDING_HISTORY_FILE, pending)
+        return {"success": False, "queued": True, "videoId": vid}
+
+    return {"success": True, "videoId": vid, "title": title, "artist": artist}
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout]")
+        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> [title] [artist] [pl_id]]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
@@ -920,4 +1078,12 @@ if __name__ == "__main__":
 
     elif cmd == "logout":
         res = logout()
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "track_playback" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        title = sys.argv[3] if len(sys.argv) > 3 else ""
+        artist = sys.argv[4] if len(sys.argv) > 4 else ""
+        pl_id = sys.argv[5] if len(sys.argv) > 5 else None
+        res = send_playback_tracking(vid, title, artist, pl_id)
         print(json.dumps(res, ensure_ascii=False))

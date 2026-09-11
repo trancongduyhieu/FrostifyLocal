@@ -15,11 +15,13 @@ Rectangle {
     property string accountThumb: ""
     property string statusMessage: ""
     property bool isProcessing: false
+    property bool syncHistoryToGoogle: true
 
     signal closeRequested()
     signal connectRequested(string rawAuth)
     signal logoutRequested()
     signal launchBrowserLoginRequested()
+    signal toggleSyncHistoryRequested(bool enabled)
 
     MouseArea {
         anchors.fill: parent
@@ -29,7 +31,7 @@ Rectangle {
     Rectangle {
         id: dialog
         width: Math.min(560, root.width - 40)
-        height: Math.min(480, root.height - 40)
+        height: Math.min(540, root.height - 40)
         anchors.centerIn: parent
         radius: 12
         color: "#181818"
@@ -142,6 +144,76 @@ Rectangle {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.logoutRequested()
+                        }
+                    }
+                }
+            }
+
+            // Sync History to Google Toggle (Item 14)
+            Rectangle {
+                Layout.fillWidth: true
+                height: 52
+                radius: 8
+                color: "#202024"
+                border.color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 12
+
+                    SpotifyIcon {
+                        source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                        iconSize: 18
+                        color: root.syncHistoryToGoogle ? Theme.spotifyGreen : Theme.textMuted
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Sync Playback History to YouTube Music"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: "Updates Google Watch History & personalized recommendations"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Toggle switch
+                    Rectangle {
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.syncHistoryToGoogle ? Theme.spotifyGreen : "#3a3a3a"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.syncHistoryToGoogle ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.syncHistoryToGoogle = !root.syncHistoryToGoogle;
+                                root.toggleSyncHistoryRequested(root.syncHistoryToGoogle);
+                            }
                         }
                     }
                 }

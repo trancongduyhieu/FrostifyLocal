@@ -15,6 +15,7 @@ Rectangle {
     property bool isPlaying: false
     signal playRequested(var trk)
     signal detailsRequested(var trk)
+    signal contextMenuRequested(var trk, real globalX, real globalY)
 
     ColumnLayout {
         anchors.fill: parent
@@ -118,7 +119,15 @@ Rectangle {
         hoverEnabled: true
         preventStealing: true
         cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         z: 20
-        onClicked: root.playRequested(root.track)
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                var pt = root.mapToItem(null, mouse.x, mouse.y);
+                root.contextMenuRequested(root.track, pt.x, pt.y);
+            } else {
+                root.playRequested(root.track);
+            }
+        }
     }
 }

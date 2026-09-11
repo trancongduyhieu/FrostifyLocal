@@ -21,13 +21,16 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Giao diện*: Nút bấm trên Header dùng **icon SVG chuẩn (TUYỆT ĐỐI KHÔNG DÙNG EMOJI)** mở modal dán link YouTube / YouTube Music.
   - *Luồng chạy*: Chạy ngầm `anpan -o ~/Music/Downloads_Phone "<URL>"`, hiển thị thanh progress bar, tự động trigger `backend/library.py` cập nhật thư viện ngay khi tải xong.
 
-- [ ] **6. Menu Chuột Phải & Quản Lý Hàng Đợi (Context Menu & Queue từ SimpMusic)**
-  - *Tham khảo*: Đã clone sẵn mã nguồn SimpMusic tại `/home/apple/Applications/SimpMusic`.
-  - *Tính năng*: Chuột phải vào bài hát (`TrackCard`, `TrackRow`):
-    - Phát tiếp theo (Play Next).
-    - Thêm vào hàng đợi (Add to Queue).
-    - Xóa bài hát khỏi thư viện / xóa file đĩa.
-    - Mở thư mục chứa file trong file manager.
+- [x] **6. Menu Chuột Phải & Quản Lý Hàng Đợi (Context Menu & Queue từ SimpMusic - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - Tạo mới component `components/TrackContextMenu.qml` phong cách Dark Glass sang trọng, 100% SVG tượng trưng chuẩn hệ thống (TUYỆT ĐỐI KHÔNG DÙNG EMOJI), tự động căn chỉnh mép cửa sổ (auto-clamping) và backdrop dismiss.
+    - Đầy đủ 5 tác vụ tiêu chuẩn kế thừa từ SimpMusic:
+      1. *Phát tiếp theo (Play next)*: Chèn bài ngay sau bài đang phát trong hàng đợi.
+      2. *Thêm vào hàng đợi (Add to queue)*: Thêm bài hát vào cuối hàng đợi phát nhạc.
+      3. *Bắt đầu radio (Start radio)*: Tự động khởi tạo automix radio dựa trên bài hát.
+      4. *Mở thư mục / Tải nhạc*: Tự động hiển thị "Open containing folder" với bài local hoặc "Download track" qua `anpan` với bài online.
+      5. *Xóa khỏi hàng đợi / Xóa thư viện*: "Remove from queue" (khi click trong tab Queue của Sidebar) hoặc "Delete from library" (với bài local) hiển thị chữ đỏ cảnh báo.
+    - Tích hợp kết nối sự kiện chuột phải trên toàn bộ các điểm chạm: `TrackCard.qml`, `TrackRow.qml`, `SpotifyMainGrid.qml`, `HomeFeedView.qml` (QuickPicks Grid, Section Carousel Cards, Fallback Grid), và `SpotifySidebar.qml` (Queue tab).
 
 - [ ] **7. Hoàn Thiện Tính Năng Album (Interactive Albums từ SimpMusic)**
   - *Hiện trạng*: Bấm vào Album không có phản hồi dù hiện dấu cộng.
@@ -87,17 +90,13 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Thanh Sóng Âm Trực Quan (Soundwave Visualizer)*: Bộ equalizer sóng âm (`||| | | |||`) tích hợp trực tiếp ngay trong thanh player bar cạnh nút Play/Pause.
   - *Tabs Điều Hướng Nghệ Thuật*: Phân nhóm "BY ALBUM", "BY PLAYLIST", "BY ARTIST" kèm avatar nghệ sĩ tròn viền tối giản.
 
-- [ ] **14. Đồng Bộ Lịch Sử Nghe Nhạc Lên YouTube Music (Watch History & Playback Tracking Sync - Đã Làm Rõ 100% Qua /grill-me)**
-  - *Mục tiêu*: Gửi lượt nghe thực tế từ Frostify Local lên YouTube Music để Google tính lượt xem/nghe, tối ưu hóa thuật toán cá nhân hóa và kích hoạt lại toàn bộ danh sách "Listen again" (Nghe lại).
-  - *Thời điểm kích hoạt (Trigger Threshold)*: Bắt đầu gửi tín hiệu tracking ngay từ những giây đầu tiên (~5 giây đầu khi bắt đầu phát bài hát) theo chuẩn SimpMusic (`initPlayback` với `videostatsPlaybackUrl` và `atrUrl`), tránh chờ quá lâu.
-  - *Phạm vi bài hát (Sync Scope)*:
-    - Bài Online stream: Sử dụng trực tiếp `videoId` có sẵn.
-    - Bài Offline cục bộ (Local MP3/FLAC): Tự động lấy `Title + Artist` tra cứu ngầm trên YouTube Music để tìm `videoId` tương ứng và gửi đồng bộ lên tài khoản Google.
-  - *Phản hồi trực quan trên UI (Instant Reactive Update)*:
-    - Khi bài hát được ghi nhận lịch sử thành công, tự động chèn bài hát vừa nghe lên vị trí đầu tiên của hàng "Listen again" trong bộ nhớ cache QML ngay lập tức (0ms visual feedback) mà không cần chờ tải lại toàn bộ trang.
-  - *Cơ chế dự phòng & Khắc phục rớt mạng (Pending Queue & Self-Healing)*:
-    - Nếu mất mạng hoặc API timeout, lưu tạm bài hát vào `~/.cache/frostify/pending_history.json`.
-    - Tự động quét hàng đợi và gửi bù lên YouTube Music khi có kết nối mạng trở lại hoặc khi chuyển sang bài hát tiếp theo.
+- [x] **14. Đồng Bộ Lịch Sử Nghe Nhạc Lên YouTube Music (Watch History & Playback Tracking Sync - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Playback Tracking (SimpMusic Adaptation)**: Triển khai phương thức `send_playback_tracking` trong `backend/ytmusic_helper.py` trích xuất `playbackTracking` từ endpoint `v1/player`, sinh chuỗi `cpn` 16 ký tự, gửi tuần tự `videostatsPlaybackUrl` (GET) và `videostatsWatchtimeUrl` (`st=0, et=5.54`), background worker gửi tiếp `atrUrl` (POST) và watchtime thứ 2 (`st=0,5.54, et=5.54,12.xx`). Tất cả đều trả về mã chuẩn HTTP 204 No Content.
+    - **Hỗ trợ đồng bộ cả Offline & Online**: Tự động phân giải ngầm `videoId` đối với các bài hát offline nội bộ theo `Title + Artist` (`resolve_video_id_for_track`) và lưu cache nhanh tại `~/.cache/frostify/local_yt_mappings.json`.
+    - **Cài đặt Dark Glass & Switch On/Off**: Bổ sung toggle Switch "Sync Playback History to YouTube Music" trong `components/SettingsModal.qml` với icon SVG `sync-symbolic.svg`, lưu trữ bền vững trạng thái `syncHistoryToGoogle` vào `~/.config/noctalia/frostify_settings.json`.
+    - **Phản hồi tức thì 0ms (Instant Reactive UI)**: Ngay khi phát bài, bài hát lập tức được đưa lên đầu hàng "Listen again" trên Home Feed mà không cần reload trang.
+    - **Cơ chế chịu lỗi & Tự phục hồi (Fault-tolerant Pending Queue)**: Lưu bài hát vào `~/.cache/frostify/pending_history.json` khi rớt mạng và tự động flush gửi bù khi kết nối internet hoạt động trở lại.
   - *Cấu hình người dùng*: Bổ sung switch bật/tắt đồng bộ (`Sync Playback to Google / sendBackToGoogle`) trong Settings Dark Glass.
 
 - [ ] **15. Mở Rộng Tìm Kiếm Đa Phân Loại: Kệ Album, Nghệ Sĩ & Bài Hát Liên Quan (Categorized Search)**

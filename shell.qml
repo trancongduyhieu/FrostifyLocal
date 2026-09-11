@@ -53,6 +53,7 @@ Scope {
     property bool isAuthLoggedIn: false
     property string authAccountName: ""
     property string authAccountThumb: ""
+    property bool syncHistoryToGoogle: true
 
     property var playlists: []
     property var allTracks: []
@@ -369,6 +370,57 @@ Scope {
         }
     }
 
+    Process {
+        id: playbackTrackingProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res && res.success) {
+                        win.onPlaybackTracked(res);
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    function trackPlayback(trk) {
+        if (!win.syncHistoryToGoogle || !trk) return;
+        var vid = trk.videoId || trk.path || "";
+        var title = trk.title || trk.name || "";
+        var artist = trk.artist || "";
+        playbackTrackingProc.running = false;
+        playbackTrackingProc.command = [
+            "python3", "-u", win.appDir + "/backend/ytmusic_helper.py",
+            "track_playback", vid, title, artist
+        ];
+        playbackTrackingProc.running = true;
+    }
+
+    function onPlaybackTracked(res) {
+        if (!win.homeSections || win.homeSections.length === 0) return;
+        var firstSec = win.homeSections[0];
+        if (firstSec && firstSec.title && firstSec.title.toLowerCase().includes("listen again") && Array.isArray(firstSec.items)) {
+            var items = firstSec.items.slice();
+            items = items.filter(it => (it.videoId && it.videoId !== res.videoId) || (it.title !== res.title));
+            var newTrackItem = {
+                title: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
+                name: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
+                artist: res.artist || (win.currentTrack ? win.currentTrack.artist : "Artist"),
+                videoId: res.videoId,
+                path: "ytdl://" + res.videoId,
+                image: win.currentTrack ? (win.currentTrack.image || "") : "",
+                type: "track"
+            };
+            items.unshift(newTrackItem);
+            firstSec.items = items;
+            var updated = win.homeSections.slice();
+            updated[0] = firstSec;
+            win.homeSections = updated;
+        }
+    }
+
     function loadHomeFeed() {
         win.isLoadingHome = true;
         homeProc.running = false;
@@ -405,6 +457,10 @@ Scope {
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
         win.showAmberolDetails = true;
+
+        if (win.syncHistoryToGoogle) {
+            win.trackPlayback(trk);
+        }
 
         if (!win.currentTracks || win.currentTracks.length === 0) {
             win.currentTracks = [trk];
@@ -582,6 +638,7 @@ Scope {
                             win.playTrack(trk);
                         }
                     }
+                    onTrackContextMenuRequested: (trk, gx, gy, isQ) => trackContextMenu.openAt(trk, gx, gy, isQ)
                 }
 
                 // Column 2: Center Main Content (Home Feed or Local Library)
@@ -609,6 +666,7 @@ Scope {
                         onMoodSelected: (title, params) => win.selectMood(title, params)
                         onTrackPlayRequested: trk => win.playOnlineTrack(trk)
                         onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
+                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                     }
 
                     SpotifyMainGrid {
@@ -635,6 +693,7 @@ Scope {
                             win.currentTrack = trk;
                             win.showAmberolDetails = true;
                         }
+                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                     }
                 }
 
@@ -698,8 +757,13 @@ Scope {
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
             accountThumb: win.authAccountThumb
+            syncHistoryToGoogle: win.syncHistoryToGoogle
 
             onCloseRequested: settingsModal.visible = false
+            onToggleSyncHistoryRequested: enabled => {
+                win.syncHistoryToGoogle = enabled;
+                win.saveSettings();
+            }
             onConnectRequested: rawAuth => {
                 settingsModal.isProcessing = true;
                 settingsModal.statusMessage = "Connecting and validating credentials...";
@@ -721,6 +785,24 @@ Scope {
                 browserLoginProc.command = ["python3", "-u", win.appDir + "/backend/browser_login.py"];
                 browserLoginProc.running = true;
             }
+        }
+
+        TrackContextMenu {
+            id: trackContextMenu
+            onPlayNextRequested: trk => win.insertTrackPlayNext(trk)
+            onAddToQueueRequested: trk => win.appendTrackToQueue(trk)
+            onStartRadioRequested: trk => {
+                if (trk && (trk.videoId || (trk.path && trk.path.startsWith("ytdl://")))) {
+                    var vid = trk.videoId || trk.path.replace("ytdl://", "");
+                    radioProc.running = false;
+                    radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", vid];
+                    radioProc.running = true;
+                }
+            }
+            onOpenFolderRequested: trk => win.openTrackFolder(trk)
+            onDownloadTrackRequested: trk => win.downloadTrack(trk)
+            onRemoveFromQueueRequested: trk => win.removeTrackFromQueue(trk)
+            onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
         }
     }
 
@@ -757,14 +839,16 @@ Scope {
             var obj = JSON.parse(raw);
             if (obj.isShuffle !== undefined) win.isShuffle = !!obj.isShuffle;
             if (obj.isRepeat !== undefined) win.isRepeat = !!obj.isRepeat;
-            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat);
+            if (obj.syncHistoryToGoogle !== undefined) win.syncHistoryToGoogle = !!obj.syncHistoryToGoogle;
+            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle);
         } catch(e) {}
     }
 
     function saveSettings() {
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
-            isRepeat: win.isRepeat
+            isRepeat: win.isRepeat,
+            syncHistoryToGoogle: win.syncHistoryToGoogle
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/frostify_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
@@ -901,6 +985,10 @@ Scope {
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
 
+        if (win.syncHistoryToGoogle) {
+            win.trackPlayback(trk);
+        }
+
         var curIdx = win.currentTracks.findIndex(t => t.path === trk.path);
         if (curIdx < 0) curIdx = 0;
 
@@ -970,6 +1058,107 @@ Scope {
     function setVolume(vol) {
         win.volume = vol;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
+    }
+
+    function updateDaemonPlaylist() {
+        if (!win.currentTracks || win.currentTracks.length === 0) return;
+        var curIdx = 0;
+        if (win.currentTrack) {
+            curIdx = win.currentTracks.findIndex(t => (t.path && t.path === win.currentTrack.path) || (t.videoId && win.currentTrack.videoId === t.videoId));
+            if (curIdx < 0) curIdx = 0;
+        }
+        var paths = [];
+        for (var i = 0; i < win.currentTracks.length; i++) {
+            var trk = win.currentTracks[i];
+            if (trk) {
+                var p = trk.path || (trk.videoId ? ("ytdl://" + trk.videoId) : "");
+                if (p) paths.push(p);
+            }
+        }
+        if (paths.length > 0) {
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)]);
+        }
+    }
+
+    function insertTrackPlayNext(trk) {
+        if (!trk) return;
+        if (!win.currentTracks || win.currentTracks.length === 0) {
+            win.currentTracks = [trk];
+            if (trk.path && trk.path.startsWith("ytdl://")) win.playOnlineTrack(trk);
+            else win.playTrack(trk);
+            return;
+        }
+        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && ((t.path && t.path === win.currentTrack.path) || (t.videoId && win.currentTrack.videoId === t.videoId)));
+        var insertAt = (curIdx >= 0) ? curIdx + 1 : 0;
+        var updated = win.currentTracks.slice();
+        var dupIdx = updated.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        if (dupIdx >= 0) {
+            updated.splice(dupIdx, 1);
+            if (dupIdx < insertAt) insertAt--;
+        }
+        updated.splice(insertAt, 0, trk);
+        win.currentTracks = updated;
+        win.updateDaemonPlaylist();
+    }
+
+    function appendTrackToQueue(trk) {
+        if (!trk) return;
+        if (!win.currentTracks || win.currentTracks.length === 0) {
+            win.currentTracks = [trk];
+            if (trk.path && trk.path.startsWith("ytdl://")) win.playOnlineTrack(trk);
+            else win.playTrack(trk);
+            return;
+        }
+        var updated = win.currentTracks.slice();
+        var dupIdx = updated.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        if (dupIdx >= 0) {
+            updated.splice(dupIdx, 1);
+        }
+        updated.push(trk);
+        win.currentTracks = updated;
+        win.updateDaemonPlaylist();
+    }
+
+    function removeTrackFromQueue(trk) {
+        if (!trk || !win.currentTracks) return;
+        var idx = win.currentTracks.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        if (idx >= 0) {
+            var updated = win.currentTracks.slice();
+            updated.splice(idx, 1);
+            win.currentTracks = updated;
+            win.updateDaemonPlaylist();
+        }
+    }
+
+    function deleteLocalTrack(trk) {
+        if (!trk) return;
+        win.removeTrackFromQueue(trk);
+        var p = trk.path || "";
+        if (p) {
+            win.allTracks = win.allTracks.filter(t => t.path !== p);
+            win.browsingTracks = win.browsingTracks.filter(t => t.path !== p);
+            if (!p.startsWith("ytdl://")) {
+                Quickshell.execDetached(["rm", "-f", p]);
+            }
+        }
+    }
+
+    function openTrackFolder(trk) {
+        if (!trk || !trk.path) return;
+        Quickshell.execDetached(["sh", "-c", 'xdg-open "$(dirname "$1")"', "sh", trk.path]);
+    }
+
+    function downloadTrack(trk) {
+        if (!trk) return;
+        var targetUrl = "";
+        if (trk.videoId) targetUrl = "https://www.youtube.com/watch?v=" + trk.videoId;
+        else if (trk.path && trk.path.startsWith("ytdl://")) targetUrl = trk.path.replace("ytdl://", "https://www.youtube.com/watch?v=");
+        else if (trk.path && (trk.path.includes("youtube.com") || trk.path.includes("youtu.be"))) targetUrl = trk.path;
+        if (targetUrl) {
+            var dlDir = Quickshell.env("HOME") + "/Music/Downloads_Phone";
+            var anpanBin = Quickshell.env("HOME") + "/.local/bin/anpan";
+            Quickshell.execDetached([anpanBin, "-o", dlDir, targetUrl]);
+        }
     }
 
     Process {
@@ -1064,6 +1253,20 @@ Scope {
         }
         function selectMood(title: string, params: string) {
             win.selectMood(title, params);
+        }
+        function openContextMenuForTest(isQueue: bool, forceLocal: bool) {
+            var trk = null;
+            if (forceLocal && win.allTracks && win.allTracks.length > 0) {
+                trk = win.allTracks[0];
+            } else {
+                trk = win.currentTrack || (win.homeQuickPicks && win.homeQuickPicks.length > 0 ? win.homeQuickPicks[0] : null) || (win.allTracks && win.allTracks.length > 0 ? win.allTracks[0] : null);
+            }
+            if (trk) {
+                trackContextMenu.openAt(trk, 600, 320, isQueue);
+            }
+        }
+        function closeContextMenu() {
+            trackContextMenu.closeMenu();
         }
     }
 

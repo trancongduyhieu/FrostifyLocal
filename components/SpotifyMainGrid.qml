@@ -15,6 +15,7 @@ Rectangle {
     property bool isLoading: false
     signal trackPlayRequested(var trk)
     signal trackDetailsRequested(var trk)
+    signal trackContextMenuRequested(var trk, real globalX, real globalY)
 
     // Dynamic gradient banner on top (Spotify style)
     Rectangle {
@@ -104,6 +105,7 @@ Rectangle {
                             isPlaying: root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying
                             onPlayRequested: trk => root.trackPlayRequested(trk)
                             onDetailsRequested: trk => root.trackDetailsRequested(trk)
+                            onContextMenuRequested: (trk, gx, gy) => root.trackContextMenuRequested(trk, gx, gy)
                         }
                     }
                 }

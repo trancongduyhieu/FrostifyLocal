@@ -21,6 +21,7 @@ Rectangle {
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
     signal playlistSelected(var pl)
+    signal trackContextMenuRequested(var trk, real globalX, real globalY)
 
     function getGreeting() {
         var h = new Date().getHours();
@@ -251,6 +252,7 @@ Rectangle {
                                 model: modelData.type === "track_grid" ? modelData.items.slice(0, 18) : []
 
                                 Rectangle {
+                                    id: gridItem
                                     Layout.fillWidth: true
                                     height: 56
                                     radius: 6
@@ -332,11 +334,17 @@ Rectangle {
                                         hoverEnabled: true
                                         preventStealing: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (modelData.type === "playlist") {
-                                                root.playlistSelected(modelData);
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
+                                                root.trackContextMenuRequested(modelData, pt.x, pt.y);
                                             } else {
-                                                root.trackPlayRequested(modelData);
+                                                if (modelData.type === "playlist") {
+                                                    root.playlistSelected(modelData);
+                                                } else {
+                                                    root.trackPlayRequested(modelData);
+                                                }
                                             }
                                         }
                                     }
@@ -370,6 +378,7 @@ Rectangle {
                                     model: modelData.type === "card_carousel" ? modelData.items : []
 
                                     Rectangle {
+                                        id: cCard
                                         width: 160
                                         height: 230
                                         radius: Theme.radiusCard
@@ -417,11 +426,11 @@ Rectangle {
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: modelData.title || ""
+                                                text: modelData.title || modelData.name || ""
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 13
                                                 font.bold: true
-                                                color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.spotifyGreen : Theme.textPrimary
+                                                color: Theme.textPrimary
                                                 elide: Text.ElideRight
                                                 maximumLineCount: 1
                                             }
@@ -446,11 +455,17 @@ Rectangle {
                                             hoverEnabled: true
                                             preventStealing: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
-                                                    root.trackPlayRequested(modelData);
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onClicked: mouse => {
+                                                if (mouse.button === Qt.RightButton) {
+                                                    var pt = cCard.mapToItem(null, mouse.x, mouse.y);
+                                                    root.trackContextMenuRequested(modelData, pt.x, pt.y);
                                                 } else {
-                                                    root.playlistSelected(modelData);
+                                                    if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
+                                                        root.trackPlayRequested(modelData);
+                                                    } else {
+                                                        root.playlistSelected(modelData);
+                                                    }
                                                 }
                                             }
                                         }
@@ -500,6 +515,7 @@ Rectangle {
                         model: root.quickPicks.slice(0, 18)
 
                         Rectangle {
+                            id: qpCard
                             Layout.fillWidth: true
                             height: 56
                             radius: 6
@@ -574,7 +590,15 @@ Rectangle {
                                 hoverEnabled: true
                                 preventStealing: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.trackPlayRequested(modelData)
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pt = qpCard.mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                    } else {
+                                        root.trackPlayRequested(modelData);
+                                    }
+                                }
                             }
                         }
                     }
