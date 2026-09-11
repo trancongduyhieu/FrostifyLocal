@@ -102,6 +102,10 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: mouse => {
+            if (win && win.isContextMenuActive) {
+                mouse.accepted = true;
+                return;
+            }
             if (mouse.button === Qt.RightButton) {
                 var pt = row.mapToItem(null, mouse.x, mouse.y);
                 row.contextMenuRequested(row.rawTrack || {
@@ -116,6 +120,10 @@ Rectangle {
             }
         }
         onDoubleClicked: mouse => {
+            if (win && win.isContextMenuActive) {
+                mouse.accepted = true;
+                return;
+            }
             if (mouse.button === Qt.LeftButton) {
                 row.trackClicked();
             }

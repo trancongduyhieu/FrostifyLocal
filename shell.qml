@@ -54,6 +54,7 @@ Scope {
     property string authAccountName: ""
     property string authAccountThumb: ""
     property bool syncHistoryToGoogle: true
+    readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
     property var allTracks: []
@@ -709,6 +710,7 @@ Scope {
                         isLoading: win.isSearchingYT
 
                         onTrackPlayRequested: trk => {
+                            if (win.isContextMenuActive) return;
                             if (win.browsingTracks && win.browsingTracks.length > 0) {
                                 win.currentTracks = win.browsingTracks;
                             }
@@ -1133,17 +1135,27 @@ Scope {
         var fn = trk.filename || "";
         var title = trk.title || trk.name || "";
 
-        // If the deleted track is currently playing, advance to next
-        if (win.isSameTrack(win.currentTrack, trk)) {
-            win.playNext();
-        }
+        var wasPlaying = win.isPlaying;
+        var isCurrent = win.isSameTrack(win.currentTrack, trk);
 
-        // Remove from queue
-        win.removeTrackFromQueue(trk);
+        // Remove from current queue first so indices and playlist stay consistent
+        win.currentTracks = win.currentTracks.filter(t => !win.isSameTrack(t, trk));
 
         // Immediately update reactive arrays for 0ms UI update
         win.allTracks = win.allTracks.filter(t => !win.isSameTrack(t, trk));
         win.browsingTracks = win.browsingTracks.filter(t => !win.isSameTrack(t, trk));
+
+        // If the deleted track was loaded in the player
+        if (isCurrent) {
+            if (wasPlaying && win.currentTracks && win.currentTracks.length > 0) {
+                win.playNext();
+            } else {
+                win.isPlaying = false;
+                win.currentTrack = null;
+                win.currentTime = 0.0;
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
+            }
+        }
 
         // Call backend/library.py to delete file, delete .lrc, and update library.json permanently
         if (!p.startsWith("ytdl://") && (p || fn || title)) {

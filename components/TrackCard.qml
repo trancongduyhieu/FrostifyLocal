@@ -122,6 +122,10 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         z: 20
         onClicked: mouse => {
+            if (win && win.isContextMenuActive) {
+                mouse.accepted = true;
+                return;
+            }
             if (mouse.button === Qt.RightButton) {
                 var pt = root.mapToItem(null, mouse.x, mouse.y);
                 root.contextMenuRequested(root.track, pt.x, pt.y);

@@ -5,8 +5,8 @@ import QtQuick.Controls.Basic
 Item {
     id: root
     anchors.fill: parent
-    enabled: isOpen
-    visible: opacity > 0
+    enabled: isOpen || closingGuard
+    visible: opacity > 0 || closingGuard
     opacity: isOpen ? 1 : 0
     z: 9999
 
@@ -15,10 +15,20 @@ Item {
     }
 
     property bool isOpen: false
+    property bool closingGuard: false
     property var track: null
     property bool isQueueItem: false
     property real targetX: 0
     property real targetY: 0
+
+    Timer {
+        id: closeTimer
+        interval: 220
+        repeat: false
+        onTriggered: {
+            root.closingGuard = false;
+        }
+    }
 
     signal playNextRequested(var track)
     signal addToQueueRequested(var track)
@@ -29,6 +39,8 @@ Item {
     signal deleteTrackRequested(var track)
 
     function openAt(posTrack, xPos, yPos, queueItem) {
+        closeTimer.stop();
+        root.closingGuard = false;
         root.track = posTrack;
         root.isQueueItem = !!queueItem;
         root.targetX = xPos;
@@ -37,7 +49,10 @@ Item {
     }
 
     function closeMenu() {
+        if (!root.isOpen && !root.closingGuard) return;
         root.isOpen = false;
+        root.closingGuard = true;
+        closeTimer.restart();
     }
 
     // Dismiss backdrop - completely absorbs press, release, and click
