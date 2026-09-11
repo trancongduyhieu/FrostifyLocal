@@ -19,6 +19,23 @@ Rectangle {
     property var rawTrack: null
     property bool isQueueItem: false
 
+    readonly property string trackVideoId: {
+        if (rawTrack && rawTrack.videoId) return rawTrack.videoId;
+        if (trackPath && trackPath.startsWith("ytdl://")) return trackPath.replace("ytdl://", "");
+        return "";
+    }
+    readonly property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(trackVideoId) : false
+    readonly property real downloadProgress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(trackVideoId) : -1
+    readonly property bool isDownloaded: {
+        if (typeof downloadManager !== "undefined" && downloadManager && downloadManager.isDownloaded(trackVideoId)) return true;
+        if (trackVideoId && typeof win !== "undefined" && win.allTracks) {
+            var vId = trackVideoId;
+            var tName = (trackTitle || "").toLowerCase().trim();
+            return win.allTracks.some(t => (vId && t.videoId === vId) || (tName && (t.title || t.name || "").toLowerCase().trim() === tName));
+        }
+        return false;
+    }
+
     signal trackClicked()
     signal contextMenuRequested(var track, real globalX, real globalY, bool isQueue)
 
@@ -73,6 +90,30 @@ Rectangle {
                 color: "#a1a1aa"
                 font.pixelSize: 11
                 elide: Text.ElideRight
+            }
+        }
+
+        // Download State Indicator
+        Item {
+            width: 22
+            height: 22
+            visible: row.isDownloading || row.isDownloaded
+
+            DownloadingSpinner {
+                anchors.centerIn: parent
+                visible: row.isDownloading
+                running: row.isDownloading
+                iconSize: 15
+                progress: row.downloadProgress
+                color: "#00c853"
+            }
+
+            SpotifyIcon {
+                anchors.centerIn: parent
+                visible: row.isDownloaded && !row.isDownloading
+                source: "../assets/icons/emblem-ok-symbolic.svg"
+                iconSize: 13
+                color: "#00a0cb"
             }
         }
 

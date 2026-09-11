@@ -243,6 +243,52 @@ Rectangle {
             }
         }
 
+        // Active Download Queue Pill (SimpMusic Style)
+        Rectangle {
+            id: downloadQueuePill
+            Layout.preferredHeight: 34
+            Layout.preferredWidth: dlRow.implicitWidth + 24
+            radius: 17
+            color: dlMouse.containsMouse ? Qt.rgba(0.12, 0.12, 0.16, 0.95) : Qt.rgba(0.08, 0.08, 0.11, 0.85)
+            border.color: Qt.rgba(0, 200, 83, 0.4)
+            border.width: 1
+            visible: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeDownloadsCount > 0
+
+            RowLayout {
+                id: dlRow
+                anchors.centerIn: parent
+                spacing: 8
+
+                DownloadingSpinner {
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
+                    running: true
+                    color: "#00c853"
+                    iconSize: 14
+                }
+
+                Text {
+                    text: "Downloading (" + (typeof downloadManager !== "undefined" && downloadManager ? downloadManager.activeDownloadsCount : 0) + ")"
+                    color: "#00c853"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+            }
+
+            MouseArea {
+                id: dlMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (typeof win !== "undefined" && win) {
+                        win.currentTab = "downloads";
+                    }
+                }
+            }
+        }
+
         Item { Layout.fillWidth: true }
     }
 }

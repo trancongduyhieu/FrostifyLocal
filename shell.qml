@@ -830,6 +830,13 @@ Scope {
             onRemoveFromQueueRequested: trk => win.removeTrackFromQueue(trk)
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
         }
+
+        DownloadManager {
+            id: downloadManager
+            onTaskCompleted: (videoId, title, path) => {
+                libLoader.reload();
+            }
+        }
     }
 
     Timer {
@@ -1173,15 +1180,7 @@ Scope {
 
     function downloadTrack(trk) {
         if (!trk) return;
-        var targetUrl = "";
-        if (trk.videoId) targetUrl = "https://www.youtube.com/watch?v=" + trk.videoId;
-        else if (trk.path && trk.path.startsWith("ytdl://")) targetUrl = trk.path.replace("ytdl://", "https://www.youtube.com/watch?v=");
-        else if (trk.path && (trk.path.includes("youtube.com") || trk.path.includes("youtu.be"))) targetUrl = trk.path;
-        if (targetUrl) {
-            var dlDir = Quickshell.env("HOME") + "/Music/Downloads_Phone";
-            var anpanBin = Quickshell.env("HOME") + "/.local/bin/anpan";
-            Quickshell.execDetached([anpanBin, "-o", dlDir, targetUrl]);
-        }
+        downloadManager.enqueue(trk);
     }
 
     Process {

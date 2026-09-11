@@ -1,17 +1,6 @@
 [
   {
     "id": 1,
-    "title": "Mesmerizer (Official English Version)",
-    "name": "Mesmerizer (Official English Version)",
-    "artist": "32ki, Will Stetson, rachie",
-    "source": "SimpMusic",
-    "path": "/home/apple/Music/SimpMusic/Tracks/32ki, Will Stetson, rachie - Mesmerizer (Official English Version).opus",
-    "filename": "32ki, Will Stetson, rachie - Mesmerizer (Official English Version).opus",
-    "duration": "--:--",
-    "image": "https://i.ytimg.com/vi/PaoUH1zp-6c/hqdefault.jpg"
-  },
-  {
-    "id": 2,
     "title": "プロポーズ - propose",
     "name": "プロポーズ - propose",
     "artist": "9Lana",
@@ -22,7 +11,7 @@
     "image": "https://i.ytimg.com/vi/Yjo_NQUyBa8/hqdefault.jpg"
   },
   {
-    "id": 3,
+    "id": 2,
     "title": "Aishite Aishite Aishite",
     "name": "Aishite Aishite Aishite",
     "artist": "Ado",
@@ -33,7 +22,7 @@
     "image": "https://i.ytimg.com/vi/U8BlNEKq0r8/hqdefault.jpg"
   },
   {
-    "id": 4,
+    "id": 3,
     "title": "unravel",
     "name": "unravel",
     "artist": "Ado",
@@ -44,7 +33,7 @@
     "image": "https://i.ytimg.com/vi/eZuDklxsaRg/hqdefault.jpg"
   },
   {
-    "id": 5,
+    "id": 4,
     "title": "うっせぇわ - Usseewa",
     "name": "うっせぇわ - Usseewa",
     "artist": "Ado",
@@ -55,7 +44,7 @@
     "image": "https://i.ytimg.com/vi/8dnjqzodjgo/hqdefault.jpg"
   },
   {
-    "id": 6,
+    "id": 5,
     "title": "アイ・アイ・ア - AiAiA",
     "name": "アイ・アイ・ア - AiAiA",
     "artist": "Ado",
@@ -66,7 +55,7 @@
     "image": "https://i.ytimg.com/vi/K9xb-JrhG50/hqdefault.jpg"
   },
   {
-    "id": 7,
+    "id": 6,
     "title": "唱 (TeddyLoid Remix) - Show (TeddyLoid Remix)",
     "name": "唱 (TeddyLoid Remix) - Show (TeddyLoid Remix)",
     "artist": "Ado",
@@ -77,7 +66,7 @@
     "image": "https://i.ytimg.com/vi/KBXoX8p0mV4/hqdefault.jpg"
   },
   {
-    "id": 8,
+    "id": 7,
     "title": "唱 - Show",
     "name": "唱 - Show",
     "artist": "Ado",
@@ -88,7 +77,7 @@
     "image": "https://i.ytimg.com/vi/jYo4TtNRAsU/hqdefault.jpg"
   },
   {
-    "id": 9,
+    "id": 8,
     "title": "悪魔の子",
     "name": "悪魔の子",
     "artist": "Ai Higuchi, 348 Tr lượt phát",
@@ -99,7 +88,7 @@
     "image": "https://i.ytimg.com/vi/tdzsOODJiX8/hqdefault.jpg"
   },
   {
-    "id": 10,
+    "id": 9,
     "title": "hobbies",
     "name": "hobbies",
     "artist": "Aleyna Moon",
@@ -110,7 +99,7 @@
     "image": "https://i.ytimg.com/vi/XIMB7U5qyas/hqdefault.jpg"
   },
   {
-    "id": 11,
+    "id": 10,
     "title": "Idol - Oshi no Ko OP [Piano]  YOASOBI",
     "name": "Idol - Oshi no Ko OP [Piano]  YOASOBI",
     "artist": "Animenz",
@@ -121,7 +110,7 @@
     "image": ""
   },
   {
-    "id": 12,
+    "id": 11,
     "title": "Unravel (Tokyo Ghoul) - Piano Version",
     "name": "Unravel (Tokyo Ghoul) - Piano Version",
     "artist": "Animenz",
@@ -132,7 +121,7 @@
     "image": "https://i.ytimg.com/vi/sEQf5lcnj_o/hqdefault.jpg"
   },
   {
-    "id": 13,
+    "id": 12,
     "title": "505",
     "name": "505",
     "artist": "Arctic Monkeys",
@@ -143,7 +132,7 @@
     "image": "https://i.ytimg.com/vi/qU9mHegkTc4/hqdefault.jpg"
   },
   {
-    "id": 14,
+    "id": 13,
     "title": "IDOL【ENGLISH EDM COVER】「アイドル」 by YOASOBI【Aries Shepard x @djJoMusicChannel 】",
     "name": "IDOL【ENGLISH EDM COVER】「アイドル」 by YOASOBI【Aries Shepard x @djJoMusicChannel 】",
     "artist": "Aries Shepard",
@@ -154,7 +143,7 @@
     "image": "https://i.ytimg.com/vi/eF0Wh78eHyA/hqdefault.jpg"
   },
   {
-    "id": 15,
+    "id": 14,
     "title": "Light Switch",
     "name": "Light Switch",
     "artist": "Charlie Puth",
@@ -165,7 +154,7 @@
     "image": "https://i.ytimg.com/vi/pGdxftEY2Fg/hqdefault.jpg"
   },
   {
-    "id": 16,
+    "id": 15,
     "title": "Nói Dối",
     "name": "Nói Dối",
     "artist": "Côngg, inari",
@@ -176,7 +165,7 @@
     "image": "https://i.ytimg.com/vi/lzEtp_azbio/hqdefault.jpg"
   },
   {
-    "id": 17,
+    "id": 16,
     "title": "Cradles (Female Version)",
     "name": "Cradles (Female Version)",
     "artist": "Eiden XII",
@@ -187,7 +176,7 @@
     "image": "https://i.ytimg.com/vi/_eeP7PIXnTU/hqdefault.jpg"
   },
   {
-    "id": 18,
+    "id": 17,
     "title": "Vietsub - Monitoring - DECO27  Best Friend Remix version.【VIETSUB】",
     "name": "Vietsub - Monitoring - DECO27  Best Friend Remix version.【VIETSUB】",
     "artist": "Fuwamochi",
@@ -198,7 +187,7 @@
     "image": ""
   },
   {
-    "id": 19,
+    "id": 18,
     "title": "【MV】 プロポーズ  propose  HAKOS BAELZ COVER",
     "name": "【MV】 プロポーズ  propose  HAKOS BAELZ COVER",
     "artist": "Hakos Baelz",
@@ -209,7 +198,7 @@
     "image": ""
   },
   {
-    "id": 20,
+    "id": 19,
     "title": "Tháng Tư Là Lời Nói Dối Của Em",
     "name": "Tháng Tư Là Lời Nói Dối Của Em",
     "artist": "Hà Anh Tuấn",
@@ -220,7 +209,7 @@
     "image": "https://i.ytimg.com/vi/kdLfaZPrIHY/hqdefault.jpg"
   },
   {
-    "id": 21,
+    "id": 20,
     "title": "Demons",
     "name": "Demons",
     "artist": "Imagine Dragons",
@@ -231,7 +220,7 @@
     "image": "https://i.ytimg.com/vi/y4FiCl-tUJc/hqdefault.jpg"
   },
   {
-    "id": 22,
+    "id": 21,
     "title": "Unravel (Full Version)",
     "name": "Unravel (Full Version)",
     "artist": "Jonathan Young",
@@ -242,7 +231,7 @@
     "image": "https://i.ytimg.com/vi/jM95kVDGYDg/hqdefault.jpg"
   },
   {
-    "id": 23,
+    "id": 22,
     "title": "GEMN「ファタール」 Performance Video (Prod. by Kento Nakajima)",
     "name": "GEMN「ファタール」 Performance Video (Prod. by Kento Nakajima)",
     "artist": "Kento Nakajima, Tatsuya Kitani, GEMN",
@@ -253,7 +242,7 @@
     "image": "https://i.ytimg.com/vi/0opyaQPK6bY/hqdefault.jpg"
   },
   {
-    "id": 24,
+    "id": 23,
     "title": "Call of Silence (From Attack on Titan) (Piano Cover)",
     "name": "Call of Silence (From Attack on Titan) (Piano Cover)",
     "artist": "Lazypianist",
@@ -264,7 +253,7 @@
     "image": "https://i.ytimg.com/vi/ODGNTY5x0_Q/hqdefault.jpg"
   },
   {
-    "id": 25,
+    "id": 24,
     "title": "GODS",
     "name": "GODS",
     "artist": "League of Legends, NewJeans",
@@ -275,7 +264,7 @@
     "image": "https://i.ytimg.com/vi/lzfyoYEGvM0/hqdefault.jpg"
   },
   {
-    "id": 26,
+    "id": 25,
     "title": "TK from 凛として時雨 『unravel』 Music Video(Full Size)",
     "name": "TK from 凛として時雨 『unravel』 Music Video(Full Size)",
     "artist": "Ling Tosite Sigure",
@@ -286,7 +275,7 @@
     "image": "https://i.ytimg.com/vi/Fve_lHIPa-I/hqdefault.jpg"
   },
   {
-    "id": 27,
+    "id": 26,
     "title": "[English Cover] Catcher in the Ui (Shigure Ui)  Mugibatake de Tsukamaete",
     "name": "[English Cover] Catcher in the Ui (Shigure Ui)  Mugibatake de Tsukamaete",
     "artist": "Little Nii",
@@ -297,7 +286,7 @@
     "image": "https://i.ytimg.com/vi/kMpdAtENBhw/hqdefault.jpg"
   },
   {
-    "id": 28,
+    "id": 27,
     "title": "Cry For Me (cùng với Ami)",
     "name": "Cry For Me (cùng với Ami)",
     "artist": "Michita",
@@ -308,7 +297,7 @@
     "image": "https://i.ytimg.com/vi/HVBnpC1b_5Y/hqdefault.jpg"
   },
   {
-    "id": 29,
+    "id": 28,
     "title": "Bản Ngã Trong Tôi",
     "name": "Bản Ngã Trong Tôi",
     "artist": "Moonatics",
@@ -319,7 +308,7 @@
     "image": "https://i.ytimg.com/vi/fbxXVrsB5vA/hqdefault.jpg"
   },
   {
-    "id": 30,
+    "id": 29,
     "title": "シネテ - NARI",
     "name": "シネテ - NARI",
     "artist": "NARI",
@@ -330,7 +319,7 @@
     "image": "https://i.ytimg.com/vi/EwX_-W-NdXk/hqdefault.jpg"
   },
   {
-    "id": 31,
+    "id": 30,
     "title": "ペカビ - Peccavi",
     "name": "ペカビ - Peccavi",
     "artist": "NARI",
@@ -341,7 +330,7 @@
     "image": "https://i.ytimg.com/vi/hcoOltUM1D4/hqdefault.jpg"
   },
   {
-    "id": 32,
+    "id": 31,
     "title": "Cơn Mưa Ngang Qua - Metal Rock Version",
     "name": "Cơn Mưa Ngang Qua - Metal Rock Version",
     "artist": "Nhạc Dốc Mê Ta",
@@ -352,7 +341,7 @@
     "image": "https://i.ytimg.com/vi/sBcY-22wOrw/hqdefault.jpg"
   },
   {
-    "id": 33,
+    "id": 32,
     "title": "House of Memories",
     "name": "House of Memories",
     "artist": "Panic! At The Disco",
@@ -363,7 +352,7 @@
     "image": "https://i.ytimg.com/vi/bLm8g1gdcPc/hqdefault.jpg"
   },
   {
-    "id": 34,
+    "id": 33,
     "title": "Mặt Mộc (cùng với BMZ)",
     "name": "Mặt Mộc (cùng với BMZ)",
     "artist": "Phạm Nguyên Ngọc, VAnh, Ân Nhi",
@@ -374,7 +363,7 @@
     "image": "https://i.ytimg.com/vi/Y6LKBtUsfSE/hqdefault.jpg"
   },
   {
-    "id": 35,
+    "id": 34,
     "title": "NIGHT DANCER - Imase [ Remind Cover ]",
     "name": "NIGHT DANCER - Imase [ Remind Cover ]",
     "artist": "Remind TV",
@@ -385,7 +374,7 @@
     "image": "https://i.ytimg.com/vi/erQhcJ1eK7g/hqdefault.jpg"
   },
   {
-    "id": 36,
+    "id": 35,
     "title": "DECO27 The Vampire - RiiKami (Cover)",
     "name": "DECO27 The Vampire - RiiKami (Cover)",
     "artist": "Riikami Ch.",
@@ -396,7 +385,7 @@
     "image": ""
   },
   {
-    "id": 37,
+    "id": 36,
     "title": "Shaun (숀) - Way Back Home (Piano Cover by Riyandi Kusuma)",
     "name": "Shaun (숀) - Way Back Home (Piano Cover by Riyandi Kusuma)",
     "artist": "Riyandi Kusuma",
@@ -407,7 +396,7 @@
     "image": "https://i.ytimg.com/vi/5lR4CTrqEgI/hqdefault.jpg"
   },
   {
-    "id": 38,
+    "id": 37,
     "title": "Wasteland (from the series Arcane League of Legends)",
     "name": "Wasteland (from the series Arcane League of Legends)",
     "artist": "Royal & the Serpent",
@@ -418,7 +407,7 @@
     "image": "https://i.ytimg.com/vi/4fi9bka66dY/hqdefault.jpg"
   },
   {
-    "id": 39,
+    "id": 38,
     "title": "Confessions of a Rotten Girl",
     "name": "Confessions of a Rotten Girl",
     "artist": "SAWTOWNE",
@@ -429,7 +418,7 @@
     "image": "https://i.ytimg.com/vi/_JeLNAjjBHw/hqdefault.jpg"
   },
   {
-    "id": 40,
+    "id": 39,
     "title": "I Really Want to Stay at Your House",
     "name": "I Really Want to Stay at Your House",
     "artist": "Samuel Kim, Lorien",
@@ -440,7 +429,7 @@
     "image": "https://i.ytimg.com/vi/9B0yX0UIN9M/hqdefault.jpg"
   },
   {
-    "id": 41,
+    "id": 40,
     "title": "Phía Sau Một Cô Gái - Soobin Hoàng Sơn (Official Music Video 4K)",
     "name": "Phía Sau Một Cô Gái - Soobin Hoàng Sơn (Official Music Video 4K)",
     "artist": "Soobin Hoàng Sơn",
@@ -451,7 +440,7 @@
     "image": "https://i.ytimg.com/vi/vCIc1g_4JWM/hqdefault.jpg"
   },
   {
-    "id": 42,
+    "id": 41,
     "title": "Chạy Ngay Đi",
     "name": "Chạy Ngay Đi",
     "artist": "Sơn Tùng M-TP",
@@ -462,7 +451,7 @@
     "image": "https://i.ytimg.com/vi/32sYGCOYJUM/hqdefault.jpg"
   },
   {
-    "id": 43,
+    "id": 42,
     "title": "Lạc Trôi",
     "name": "Lạc Trôi",
     "artist": "Sơn Tùng M-TP",
@@ -473,7 +462,7 @@
     "image": "https://i.ytimg.com/vi/Llw9Q6akRo4/hqdefault.jpg"
   },
   {
-    "id": 44,
+    "id": 43,
     "title": "Execution Clap",
     "name": "Execution Clap",
     "artist": "TRAP CHICK",
@@ -484,7 +473,7 @@
     "image": "https://i.ytimg.com/vi/YcxhmHEykPg/hqdefault.jpg"
   },
   {
-    "id": 45,
+    "id": 44,
     "title": "HEAVENLY JUMPSTYLE (Slowed)",
     "name": "HEAVENLY JUMPSTYLE (Slowed)",
     "artist": "TWXNY, Sxilwix, Innxcence",
@@ -495,7 +484,7 @@
     "image": "https://i.ytimg.com/vi/DWv8ZkHpCx4/hqdefault.jpg"
   },
   {
-    "id": 46,
+    "id": 45,
     "title": "Blinding Lights",
     "name": "Blinding Lights",
     "artist": "The Weeknd",
@@ -506,7 +495,7 @@
     "image": "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"
   },
   {
-    "id": 47,
+    "id": 46,
     "title": "Aishite Aishite Aishite",
     "name": "Aishite Aishite Aishite",
     "artist": "Trickle",
@@ -517,7 +506,7 @@
     "image": "https://i.ytimg.com/vi/Ka8I3U40i7k/hqdefault.jpg"
   },
   {
-    "id": 48,
+    "id": 47,
     "title": "BUTCHER VANITY",
     "name": "BUTCHER VANITY",
     "artist": "Trickle",
@@ -528,7 +517,7 @@
     "image": "https://i.ytimg.com/vi/8kB_H7S0MGY/hqdefault.jpg"
   },
   {
-    "id": 49,
+    "id": 48,
     "title": "Idol  ENGLISH COVER【Trickle】Oshi no Ko",
     "name": "Idol  ENGLISH COVER【Trickle】Oshi no Ko",
     "artist": "Trickle",
@@ -539,7 +528,7 @@
     "image": ""
   },
   {
-    "id": 50,
+    "id": 49,
     "title": "KING",
     "name": "KING",
     "artist": "Trickle",
@@ -550,7 +539,7 @@
     "image": "https://i.ytimg.com/vi/V6LSJMRSuSA/hqdefault.jpg"
   },
   {
-    "id": 51,
+    "id": 50,
     "title": "Monitoring  English Cover - Trickle",
     "name": "Monitoring  English Cover - Trickle",
     "artist": "Trickle",
@@ -561,7 +550,7 @@
     "image": "https://i.ytimg.com/vi/OCiBbuav97s/hqdefault.jpg"
   },
   {
-    "id": 52,
+    "id": 51,
     "title": "Show",
     "name": "Show",
     "artist": "Trickle",
@@ -572,7 +561,7 @@
     "image": "https://i.ytimg.com/vi/v6RnbKi-4NU/hqdefault.jpg"
   },
   {
-    "id": 53,
+    "id": 52,
     "title": "Trickle • Aishite Aishite Aishite (English Cover) – Kikuo",
     "name": "Trickle • Aishite Aishite Aishite (English Cover) – Kikuo",
     "artist": "Trickle",
@@ -583,7 +572,7 @@
     "image": "https://i.ytimg.com/vi/b4nehnzWvS4/hqdefault.jpg"
   },
   {
-    "id": 54,
+    "id": 53,
     "title": "Trickle • Brain Rot (English Cover) – Tokyo Manaka",
     "name": "Trickle • Brain Rot (English Cover) – Tokyo Manaka",
     "artist": "Trickle",
@@ -594,7 +583,7 @@
     "image": "https://i.ytimg.com/vi/-Sl3TGlfSdk/hqdefault.jpg"
   },
   {
-    "id": 55,
+    "id": 54,
     "title": "Vừa Hận Vừa Yêu",
     "name": "Vừa Hận Vừa Yêu",
     "artist": "Trung Tự",
@@ -605,7 +594,7 @@
     "image": "https://i.ytimg.com/vi/_rh-BpJ4jEY/hqdefault.jpg"
   },
   {
-    "id": 56,
+    "id": 55,
     "title": "The Line (from the series Arcane League of Legends)",
     "name": "The Line (from the series Arcane League of Legends)",
     "artist": "Twenty One Pilots",
@@ -616,7 +605,7 @@
     "image": "https://i.ytimg.com/vi/cOfFWiVMUXs/hqdefault.jpg"
   },
   {
-    "id": 57,
+    "id": 56,
     "title": "唱 (Cover)",
     "name": "唱 (Cover)",
     "artist": "Unnämed",
@@ -627,7 +616,7 @@
     "image": "https://i.ytimg.com/vi/47TuRG7oxkY/hqdefault.jpg"
   },
   {
-    "id": 58,
+    "id": 57,
     "title": "Harlequin Contraption ft. Kasane Teto",
     "name": "Harlequin Contraption ft. Kasane Teto",
     "artist": "Vane Lily",
@@ -638,7 +627,7 @@
     "image": "https://i.ytimg.com/vi/XKqUsbYyLk4/hqdefault.jpg"
   },
   {
-    "id": 59,
+    "id": 58,
     "title": "THÁNG TƯ LÀ LỜI NÓI DỐI CỦA EM - PIANO COVER - HÀ ANH TUẤN",
     "name": "THÁNG TƯ LÀ LỜI NÓI DỐI CỦA EM - PIANO COVER - HÀ ANH TUẤN",
     "artist": "Vu Ngoc Tien",
@@ -649,7 +638,7 @@
     "image": "https://i.ytimg.com/vi/2ApmjahcxzA/hqdefault.jpg"
   },
   {
-    "id": 60,
+    "id": 59,
     "title": "Fatal (English Cover)「Oshi no Ko OP 2」【Will Stetson】「ファタール - 推しの子」",
     "name": "Fatal (English Cover)「Oshi no Ko OP 2」【Will Stetson】「ファタール - 推しの子」",
     "artist": "Will Stetson",
@@ -660,7 +649,7 @@
     "image": "https://i.ytimg.com/vi/15Cq6FVqWMI/hqdefault.jpg"
   },
   {
-    "id": 61,
+    "id": 60,
     "title": "Overdose (English Cover)「なとり」【Will Stetson】",
     "name": "Overdose (English Cover)「なとり」【Will Stetson】",
     "artist": "Will Stetson",
@@ -671,7 +660,7 @@
     "image": "https://i.ytimg.com/vi/j_NWbUgXKqE/hqdefault.jpg"
   },
   {
-    "id": 62,
+    "id": 61,
     "title": "AiAiA ENGLISH COVER 【Y1L1NG】Ado",
     "name": "AiAiA ENGLISH COVER 【Y1L1NG】Ado",
     "artist": "Y1L1NG",
@@ -682,7 +671,7 @@
     "image": "https://i.ytimg.com/vi/9z4V-UnBhE4/hqdefault.jpg"
   },
   {
-    "id": 63,
+    "id": 62,
     "title": "怪物",
     "name": "怪物",
     "artist": "YOASOBI",
@@ -693,7 +682,7 @@
     "image": "https://i.ytimg.com/vi/dy90tA3TT1c/hqdefault.jpg"
   },
   {
-    "id": 64,
+    "id": 63,
     "title": "Harpy Hare",
     "name": "Harpy Hare",
     "artist": "Yaelokre",
@@ -704,7 +693,7 @@
     "image": "https://i.ytimg.com/vi/5-I1lT6Jbdo/hqdefault.jpg"
   },
   {
-    "id": 65,
+    "id": 64,
     "title": "Hearken",
     "name": "Hearken",
     "artist": "Yaelokre",
@@ -715,7 +704,7 @@
     "image": "https://i.ytimg.com/vi/DiTo6yeIFbA/hqdefault.jpg"
   },
   {
-    "id": 66,
+    "id": 65,
     "title": "Kid & Leveret",
     "name": "Kid & Leveret",
     "artist": "Yaelokre",
@@ -726,7 +715,7 @@
     "image": "https://i.ytimg.com/vi/Yps5mIC022Y/hqdefault.jpg"
   },
   {
-    "id": 67,
+    "id": 66,
     "title": "My farewells to the fields",
     "name": "My farewells to the fields",
     "artist": "Yaelokre",
@@ -737,7 +726,7 @@
     "image": "https://i.ytimg.com/vi/mKwAS_ZCylI/hqdefault.jpg"
   },
   {
-    "id": 68,
+    "id": 67,
     "title": "Neath the grove is a heart",
     "name": "Neath the grove is a heart",
     "artist": "Yaelokre",
@@ -748,7 +737,7 @@
     "image": "https://i.ytimg.com/vi/eJSum8E3BtI/hqdefault.jpg"
   },
   {
-    "id": 69,
+    "id": 68,
     "title": "うそつきマカロン - Liar Macaron (cùng với KASANE TETO)",
     "name": "うそつきマカロン - Liar Macaron (cùng với KASANE TETO)",
     "artist": "bouinboushokup",
@@ -759,7 +748,7 @@
     "image": "https://i.ytimg.com/vi/DxVFFdNEbaU/hqdefault.jpg"
   },
   {
-    "id": 70,
+    "id": 69,
     "title": "Ca Sĩ Vô Danh",
     "name": "Ca Sĩ Vô Danh",
     "artist": "inari, Côngg",
@@ -770,7 +759,7 @@
     "image": "https://i.ytimg.com/vi/V5s_xyMG_Fc/hqdefault.jpg"
   },
   {
-    "id": 71,
+    "id": 70,
     "title": "not again",
     "name": "not again",
     "artist": "mindfreakk!",
@@ -781,7 +770,7 @@
     "image": "https://i.ytimg.com/vi/tVd6cvwfodg/hqdefault.jpg"
   },
   {
-    "id": 72,
+    "id": 71,
     "title": "All The Things She Said",
     "name": "All The Things She Said",
     "artist": "t.A.T.u.",
@@ -792,7 +781,7 @@
     "image": "https://i.ytimg.com/vi/ujpvNvSgcic/hqdefault.jpg"
   },
   {
-    "id": 73,
+    "id": 72,
     "title": "【tira feat. Yi Xi】INFINITE DEATH【ORIGINAL SONG】",
     "name": "【tira feat. Yi Xi】INFINITE DEATH【ORIGINAL SONG】",
     "artist": "tiramika",
@@ -803,7 +792,7 @@
     "image": "https://i.ytimg.com/vi/Plk3Vu6zAk8/hqdefault.jpg"
   },
   {
-    "id": 74,
+    "id": 73,
     "title": "Wannabe (Sped Up Version)",
     "name": "Wannabe (Sped Up Version)",
     "artist": "why mona, 22 Tr lượt phát",
@@ -814,7 +803,7 @@
     "image": "https://i.ytimg.com/vi/liYGiUgkvcQ/hqdefault.jpg"
   },
   {
-    "id": 75,
+    "id": 74,
     "title": "Fatal – Oshi no Ko OP 2【Duet Cover  xsakurarose & reruzensky】「ファタール」",
     "name": "Fatal – Oshi no Ko OP 2【Duet Cover  xsakurarose & reruzensky】「ファタール」",
     "artist": "xsakurarose",
@@ -825,7 +814,7 @@
     "image": ""
   },
   {
-    "id": 76,
+    "id": 75,
     "title": "爱是难解的签",
     "name": "爱是难解的签",
     "artist": "一只白羊",
@@ -836,7 +825,7 @@
     "image": "https://i.ytimg.com/vi/HzluFOlxkUo/hqdefault.jpg"
   },
   {
-    "id": 77,
+    "id": 76,
     "title": "ラビットホール×メズマライザー(Mashup)  初音ミク・重音テトSV【channel】",
     "name": "ラビットホール×メズマライザー(Mashup)  初音ミク・重音テトSV【channel】",
     "artist": "作曲生徒︎︎　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 ︎",
@@ -847,7 +836,7 @@
     "image": ""
   },
   {
-    "id": 78,
+    "id": 77,
     "title": "unravel - (320 Kbps)",
     "name": "unravel - (320 Kbps)",
     "artist": "Ado",
@@ -858,73 +847,7 @@
     "image": "https://i.ytimg.com/vi/2naGCYPIN10/hqdefault.jpg"
   },
   {
-    "id": 79,
-    "title": "Nói Dối - (320 Kbps)",
-    "name": "Nói Dối - (320 Kbps)",
-    "artist": "Côngg & inari",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Côngg & inari - Nói Dối - (320 Kbps).mp3",
-    "filename": "Côngg & inari - Nói Dối - (320 Kbps).mp3",
-    "duration": "--:--",
-    "image": "https://i.ytimg.com/vi/wdcEZRFAB7Y/hqdefault.jpg"
-  },
-  {
-    "id": 80,
-    "title": "Darling~",
-    "name": "Darling~",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Darling~.mp3",
-    "filename": "Darling~.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 81,
-    "title": "Icant'",
-    "name": "Icant'",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Icant'.mp3",
-    "filename": "Icant'.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 82,
-    "title": "Icant'.mp3 (Remix) (1)",
-    "name": "Icant'.mp3 (Remix) (1)",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Icant'.mp3 (Remix) (1).mp3",
-    "filename": "Icant'.mp3 (Remix) (1).mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 83,
-    "title": "(320 Kbps)",
-    "name": "(320 Kbps)",
-    "artist": "Trickle • BUTCHER VANITY (Cover) – Flavor Foley",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Trickle • BUTCHER VANITY (Cover) – Flavor Foley - (320 Kbps).mp3",
-    "filename": "Trickle • BUTCHER VANITY (Cover) – Flavor Foley - (320 Kbps).mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 84,
-    "title": "(320 Kbps)",
-    "name": "(320 Kbps)",
-    "artist": "Trickle • Monitoring (English Cover) – Deco_27",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Trickle • Monitoring (English Cover) – Deco_27 - (320 Kbps).mp3",
-    "filename": "Trickle • Monitoring (English Cover) – Deco_27 - (320 Kbps).mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 85,
+    "id": 78,
     "title": "NIGHT DANCER - (320 Kbps)",
     "name": "NIGHT DANCER - (320 Kbps)",
     "artist": "Will Stetson",
@@ -935,84 +858,7 @@
     "image": "https://i.ytimg.com/vi/aX8JmX-PJ8k/hqdefault.jpg"
   },
   {
-    "id": 86,
-    "title": "YTSave_YouTube_inari-_-Congg-Lac-Vao-Nha-Ma-feat-Kasane_Media_BfqxnD8RTa0_009_128k",
-    "name": "YTSave_YouTube_inari-_-Congg-Lac-Vao-Nha-Ma-feat-Kasane_Media_BfqxnD8RTa0_009_128k",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/YTSave_YouTube_inari-_-Congg-Lac-Vao-Nha-Ma-feat-Kasane_Media_BfqxnD8RTa0_009_128k.mp3",
-    "filename": "YTSave_YouTube_inari-_-Congg-Lac-Vao-Nha-Ma-feat-Kasane_Media_BfqxnD8RTa0_009_128k.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 87,
-    "title": "inari & Côngg  Ca Sĩ Vô Danh",
-    "name": "inari & Côngg  Ca Sĩ Vô Danh",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/inari & Côngg  Ca Sĩ Vô Danh.mp3",
-    "filename": "inari & Côngg  Ca Sĩ Vô Danh.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 88,
-    "title": "nói dối piano (1)",
-    "name": "nói dối piano (1)",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/nói dối piano (1).mp3",
-    "filename": "nói dối piano (1).mp3",
-    "duration": "--:--",
-    "image": "https://i.ytimg.com/vi/wdcEZRFAB7Y/hqdefault.jpg"
-  },
-  {
-    "id": 89,
-    "title": "nói dối piano + violin",
-    "name": "nói dối piano + violin",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/nói dối piano + violin.mp3",
-    "filename": "nói dối piano + violin.mp3",
-    "duration": "--:--",
-    "image": "https://i.ytimg.com/vi/wdcEZRFAB7Y/hqdefault.jpg"
-  },
-  {
-    "id": 90,
-    "title": "nói dối",
-    "name": "nói dối",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/nói dối.mp3",
-    "filename": "nói dối.mp3",
-    "duration": "--:--",
-    "image": "https://i.ytimg.com/vi/wdcEZRFAB7Y/hqdefault.jpg"
-  },
-  {
-    "id": 91,
-    "title": "staywithme",
-    "name": "staywithme",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/staywithme.mp3",
-    "filename": "staywithme.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 92,
-    "title": "thatladethuonglamsao_1",
-    "name": "thatladethuonglamsao_1",
-    "artist": "Downloaded",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/thatladethuonglamsao_1.mp3",
-    "filename": "thatladethuonglamsao_1.mp3",
-    "duration": "--:--",
-    "image": ""
-  },
-  {
-    "id": 93,
+    "id": 79,
     "title": "ĐỊA NGỤC TRẦN GIAN PHẠM KỲ OFFICIAL MV",
     "name": "ĐỊA NGỤC TRẦN GIAN PHẠM KỲ OFFICIAL MV",
     "artist": "Downloaded",
@@ -1023,7 +869,7 @@
     "image": "https://i.ytimg.com/vi/4I7pTRU0p5Y/hqdefault.jpg"
   },
   {
-    "id": 94,
+    "id": 80,
     "title": "Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix - (320 Kbps)",
     "name": "Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix - (320 Kbps)",
     "artist": "Địa Ngục Trần Gian (Thazh x Đông Remix)",
@@ -1034,13 +880,13 @@
     "image": ""
   },
   {
-    "id": 95,
-    "title": "【Ado】アイ・アイ・ア（AiAiA） (1)",
-    "name": "【Ado】アイ・アイ・ア（AiAiA） (1)",
+    "id": 81,
+    "title": "西楼别序 (prod.htingale)",
+    "name": "西楼别序 (prod.htingale)",
     "artist": "Downloaded",
     "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/【Ado】アイ・アイ・ア（AiAiA） (1).mp3",
-    "filename": "【Ado】アイ・アイ・ア（AiAiA） (1).mp3",
+    "path": "/home/apple/Music/Downloads_Phone/西楼别序 (prod.htingale).m4a",
+    "filename": "西楼别序 (prod.htingale).m4a",
     "duration": "--:--",
     "image": ""
   }

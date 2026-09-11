@@ -208,9 +208,21 @@ Item {
             // Action 4: Open folder (local) or Download (online)
             MenuItemButton {
                 property bool isLocal: root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://"))
-                text: isLocal ? "Open containing folder" : "Download track"
-                iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : "../assets/icons/download-symbolic.svg"
+                property string vid: {
+                    if (!root.track) return "";
+                    if (root.track.videoId) return root.track.videoId;
+                    if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
+                    return "";
+                }
+                property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(vid) : false
+                property real progress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(vid) : -1
+
+                text: isLocal ? "Open containing folder" : (isDownloading ? ("Downloading (" + Math.max(0, Math.round(progress)) + "%)...") : "Download track")
+                iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : (isDownloading ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/download-symbolic.svg")
+                textColor: isDownloading ? "#00c853" : Theme.textPrimary
+                iconColor: isDownloading ? "#00c853" : Theme.textSecondary
                 onClicked: {
+                    if (isDownloading) return;
                     var t = root.track;
                     var local = isLocal;
                     root.closeMenu();

@@ -17,6 +17,24 @@ Rectangle {
     signal detailsRequested(var trk)
     signal contextMenuRequested(var trk, real globalX, real globalY)
 
+    readonly property string trackVideoId: {
+        if (!track) return "";
+        if (track.videoId) return track.videoId;
+        if (track.path && track.path.startsWith("ytdl://")) return track.path.replace("ytdl://", "");
+        return "";
+    }
+    readonly property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(trackVideoId) : false
+    readonly property real downloadProgress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(trackVideoId) : -1
+    readonly property bool isDownloaded: {
+        if (typeof downloadManager !== "undefined" && downloadManager && downloadManager.isDownloaded(trackVideoId)) return true;
+        if (track && (track.videoId || (track.path && track.path.startsWith("ytdl://"))) && typeof win !== "undefined" && win.allTracks) {
+            var vId = trackVideoId;
+            var tName = (track.name || track.title || "").toLowerCase().trim();
+            return win.allTracks.some(t => (vId && t.videoId === vId) || (tName && (t.title || t.name || "").toLowerCase().trim() === tName));
+        }
+        return false;
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 14
@@ -82,6 +100,39 @@ Rectangle {
                     source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                     iconSize: 18
                     color: "#000000"
+                }
+            }
+
+            // SimpMusic Download State Badge (Spinner or Checkmark)
+            Rectangle {
+                id: downloadBadge
+                width: 26
+                height: 26
+                radius: 13
+                color: Qt.rgba(0.08, 0.08, 0.1, 0.85)
+                border.color: root.isDownloading ? "#00c853" : Qt.rgba(0, 160, 203, 0.5)
+                border.width: 1
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 6
+                z: 15
+                visible: root.isDownloading || root.isDownloaded
+
+                DownloadingSpinner {
+                    anchors.centerIn: parent
+                    visible: root.isDownloading
+                    running: root.isDownloading
+                    iconSize: 15
+                    progress: root.downloadProgress
+                    color: "#00c853"
+                }
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    visible: root.isDownloaded && !root.isDownloading
+                    source: "../assets/icons/emblem-ok-symbolic.svg"
+                    iconSize: 13
+                    color: "#00a0cb"
                 }
             }
         }
