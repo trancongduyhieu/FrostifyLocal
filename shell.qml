@@ -975,6 +975,8 @@ Scope {
                     onDownloadTrackRequested: trk => win.downloadTrack(trk)
                     onOpenFolderRequested: trk => win.openTrackFolder(trk)
                     onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
+                    onRateSongRequested: (vid, rating) => win.rateSong(vid, rating)
+                    onSongDisliked: trk => win.handleDislikedTrack(trk)
                     onCopyLinkRequested: text => {
                         Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Frostify" "Đã sao chép liên kết vào clipboard"', "sh", text]);
                     }
@@ -1338,6 +1340,47 @@ Scope {
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
     }
 
+    function rateSong(vid, rating) {
+        if (!vid) return;
+        Quickshell.execDetached([
+            "python3",
+            win.appDir + "/backend/ytmusic_helper.py",
+            "rate_song", vid, rating
+        ]);
+    }
+
+    function handleDislikedTrack(trk) {
+        if (!trk) return;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (vid) {
+            rateSong(vid, "DISLIKE");
+        }
+        // 1. Remove from current playback queue
+        var newQueue = [];
+        for (var i = 0; i < win.currentTracks.length; i++) {
+            var t = win.currentTracks[i];
+            var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+            if (tVid !== vid) {
+                newQueue.push(t);
+            }
+        }
+        win.currentTracks = newQueue;
+
+        // 2. Remove from browsing tracks
+        var newBrowse = [];
+        for (var j = 0; j < win.browsingTracks.length; j++) {
+            var bt = win.browsingTracks[j];
+            var bVid = bt.videoId || (bt.path && bt.path.startsWith("ytdl://") ? bt.path.replace("ytdl://", "") : "");
+            if (bVid !== vid) {
+                newBrowse.push(bt);
+            }
+        }
+        win.browsingTracks = newBrowse;
+
+        // 3. Skip to next track immediately
+        win.playNext();
+    }
+
     function insertTrackPlayNext(trk) {
         if (!trk) return;
 
@@ -1659,6 +1702,17 @@ Scope {
         }
         function toggleDetails() {
             win.showAmberolDetails = !win.showAmberolDetails;
+        }
+        function openArtwork() {
+            win.visible = true;
+            win.showAmberolDetails = true;
+            amberolView.compactTab = "art";
+        }
+        function scrollArtworkDown() {
+            amberolView.scrollArtDown();
+        }
+        function dislikeCurrentTrack() {
+            win.handleDislikedTrack(win.currentTrack);
         }
         function openSettings() {
             settingsModal.visible = true;

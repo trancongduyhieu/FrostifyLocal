@@ -125,13 +125,26 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - **Albums**: Kệ ngang các Album liên quan trực tiếp đến từ khóa tìm kiếm (bấm vào mở danh sách bài trong album).
     - **Artists & Playlists**: Kệ các Playlist tổng hợp và kênh nghệ sĩ chính thức.
 
-- [x] **16. Tab Artwork: Hiển Thị Chi Tiết Nghệ Sĩ, Lượt Xem/Thích/Không Thích, Mô Tả & Thông Số Kỹ Thuật Audio (SimpMusic Metadata & Audio Specs Inspector - ĐÃ HOÀN THÀNH)**
+- [x] **16. Tab Artwork: Bố Cục Thẻ Biểu Cảm SimpMusic, Mô Tả Bài Hát & Hệ Thống Blacklist Like/Dislike (SimpMusic Expressive Cards, Description & Dislike Blacklist - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:
-    - **Backend Audio Specs Daemon**: Thêm action `audio_specs` trong `backend/player_daemon.py` đọc trực tiếp các thông số từ MPV Unix Domain Socket: codec (`audio-codec-name`), bitrate (`audio-bitrate` kbps), sample rate (`audio-params.samplerate` kHz) và kênh âm thanh (`audio-params.channels`).
-    - **Backend Song Details & Return YouTube Dislike API**: Thêm hàm `get_song_details` trong `backend/ytmusic_helper.py` tích hợp Return YouTube Dislike API (`https://returnyoutubedislikeapi.com/votes?videoId={videoId}`) mang lại số lượt xem (`viewsStr`), lượt thích (`likesStr`), lượt không thích (`dislikesStr`), điểm đánh giá (`rating`), và tỷ lệ thích (`likeRatio`). Hỗ trợ tự động phân giải ngầm qua `ytm.search` khi phát bài hát offline trong thư viện để vẫn lấy được đầy đủ thống kê online.
-    - **Artwork & Metadata Inspector Panel**: Thiết kế giao diện Dark Glass trong `components/AmberolDetailView.qml` gồm ảnh bìa bo tròn, các badge trạng thái (`CODEC • BITRATE`, `SOURCE`, `YEAR`), lưới thẻ 2x2 Audio Engine Specs (Codec, Bitrate, Sample Rate, Channels), thẻ tương tác Social Engagement (Lượt xem với icon con mắt, Thích với icon ngón tay cái, Không thích, thanh tiến trình tỷ lệ thích xanh neon), hộp chi tiết Album/Single với nút xem album, và cụm nút thao tác nhanh `[ 📥 Tải bài / 📁 Mở thư mục ]`, `[ 📻 Radio ]`, `[ 📋 Sao chép ]`.
-    - **Zero Emoji**: 100% icon sử dụng SVG chuẩn hệ thống (`assets/icons/thumb-up-symbolic.svg`, `thumb-down-symbolic.svg`, `eye-symbolic.svg`).
-
+    - **Thẻ Nghệ Sĩ SimpMusic (Artist Hero Card)**:
+      - Thiết kế thẻ nghệ sĩ bo tròn 16px với nền avatar nghệ sĩ phân giải cao (960px) từ YouTube Innertube `v1/next`.
+      - Lớp phủ gradient scrim điện ảnh sâu, huy hiệu `"Nghệ sĩ"` bo viền thanh lịch ở góc trên bên trái, tên nghệ sĩ in đậm 17px và số người đăng ký kênh (`subscribers`).
+    - **Thẻ Thống Kê, Mô Tả & Tương Tác (Stats, Engagement & Expandable Description Card)**:
+      - Hiển thị ngày phát hành (`Phát hành lúc ...`), tổng lượt xem từ YouTube Music API.
+      - Nút **Thích (Like)** tương tác: Chuyển màu xanh Spotify (#1ed760) kèm số lượt thích, đồng bộ đánh giá `LIKE` về YouTube Music (`rate_song_action`).
+      - Nút **Không Thích (Dislike)** tương tác & **Cơ chế Blacklist triệt để**:
+        - Khi người dùng bấm Dislike: Tự động lưu bài hát vào danh sách đen `~/.config/noctalia/frostify_disliked_songs.json`.
+        - Lập tức tự động bỏ qua và chuyển sang bài tiếp theo (`win.playNext()`).
+        - Loại bỏ bài hát vĩnh viễn khỏi hàng đợi phát hiện tại (`win.currentTracks`), danh sách duyệt (`win.browsingTracks`), và bộ lọc thuật toán Home Feed, Quick Picks, Carousel và Automix Radio (`normalize_track` & `_normalize_shelf_item`).
+      - Thanh tỷ lệ thích / không thích (Like Ratio Bar) màu xanh neon (#1ed760) hiển thị tỷ lệ thực tế.
+      - Khối **Mô tả bài hát (YouTube Description)**: Bóc tách toàn bộ mô tả bài hát từ YouTube Music, hỗ trợ nút bấm `[ Xem thêm ▼ / Thu gọn ▲ ]` mượt mà, co giãn linh hoạt mà không làm vỡ layout.
+    - **Sửa Lỗi Hiển Thị "Single / SimpMusic"**:
+      - Xóa bỏ triệt để chuỗi fallback cứng `"SimpMusic"`.
+      - Tự động phân giải tên album thực tế hoặc hiển thị chuẩn xác `"Single"` khi bài hát là đĩa đơn độc lập.
+    - **Lưới Thông Số Audio Kỹ Thuật (Audio Engine Specs)**:
+      - Thẻ 2x2 Dark Glass (Codec, Bitrate, Sample Rate, Channels) chiều cao 96px tối ưu, lề đối xứng 12px không bị lệch viền.
+    - **Zero Emoji**: 100% icon sử dụng SVG chuẩn hệ thống (`thumb-up-symbolic.svg`, `thumb-down-symbolic.svg`, `eye-symbolic.svg`, `folder-music-symbolic.svg`).
 - [x] **20. Pure Visual Skeleton Shimmer Lazy Loading (Tải Lười Dạng Khung Xương Xung Nhịp - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:
     - **Loại bỏ triệt để dòng chữ Loading thô**: Xóa sạch toàn bộ các dòng chữ text nhàm chán như "Searching YouTube Music...", "Loading...", "Đang tạo đài phát...".

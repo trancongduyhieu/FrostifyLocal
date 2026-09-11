@@ -36,6 +36,45 @@ def save_json(filepath, data):
     except Exception:
         pass
 
+DISLIKED_SONGS_FILE = os.path.expanduser("~/.config/noctalia/frostify_disliked_songs.json")
+
+def load_disliked_songs():
+    return load_json(DISLIKED_SONGS_FILE, {})
+
+def save_disliked_songs(data):
+    save_json(DISLIKED_SONGS_FILE, data)
+
+def add_disliked_song(video_id, title="", artist=""):
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    if not clean_vid:
+        return False
+    data = load_disliked_songs()
+    data[clean_vid] = {
+        "videoId": clean_vid,
+        "title": title,
+        "artist": artist,
+        "timestamp": int(time.time())
+    }
+    save_disliked_songs(data)
+    return True
+
+def remove_disliked_song(video_id):
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    if not clean_vid:
+        return False
+    data = load_disliked_songs()
+    if clean_vid in data:
+        del data[clean_vid]
+        save_disliked_songs(data)
+    return True
+
+def is_song_disliked(video_id):
+    if not video_id:
+        return False
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    data = load_disliked_songs()
+    return clean_vid in data
+
 def cache_online_tracks(tracks):
     try:
         data = load_json(ONLINE_TRACKS_FILE, {})
@@ -154,7 +193,7 @@ def logout():
 
 def normalize_track(item):
     vid = item.get("videoId")
-    if not vid:
+    if not vid or is_song_disliked(vid):
         return None
     title = item.get("title", "Unknown")
     artists = item.get("artists", [])
@@ -220,6 +259,8 @@ def _normalize_shelf_item(it, shelf_title=""):
     if "musicResponsiveListItemRenderer" in it:
         r = it["musicResponsiveListItemRenderer"]
         vid = r.get("playlistItemData", {}).get("videoId")
+        if vid and is_song_disliked(vid):
+            return None
         cols = r.get("flexColumns", [])
         title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
         artist = ""
@@ -261,6 +302,8 @@ def _normalize_shelf_item(it, shelf_title=""):
         browse_ep = nav_ep.get("browseEndpoint", {})
 
         vid = watch_ep.get("videoId")
+        if vid and is_song_disliked(vid):
+            return None
         pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
 
         if vid and (not pl_id or "listen" in shelf_title.lower() or "favorite" in shelf_title.lower()):
@@ -1154,9 +1197,10 @@ def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
 def get_song_details(video_id):
     """
     Fetch comprehensive song metadata and engagement statistics:
-    - Title, Artist, Album, Year, Duration, Description
-    - View count, Like count
-    - Return YouTube Dislike API stats: Dislikes, Rating, Likes
+    - Title, Artist, Author, Subscribers, AuthorThumbnail
+    - Album (real album name, or 'Single'), AlbumBrowseId
+    - DateText, PublishDate, Description
+    - View count, Like count, Dislike count, Like status
     """
     if not video_id:
         return {}
@@ -1180,9 +1224,15 @@ def get_song_details(video_id):
         "videoId": clean_vid,
         "title": "",
         "artist": "",
-        "album": "",
-        "albumBrowseId": "",
+        "author": "",
+        "subscribers": "",
+        "authorThumbnail": "",
+        "dateText": "",
+        "publishDate": "",
         "year": "",
+        "description": "",
+        "album": "Single",
+        "albumBrowseId": "",
         "views": 0,
         "viewsStr": "--",
         "likes": 0,
@@ -1191,11 +1241,71 @@ def get_song_details(video_id):
         "dislikesStr": "--",
         "rating": 5.0,
         "likeRatio": 100.0,
-        "description": "",
-        "publishDate": ""
+        "likeStatus": "INDIFFERENT"
     }
 
-    # 1. Fetch YouTube Dislike & Engagement stats via Return YouTube Dislike API
+    # 1. Fetch YouTube Innertube next endpoint for Author, Subscribers, Thumbnail, Date, and Description
+    try:
+        req = urllib.request.Request(
+            "https://www.youtube.com/youtubei/v1/next?prettyPrint=false",
+            data=json.dumps({
+                "context": {"client": {"clientName": "WEB", "clientVersion": "2.20230515.01.00"}},
+                "videoId": clean_vid
+            }).encode(),
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            next_data = json.loads(resp.read().decode())
+
+        contents = next_data.get("contents", {}).get("twoColumnWatchNextResults", {}).get("results", {}).get("results", {}).get("contents", [])
+        for c in contents:
+            if "videoSecondaryInfoRenderer" in c:
+                sec = c["videoSecondaryInfoRenderer"]
+                owner = sec.get("owner", {}).get("videoOwnerRenderer", {})
+                author = owner.get("title", {}).get("runs", [{}])[0].get("text", "")
+                details["author"] = re.sub(r' - Topic| - Chủ đề', '', author).strip()
+                details["artist"] = details["author"]
+                details["subscribers"] = owner.get("subscriberCountText", {}).get("simpleText", "")
+                thumbs = owner.get("thumbnail", {}).get("thumbnails", [])
+                if thumbs:
+                    details["authorThumbnail"] = thumbs[-1].get("url", "").replace("s48", "s960").replace("s88", "s960")
+                details["description"] = sec.get("attributedDescription", {}).get("content", "")
+            if "videoPrimaryInfoRenderer" in c:
+                prim = c["videoPrimaryInfoRenderer"]
+                details["dateText"] = prim.get("dateText", {}).get("simpleText", "")
+                details["publishDate"] = details["dateText"]
+                t_runs = prim.get("title", {}).get("runs", [])
+                if t_runs:
+                    details["title"] = t_runs[0].get("text", "")
+    except Exception as e:
+        sys.stderr.write(f"[Innertube next error for {clean_vid}]: {e}\n")
+
+    # 2. Fetch watch playlist for Album info and Like status
+    try:
+        ytm = get_ytmusic_client()
+        wp = ytm.get_watch_playlist(clean_vid, limit=1)
+        if wp and "tracks" in wp and len(wp["tracks"]) > 0:
+            tr0 = wp["tracks"][0]
+            alb = tr0.get("album")
+            if isinstance(alb, dict) and alb.get("name"):
+                details["album"] = alb["name"]
+                details["albumBrowseId"] = alb.get("id", "")
+            elif isinstance(alb, str) and alb.strip():
+                details["album"] = alb.strip()
+
+            ls = tr0.get("likeStatus")
+            if ls in ("LIKE", "DISLIKE", "INDIFFERENT"):
+                details["likeStatus"] = ls
+
+            if not details["title"]:
+                details["title"] = tr0.get("title", "")
+            if not details["artist"]:
+                artists = tr0.get("artists", [])
+                details["artist"] = ", ".join(a.get("name", "") for a in artists if a.get("name")) or details.get("author", "")
+    except Exception as e:
+        sys.stderr.write(f"[watch_playlist error for {clean_vid}]: {e}\n")
+
+    # 3. Fetch YouTube Dislike & Engagement stats via Return YouTube Dislike API
     try:
         ryd_url = f"https://returnyoutubedislikeapi.com/votes?videoId={clean_vid}"
         req = urllib.request.Request(ryd_url, headers={"User-Agent": "Mozilla/5.0"})
@@ -1216,7 +1326,7 @@ def get_song_details(video_id):
                 elif view_count >= 1000:
                     details["viewsStr"] = f"{view_count / 1000:.1f}K"
                 else:
-                    details["viewsStr"] = str(view_count)
+                    details["viewsStr"] = f"{view_count:,}"
 
             if likes >= 1000000:
                 details["likesStr"] = f"{likes / 1000000:.1f}M"
@@ -1240,49 +1350,72 @@ def get_song_details(video_id):
     except Exception as e:
         sys.stderr.write(f"[RYD API error for {clean_vid}]: {e}\n")
 
-    # 2. Fetch YTMusic song details
-    try:
-        ytm = get_ytmusic_client()
-        song = ytm.get_song(clean_vid)
-        v_details = song.get("videoDetails", {})
-        details["title"] = v_details.get("title", "")
-        details["artist"] = v_details.get("author", "")
+    # 4. Fallback check for empty fields via get_song
+    if not details["description"] or not details["publishDate"]:
+        try:
+            ytm = get_ytmusic_client()
+            song = ytm.get_song(clean_vid)
+            v_details = song.get("videoDetails", {})
+            if not details["title"]:
+                details["title"] = v_details.get("title", "")
+            if not details["artist"]:
+                details["artist"] = v_details.get("author", "")
+            if not details["author"]:
+                details["author"] = v_details.get("author", "")
 
-        mf = song.get("microformat", {}).get("microformatDataRenderer", {})
-        pub_date = mf.get("publishDate", "") or mf.get("uploadDate", "")
-        if pub_date:
-            details["publishDate"] = pub_date[:10]
-            details["year"] = pub_date[:4]
+            mf = song.get("microformat", {}).get("microformatDataRenderer", {})
+            pub_date = mf.get("publishDate", "") or mf.get("uploadDate", "")
+            if pub_date and not details["publishDate"]:
+                details["publishDate"] = pub_date[:10]
+                details["dateText"] = pub_date[:10]
+            if pub_date and not details["year"]:
+                details["year"] = pub_date[:4]
 
-        desc = ""
-        if "description" in mf:
-            d_val = mf["description"]
-            desc = d_val.get("simpleText", "") if isinstance(d_val, dict) else str(d_val)
-        if not desc and "shortDescription" in v_details:
-            desc = v_details["shortDescription"]
-        details["description"] = desc[:500] if desc else ""
+            if not details["description"]:
+                desc = ""
+                if "description" in mf:
+                    d_val = mf["description"]
+                    desc = d_val.get("simpleText", "") if isinstance(d_val, dict) else str(d_val)
+                if not desc and "shortDescription" in v_details:
+                    desc = v_details["shortDescription"]
+                if desc:
+                    details["description"] = desc
+        except Exception:
+            pass
 
-        # Check views from videoDetails if RYD didn't provide
-        if not details["views"] and "viewCount" in v_details:
-            try:
-                vc = int(v_details["viewCount"])
-                details["views"] = vc
-                if vc >= 1000000:
-                    details["viewsStr"] = f"{vc / 1000000:.1f}M"
-                elif vc >= 1000:
-                    details["viewsStr"] = f"{vc / 1000:.1f}K"
-                else:
-                    details["viewsStr"] = str(vc)
-            except Exception:
-                pass
-    except Exception as e:
-        sys.stderr.write(f"[ytmusic get_song error for {clean_vid}]: {e}\n")
+    # Ensure album is never empty or weird
+    if not details["album"] or details["album"].lower() == "single / simpmusic":
+        details["album"] = "Single"
+
+    # Enforce blacklist check on likeStatus
+    if is_song_disliked(clean_vid):
+        details["likeStatus"] = "DISLIKE"
 
     return details
 
+def rate_song_action(video_id, rating):
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    upper_rating = str(rating).upper().strip()
+    if upper_rating not in ("LIKE", "DISLIKE", "INDIFFERENT"):
+        upper_rating = "INDIFFERENT"
+
+    if upper_rating == "DISLIKE":
+        add_disliked_song(clean_vid)
+    elif upper_rating in ("LIKE", "INDIFFERENT"):
+        remove_disliked_song(clean_vid)
+
+    res = {"success": True, "videoId": clean_vid, "rating": upper_rating}
+    try:
+        ytm = get_ytmusic_client()
+        ytm.rate_song(clean_vid, upper_rating)
+    except Exception as e:
+        sys.stderr.write(f"[rate_song error for {clean_vid}]: {e}\n")
+        res["ytm_error"] = str(e)
+    return res
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id>]")
+        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating>]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
@@ -1290,6 +1423,15 @@ if __name__ == "__main__":
         vid = sys.argv[2]
         res = get_song_details(vid)
         print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "rate_song" and len(sys.argv) > 3:
+        vid = sys.argv[2]
+        rating = sys.argv[3]
+        res = rate_song_action(vid, rating)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "disliked_list":
+        print(json.dumps(load_disliked_songs(), ensure_ascii=False))
 
     elif cmd == "home":
         res = get_personalized_home()
@@ -1356,3 +1498,4 @@ if __name__ == "__main__":
         pl_id = sys.argv[5] if len(sys.argv) > 5 else None
         res = send_playback_tracking(vid, title, artist, pl_id)
         print(json.dumps(res, ensure_ascii=False))
+

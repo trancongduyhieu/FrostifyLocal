@@ -77,6 +77,57 @@ Rectangle {
     signal downloadTrackRequested(var trk)
     signal openFolderRequested(var trk)
     signal copyLinkRequested(string text)
+    signal rateSongRequested(string videoId, string rating)
+    signal songDisliked(var trk)
+
+    property string currentLikeStatus: (songDetails && songDetails.likeStatus) ? songDetails.likeStatus : "INDIFFERENT"
+    property int localLikesCount: (songDetails && songDetails.likes) ? songDetails.likes : 0
+    property int localDislikesCount: (songDetails && songDetails.dislikes) ? songDetails.dislikes : 0
+
+    onSongDetailsChanged: {
+        if (songDetails) {
+            currentLikeStatus = songDetails.likeStatus || "INDIFFERENT";
+            localLikesCount = songDetails.likes || 0;
+            localDislikesCount = songDetails.dislikes || 0;
+        }
+    }
+
+    function toggleLike() {
+        if (!songDetails || !songDetails.videoId) return;
+        var newStatus = (currentLikeStatus === "LIKE") ? "INDIFFERENT" : "LIKE";
+        if (newStatus === "LIKE") {
+            localLikesCount += 1;
+            if (currentLikeStatus === "DISLIKE" && localDislikesCount > 0) {
+                localDislikesCount -= 1;
+            }
+        } else {
+            if (localLikesCount > 0) localLikesCount -= 1;
+        }
+        currentLikeStatus = newStatus;
+        rateSongRequested(songDetails.videoId, newStatus);
+    }
+
+    function toggleDislike() {
+        if (!songDetails || !songDetails.videoId) return;
+        var newStatus = (currentLikeStatus === "DISLIKE") ? "INDIFFERENT" : "DISLIKE";
+        if (newStatus === "DISLIKE") {
+            localDislikesCount += 1;
+            if (currentLikeStatus === "LIKE" && localLikesCount > 0) {
+                localLikesCount -= 1;
+            }
+            currentLikeStatus = newStatus;
+            rateSongRequested(songDetails.videoId, "DISLIKE");
+            songDisliked(track);
+        } else {
+            if (localDislikesCount > 0) localDislikesCount -= 1;
+            currentLikeStatus = newStatus;
+            rateSongRequested(songDetails.videoId, "INDIFFERENT");
+        }
+    }
+
+    function scrollArtDown() {
+        artScrollArea.contentY = Math.min(artScrollArea.contentHeight - artScrollArea.height, artScrollArea.contentY + 340);
+    }
 
     function fetchSongDetails() {
         songDetails = null;
@@ -654,110 +705,278 @@ Rectangle {
                         }
                     }
 
-                    // 4. Engagement & Community Stats Card (Views, Likes, Dislikes from Return YouTube Dislike API)
+                    // 4. SimpMusic Artist Card (Avatar, Label "Nghệ sĩ", Name & Subscribers)
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
                         Layout.maximumWidth: 320
-                        Layout.preferredHeight: 74
+                        Layout.preferredHeight: 164
                         Layout.alignment: Qt.AlignHCenter
-                        radius: 8
+                        radius: 12
                         color: "#161618"
                         border.color: "#28282c"
                         border.width: 1
-                        visible: root.songDetails && (root.songDetails.views > 0 || root.songDetails.likes > 0)
+                        clip: true
+                        visible: (root.songDetails && (root.songDetails.author || root.songDetails.authorThumbnail)) || (root.track && root.track.artist)
+
+                        // Artist Banner / Thumbnail image
+                        Image {
+                            id: artistImg
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 108
+                            source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : (root.track && root.track.image ? root.track.image : "")
+                            fillMode: Image.PreserveAspectCrop
+                            clip: true
+                            asynchronous: true
+                        }
+
+                        // Smooth gradient scrim on top of photo
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 108
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.60) }
+                                GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.08) }
+                                GradientStop { position: 1.0; color: Qt.rgba(0.08, 0.08, 0.09, 1.0) }
+                            }
+                        }
+
+                        // Top-left "Nghệ sĩ" Badge
+                        Text {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.margins: 10
+                            text: "Nghệ sĩ"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: "#ffffff"
+                        }
+
+                        // Bottom Info: Artist Name & Subscribers
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 10
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: (root.songDetails && root.songDetails.author) ? root.songDetails.author : (root.track ? (root.track.artist || "Unknown Artist") : "")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: "#ffffff"
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: (root.songDetails && root.songDetails.subscribers) ? root.songDetails.subscribers : "Nghệ sĩ âm nhạc"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Theme.textMuted
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // 5. SimpMusic Info & Description Card (Release Date, Views, Interactive Likes/Dislikes, Description)
+                    Rectangle {
+                        id: infoDescCard
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.preferredHeight: descCol.implicitHeight + 24
+                        Layout.alignment: Qt.AlignHCenter
+                        radius: 12
+                        color: "#161618"
+                        border.color: "#28282c"
+                        border.width: 1
+
+                        property bool isExpanded: false
 
                         ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
+                            id: descCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
                             spacing: 8
 
+                            // 1. Release date
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Phát hành lúc " + ((root.songDetails && (root.songDetails.dateText || root.songDetails.publishDate)) ? (root.songDetails.dateText || root.songDetails.publishDate) : ((root.track && root.track.year) ? root.track.year : "Gần đây"))
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Theme.textMuted
+                            }
+
+                            // 2. View Count
+                            Text {
+                                Layout.fillWidth: true
+                                text: ((root.songDetails && root.songDetails.viewsStr && root.songDetails.viewsStr !== "--") ? root.songDetails.viewsStr : "100K+") + " lượt xem"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 16
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+
+                            // 3. Interactive Likes & Dislikes Row
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 14
+                                spacing: 10
 
-                                // Views
-                                RowLayout {
-                                    spacing: 5
-                                    SpotifyIcon {
-                                        source: "../assets/icons/eye-symbolic.svg"
-                                        iconSize: 13
-                                        color: "#ffffff"
+                                // Like interactive button
+                                Rectangle {
+                                    height: 28
+                                    Layout.preferredWidth: likeRow.implicitWidth + 16
+                                    radius: 14
+                                    color: root.currentLikeStatus === "LIKE" ? Qt.rgba(0.12, 0.84, 0.38, 0.20) : (likeH.hovered ? "#242428" : "#1a1a1d")
+                                    border.color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#2c2c30"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        id: likeRow
+                                        anchors.centerIn: parent
+                                        spacing: 5
+
+                                        SpotifyIcon {
+                                            source: "../assets/icons/thumb-up-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                        }
+
+                                        Text {
+                                            text: root.localLikesCount > 0 ? (root.songDetails ? root.songDetails.likesStr : "" + root.localLikesCount) + " thích" : "Thích"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                        }
                                     }
-                                    Text {
-                                        text: root.songDetails ? root.songDetails.viewsStr : "--"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: Theme.textPrimary
+
+                                    HoverHandler { id: likeH }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.toggleLike()
+                                    }
+                                }
+
+                                // Dislike interactive button
+                                Rectangle {
+                                    height: 28
+                                    Layout.preferredWidth: dislikeRow.implicitWidth + 16
+                                    radius: 14
+                                    color: root.currentLikeStatus === "DISLIKE" ? Qt.rgba(1.0, 0.25, 0.25, 0.20) : (dislikeH.hovered ? "#242428" : "#1a1a1d")
+                                    border.color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#2c2c30"
+                                    border.width: 1
+
+                                    RowLayout {
+                                        id: dislikeRow
+                                        anchors.centerIn: parent
+                                        spacing: 5
+
+                                        SpotifyIcon {
+                                            source: "../assets/icons/thumb-down-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#ffffff"
+                                        }
+
+                                        Text {
+                                            text: root.localDislikesCount > 0 ? (root.songDetails ? root.songDetails.dislikesStr : "" + root.localDislikesCount) + " không thích" : "Không thích"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : Theme.textSecondary
+                                        }
+                                    }
+
+                                    HoverHandler { id: dislikeH }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.toggleDislike()
                                     }
                                 }
 
                                 Item { Layout.fillWidth: true }
-
-                                // Likes
-                                RowLayout {
-                                    spacing: 5
-                                    SpotifyIcon {
-                                        source: "../assets/icons/thumb-up-symbolic.svg"
-                                        iconSize: 13
-                                        color: "#1ed760"
-                                    }
-                                    Text {
-                                        text: root.songDetails ? root.songDetails.likesStr : "--"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: Theme.textPrimary
-                                    }
-                                }
-
-                                // Dislikes
-                                RowLayout {
-                                    spacing: 5
-                                    SpotifyIcon {
-                                        source: "../assets/icons/thumb-down-symbolic.svg"
-                                        iconSize: 13
-                                        color: "#ffffff"
-                                    }
-                                    Text {
-                                        text: root.songDetails ? root.songDetails.dislikesStr : "--"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: Theme.textSecondary
-                                    }
-                                }
                             }
 
-                            // Like / Dislike Ratio Bar
+                            // Like/Dislike Ratio mini bar
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 4
-                                radius: 2
-                                color: "#333333"
+                                height: 3
+                                radius: 1.5
+                                color: "#282828"
 
                                 Rectangle {
                                     anchors.left: parent.left
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     width: parent.width * (root.songDetails ? (root.songDetails.likeRatio / 100.0) : 1.0)
-                                    radius: 2
+                                    radius: 1.5
                                     color: "#1ed760"
+                                }
+                            }
+
+                            // 4. Description Header
+                            Text {
+                                text: "Mô tả"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: "#ffffff"
+                            }
+
+                            // 5. Description Content Text
+                            Text {
+                                id: descText
+                                Layout.fillWidth: true
+                                text: (root.songDetails && root.songDetails.description) ? root.songDetails.description : "Không có mô tả cho bài hát này."
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                lineHeight: 1.3
+                                color: Theme.textSecondary
+                                wrapMode: Text.Wrap
+                                maximumLineCount: infoDescCard.isExpanded ? 100 : 4
+                                elide: infoDescCard.isExpanded ? Text.ElideNone : Text.ElideRight
+                            }
+
+                            // Expand / Collapse button
+                            Text {
+                                visible: descText.lineCount > 4 || (root.songDetails && root.songDetails.description && root.songDetails.description.length > 150)
+                                text: infoDescCard.isExpanded ? "Thu gọn ▲" : "Xem thêm ▼"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Theme.spotifyGreen
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: infoDescCard.isExpanded = !infoDescCard.isExpanded
                                 }
                             }
                         }
                     }
 
-                    // 5. Album & Release Details Box
+                    // 6. Album & Release Details Box (Clean, zero SimpMusic text)
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
                         Layout.maximumWidth: 320
                         Layout.preferredHeight: albRow.implicitHeight + 16
                         Layout.alignment: Qt.AlignHCenter
-                        radius: 8
-                        color: "#161618"
+                        radius: 10
+                        color: albH.hovered ? "#1c1c20" : "#161618"
                         border.color: "#28282c"
                         border.width: 1
 
@@ -778,7 +997,7 @@ Rectangle {
                                 spacing: 2
 
                                 Text {
-                                    text: "ALBUM / SINGLE"
+                                    text: (root.songDetails && root.songDetails.albumBrowseId) ? "ALBUM" : "ALBUM / SINGLE"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -787,12 +1006,27 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : "Single / SimpMusic")
+                                    text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : "Single")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
                                     color: Theme.textPrimary
                                     elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        HoverHandler { id: albH }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: (root.songDetails && root.songDetails.albumBrowseId) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (root.songDetails && root.songDetails.albumBrowseId) {
+                                    root.viewAlbumRequested({
+                                        "browseId": root.songDetails.albumBrowseId,
+                                        "title": root.songDetails.album || "Album",
+                                        "artist": (root.songDetails.artist || "")
+                                    });
                                 }
                             }
                         }

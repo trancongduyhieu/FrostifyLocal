@@ -146,6 +146,16 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Thẻ tương tác: Lượt xem (icon mắt), Lượt thích (icon like), Lượt không thích (icon dislike) kèm thanh tỷ lệ thích xanh neon (#1ed760).
       - Hộp chi tiết Album và cụm nút tương tác nhanh: `[ 📥 Tải bài / 📁 Mở thư mục ]`, `[ 📻 Radio ]`, `[ 📋 Sao chép ]`.
       - Hệ thống Icon Trắng Sáng & Zero Emoji: Toàn bộ SVG trong `assets/icons/*.svg` chuẩn hóa `fill="#ffffff"`, kết hợp `MultiEffect.brightness: 1.0` trong `components/SpotifyIcon.qml` để mọi icon luôn hiển thị màu trắng sáng rực rỡ và dễ dàng đổi màu trên nền Dark Glass.
+17. **Hệ Thống Thẻ Biểu Cảm SimpMusic, Mô Tả Bài Hát & Blacklist Dislike (SimpMusic Expressive Cards & Dislike Blacklist)**:
+    - **Backend Innertube & Blacklist**:
+      - `backend/ytmusic_helper.py`: Gọi endpoint `v1/next` của YouTube Innertube (`WEB` client) lấy nhanh (~0.2s) avatar nghệ sĩ chất lượng cao (960px), số người đăng ký kênh (`subscribers`), ngày phát hành, và toàn bộ mô tả bài hát.
+      - Phân giải album: Thay thế triệt để chuỗi fallback "SimpMusic", tự động phân giải tên album thực tế hoặc hiển thị "Single".
+      - Blacklist lưu trữ tại `~/.config/noctalia/frostify_disliked_songs.json`. Áp dụng `is_song_disliked()` trong `normalize_track` và `_normalize_shelf_item` để loại bỏ vĩnh viễn các bài hát bị dislike khỏi toàn bộ feed, carousel, radio và search.
+      - Hành động `rate_song_action`: Đồng bộ trạng thái like/dislike về YouTube Music qua `ytmusic.rate_song`.
+    - **Giao Diện QML (`AmberolDetailView.qml` & `shell.qml`)**:
+      - Thẻ Nghệ Sĩ SimpMusic (140px): Avatar nghệ sĩ lớn, gradient scrim, badge `Nghệ sĩ`, tên và số lượng người đăng ký.
+      - Thẻ Thống Kê & Mô Tả: Ngày phát hành, số lượt xem, nút Thích (xanh Spotify), nút Không Thích (đỏ neon), thanh tỷ lệ like neon, và khối mô tả mở rộng với nút `[ Xem thêm ▼ / Thu gọn ▲ ]`.
+      - Khi bấm Không Thích: Lập tức ghi vào blacklist, loại bài khỏi `currentTracks`/`browsingTracks`, và tự động chuyển sang bài tiếp theo (`playNext()`).
 
 ---
 
