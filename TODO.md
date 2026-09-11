@@ -170,3 +170,35 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Đã hoàn thành*:
     - Xóa vĩnh viễn tệp âm thanh cục bộ trên đĩa cứng và cập nhật đồng bộ cache `library.json`, khắc phục triệt để lỗi bài hát xuất hiện trở lại sau khi khởi động lại ứng dụng.
     - Sửa lỗi khi xóa một bài trong tab Downloads không còn kích hoạt tự động phát toàn bộ danh sách bài hát tải về.
+
+- [ ] **21. Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn SimpMusic (SimpMusic Interactive Artist Page Suite)**
+  - *Tham chiếu trực quan*: 4 ảnh chụp giao diện từ SimpMusic do người dùng cung cấp (`media_1789131034612.jpg` đến `media_1789131034657.jpg`).
+  - *Nghiên cứu kiến trúc từ SimpMusic codebase* (`/home/apple/Applications/SimpMusic/composeApp/.../ArtistScreen.kt` & `ArtistPage.kt`):
+    - **Backend Engine**: Sử dụng `ytmusic.get_artist(channelId)` trích xuất toàn diện:
+      - `name`, `subscribers`, `views`, `thumbnails` (header banner và avatar tròn).
+      - `shuffleId` (phát ngẫu nhiên tất cả bài hát của nghệ sĩ), `radioId` (khởi tạo đài phát automix).
+      - Section 1: `songs` (Top bài hát hot nhất - "Phổ biến" / Popular).
+      - Section 2: `singles` (Kệ carousel ngang các "Đĩa đơn").
+      - Section 3: `albums` (Kệ carousel ngang các "Albums" phòng thu).
+      - Section 4: `videos` (Kệ carousel các "Video" âm nhạc chính thức).
+      - Section 5: `related` (Kệ danh sách avatar tròn "Nghệ sĩ liên quan" / Similar Artists).
+      - Section 6: `description` ("Mô tả" / Tiểu sử nghệ sĩ).
+    - **Kích hoạt & Điều hướng**: Cho phép bấm vào tên nghệ sĩ hoặc avatar nghệ sĩ từ bất kỳ đâu (Now Playing View, TrackCard, TrackRow, PlayerBar) để mở màn hình chi tiết nghệ sĩ (`ArtistDetailView.qml`).
+    - **Header & 3 Nút Hành Động**:
+      1. `[ 📻 Đài phát ]`: Khởi tạo và phát radio theo nghệ sĩ (`radioId`).
+      2. `[ 🔀 Xáo trộn ]`: Xáo trộn toàn bộ bài hát của nghệ sĩ (`shuffleId`).
+      3. `[ 👤+ Đăng ký ]`: Nút theo dõi / đăng ký kênh nghệ sĩ trên YouTube Music.
+
+- [ ] **22. Tối Ưu Tốc Độ Nạp & Xóa Bỏ Hiện Tượng Nhảy Giật Ảnh Avatar Nghệ Sĩ (Instant Artist Avatar Cache & Shimmer Fallback)**
+  - *Hiện trạng lỗi*: Khi bấm vào bài hát (ví dụ bài hát của Not Again hoặc McPepii), avatar nghệ sĩ ban đầu hiển thị ảnh bìa bài hát (`track.image`), sau 1-2 giây khi API Innertube trả về thì avatar mới đột ngột nhảy sang ảnh của kênh nghệ sĩ, gây cảm giác giật và khó chịu.
+  - *Nguyên nhân gốc rễ*: Tại dòng 729 của `components/AmberolDetailView.qml`, biểu thức binding `source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : (root.track && root.track.image ? root.track.image : "")` đã lấy tạm ảnh bài hát làm avatar nghệ sĩ trong lúc chờ `authorThumbnail` tải xong.
+  - *Giải pháp*:
+    1. Xóa bỏ hoàn toàn việc fallback về ảnh bìa bài hát `track.image` cho avatar nghệ sĩ. Thay bằng khung xương mờ skeleton hoặc placeholder trung tính mượt mà.
+    2. Xây dựng bộ cache avatar nghệ sĩ cục bộ `~/.cache/frostify/artist_avatars.json` ánh xạ `artist_name -> authorThumbnail`. Khi phát bài hát của một nghệ sĩ đã từng phát trước đó, avatar nghệ sĩ sẽ hiển thị tức thì trong 0ms mà không cần đợi API.
+
+- [ ] **23. Khắc Phục Lỗi Trễ & Rò Rỉ Trạng Thái Like/Dislike Khi Chuyển Bài (Instant State Clean Reset on Track Change)**
+  - *Hiện trạng lỗi*: Khi người dùng bấm Dislike một bài (ví dụ `Abnormality Dancin' Girl`) và hệ thống skip sang bài tiếp theo, bài tiếp theo vẫn hiển thị nút Dislike màu đỏ của bài cũ trong 1-2 giây rồi mới đổi lại thông tin đúng của bài mới.
+  - *Nguyên nhân gốc rễ*: Trong `components/AmberolDetailView.qml`, hàm `onTrackChanged` chỉ kích hoạt tiến trình nạp ngầm `fetchSongDetails()` mà không dọn sạch các thuộc tính trạng thái cục bộ (`currentLikeStatus`, `localLikesCount`, `localDislikesCount`, `songDetails`). Do đó, giao diện vẫn giữ nguyên trạng thái dislike của bài trước trong suốt thời gian API đang nạp bài mới.
+  - *Giải pháp*:
+    1. Trong `onTrackChanged`: Ngay lập tức reset `currentLikeStatus = "INDIFFERENT"`, `songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0`, `isLoadingDetails = true`.
+    2. Đọc nhanh trạng thái blacklist đồng bộ từ bộ nhớ: Kiểm tra ngay lập tức xem `track.id` có nằm trong blacklist hay không để cập nhật `currentLikeStatus = "DISLIKE"` ngay trong 0ms nếu đúng là bài đã bị dislike, ngăn chặn triệt để hiện tượng rò rỉ trạng thái bài cũ sang bài mới.
