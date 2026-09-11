@@ -16,10 +16,14 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
   - *Cấu hình*: Lưu trạng thái trong `~/.config/noctalia/frostify_settings.json`.
   - *Tính năng*: Nút gạt Toggle On/Off desktop lyrics; Chuyển đổi giữa chế độ `Auto (Wallpaper Adaptive)` và chế độ `Manual (Tự chọn mã màu highlight)`.
 
-- [ ] **5. Tích Hợp Trình Tải Nhạc Qua `anpan` (One-Click Downloader)**
-  - *Công cụ*: Binary `/home/apple/.local/bin/anpan`.
-  - *Giao diện*: Nút bấm trên Header dùng **icon SVG chuẩn (TUYỆT ĐỐI KHÔNG DÙNG EMOJI)** mở modal dán link YouTube / YouTube Music.
-  - *Luồng chạy*: Chạy ngầm `anpan -o ~/Music/Downloads_Phone "<URL>"`, hiển thị thanh progress bar, tự động trigger `backend/library.py` cập nhật thư viện ngay khi tải xong.
+- [x] **5. Trình Quản Lý & Tải Nhạc Đa Luồng SimpMusic (SimpMusic Style Download Manager Daemon & Minimalist Popover - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Daemon & Worker Loop**: `backend/download_manager.py` chạy thường trú độc lập, giao tiếp socket IPC `/tmp/frostify_download.sock` và file trạng thái nguyên tử `/tmp/frostify_download_status.json`.
+    - **Trích xuất & Tagging chuyên sâu**: Sử dụng `yt-dlp` + FFmpeg trích xuất âm thanh 192k AAC/M4A, nhúng bìa album chất lượng cao qua FFmpeg (`-an -frames:v 1 -update 1`) và gắn tag ID3 đầy đủ; tự động tải synced lyrics (`.lrc`) đi kèm bài hát.
+    - **Hàng đợi tải đa tiến trình**: Theo dõi tiến trình tải theo thời gian thực (Tốc độ MB/s, Thời gian còn lại ETA, Phần trăm hoàn thành %) với độ trễ 0ms.
+    - **Giao diện Popover Minimalist Clean**: `components/DownloadQueuePopover.qml` chuẩn Spotify Desktop (#121212, bo góc 8px, thanh progress 3px bo tròn), nút hủy tải từng bài, nút mở thư mục nhạc `~/Music/Downloads_Phone` (`folder-music-symbolic.svg`), nút dọn sạch danh sách đã tải xong (`edit-clear-all-symbolic.svg`) kèm Tooltip giải thích trực quan khi rê chuột.
+    - **Header Pill & Con quay động**: `components/SpotifyHeader.qml` hiển thị pill tải nhạc với số lượng bài đang tải thực tế (`activeTasksCount`) và con quay `CircularSpinner.qml` xoay tròn khi đang có tác vụ tải.
+    - **Desktop Notification**: Tự động thông báo qua `notify-send` kèm tên bài hát khi hoàn thành.
 
 - [x] **6. Menu Chuột Phải & Quản Lý Hàng Đợi (Context Menu & Queue từ SimpMusic - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:
@@ -115,3 +119,20 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - Lượt xem (View count), lượt thích (Like count).
     - Lượt không thích (Dislike count - tích hợp API `https://returnyoutubedislikeapi.com/Votes?videoId={videoId}`).
     - Mô tả bài hát (Song description / Credits / Lyrics text nếu có).
+
+- [x] **17. Con Quay Loading Trực Tuyến (SimpMusic Circular Buffer Indicator - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - Tạo mới `components/CircularSpinner.qml` với Canvas 270° arc, hai đầu bo tròn (round caps), `RotationAnimation` vô hạn 360° (tiêu thụ 0% CPU).
+    - Tích hợp trực tiếp vào nút tròn Play/Pause 36px trong `components/SpotifyPlayerBar.qml` thông qua cờ `isLoadingAudio`.
+    - Khi người dùng click phát bài hát trực tuyến hoặc chuyển bài, icon Play/Pause tạm thời ẩn và con quay xoay mượt mà cho đến khi MPV nhận được luồng stream và bắt đầu đếm thời gian phát (`time_pos > 0`), giúp người dùng nhận biết hệ thống đang xử lý và không gây cảm giác ứng dụng bị đơ hay giật.
+
+- [x] **18. Nút Phát Tuần Tự & Tách Biệt Trạng Thái Playlist (Sequential Play All & Decoupled State - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - Bổ sung nút chính `[ ▶ Phát ]` bo góc tròn màu xanh Spotify Green trong `components/SpotifyMainGrid.qml` cho phép phát toàn bộ danh sách nhạc hoặc danh sách tải về tuần tự từ bài đầu tiên (track index 0).
+    - Giữ nút phụ `[ 🔀 Phát ngẫu nhiên ]` dạng kính mờ (glassmorphism).
+    - Tách biệt hai biến trạng thái độc lập: `win.activePlaylistId` (danh mục đang duyệt trên giao diện) và `win.playingPlaylistId` (danh mục đang thực sự phát nhạc). Sóng âm equalizer 3-bar và chữ xanh giờ chỉ hiển thị duy nhất trên playlist đang phát nhạc, duyệt xem playlist khác không làm nhảy sóng âm.
+
+- [x] **19. Xóa Bài Hát Cục Bộ Vĩnh Viễn & Sửa Lỗi Tự Động Phát Khi Xóa (Safe Permanent Deletion - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - Xóa vĩnh viễn tệp âm thanh cục bộ trên đĩa cứng và cập nhật đồng bộ cache `library.json`, khắc phục triệt để lỗi bài hát xuất hiện trở lại sau khi khởi động lại ứng dụng.
+    - Sửa lỗi khi xóa một bài trong tab Downloads không còn kích hoạt tự động phát toàn bộ danh sách bài hát tải về.
