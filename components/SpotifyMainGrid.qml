@@ -348,8 +348,8 @@ Rectangle {
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        visible: !root.isDownloadsView
-                        text: root.isLoading ? "Loading..." : (root.sortedTracks ? root.sortedTracks.length + " tracks" : "")
+                        visible: !root.isDownloadsView && !root.isLoading
+                        text: (root.sortedTracks ? root.sortedTracks.length + " tracks" : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
@@ -823,13 +823,29 @@ Rectangle {
                     }
                 }
 
-                Text {
+                // Skeleton Lazy Loading Rows (Pure Visual Shimmer, No Clunky Text)
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
                     visible: root.isLoading
-                    text: "Searching YouTube Music online..."
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 14
-                    font.italic: true
-                    color: Theme.spotifyGreen
+
+                    Repeater {
+                        model: [
+                            { tw: 220, sw: 130 },
+                            { tw: 170, sw: 100 },
+                            { tw: 240, sw: 150 },
+                            { tw: 190, sw: 110 },
+                            { tw: 210, sw: 140 },
+                            { tw: 160, sw: 95 },
+                            { tw: 250, sw: 160 },
+                            { tw: 180, sw: 120 }
+                        ]
+
+                        SkeletonTrackRow {
+                            titleWidth: modelData.tw
+                            subtitleWidth: modelData.sw
+                        }
+                    }
                 }
 
                 Text {

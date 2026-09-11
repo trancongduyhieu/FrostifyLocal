@@ -19,6 +19,7 @@ Rectangle {
     property var currentTrack: null
     property bool isPlaying: false
     property string sidebarTab: "playlists" // "playlists" or "queue"
+    property bool isLoadingRadio: false
 
     property var customPlaylists: []
 
@@ -295,8 +296,8 @@ Rectangle {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: root.queueTracks && root.queueTracks.length > 0
-                            text: "(" + (root.queueTracks ? root.queueTracks.length : 0) + ")"
+                            visible: (root.queueTracks && root.queueTracks.length > 0) || root.isLoadingRadio
+                            text: root.isLoadingRadio ? "(" + (root.queueTracks ? root.queueTracks.length : 0) + "+)" : ("(" + (root.queueTracks ? root.queueTracks.length : 0) + ")")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: root.sidebarTab === "queue"
@@ -554,7 +555,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         color: "transparent"
-                        visible: !root.queueTracks || root.queueTracks.length === 0
+                        visible: (!root.queueTracks || root.queueTracks.length === 0) && !root.isLoadingRadio
 
                         ColumnLayout {
                             anchors.centerIn: parent
@@ -593,9 +594,25 @@ Rectangle {
                         Layout.fillHeight: true
                         clip: true
                         spacing: 3
-                        visible: root.queueTracks && root.queueTracks.length > 0
+                        visible: (root.queueTracks && root.queueTracks.length > 0) || root.isLoadingRadio
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                        footer: ColumnLayout {
+                            width: qList.width
+                            spacing: 3
+                            visible: root.isLoadingRadio
+
+                            Repeater {
+                                model: [130, 110, 140, 95, 120]
+
+                                SkeletonTrackRow {
+                                    isCompact: true
+                                    titleWidth: modelData
+                                    subtitleWidth: 70
+                                }
+                            }
+                        }
 
                         model: root.queueTracks
 

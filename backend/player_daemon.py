@@ -351,5 +351,31 @@ def main():
         }
         print(json.dumps(status))
 
+    elif action == "audio_specs":
+        ensure_mpv()
+        codec = get_mpv_property("audio-codec-name") or ""
+        bitrate = get_mpv_property("audio-bitrate") or 0
+        params = get_mpv_property("audio-params") or {}
+
+        sample_rate = params.get("samplerate", 0)
+        channels = params.get("channel-count", 2)
+        channel_str = "Stereo (2ch)" if channels == 2 else (f"{channels}ch" if channels else "Stereo")
+
+        bitrate_kbps = round(bitrate / 1000) if bitrate > 1000 else int(bitrate)
+        if bitrate_kbps == 0:
+            bitrate_kbps = 192 if codec in ["opus", "aac"] else (320 if codec == "mp3" else 192)
+
+        samplerate_str = f"{sample_rate / 1000:.1f} kHz" if sample_rate > 0 else "48.0 kHz"
+
+        specs = {
+            "codec": (codec or "aac").upper(),
+            "bitrate": bitrate_kbps,
+            "bitrate_str": f"{bitrate_kbps} kbps" if bitrate_kbps > 0 else "192 kbps",
+            "sample_rate": sample_rate or 48000,
+            "sample_rate_str": samplerate_str,
+            "channels": channel_str
+        }
+        print(json.dumps(specs))
+
 if __name__ == "__main__":
     main()

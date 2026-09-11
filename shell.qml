@@ -814,6 +814,7 @@ Scope {
                     playingPlaylistId: win.playingPlaylistId
                     selectedIndex: win.selectedPlaylistIndex
                     currentView: win.currentView
+                    isLoadingRadio: radioProc.running
 
                     onHomeSelected: {
                         if (win.currentView !== "home") win.previousView = win.currentView;
@@ -970,6 +971,13 @@ Scope {
 
                     onCloseRequested: win.showAmberolDetails = false
                     onSeekRequested: sec => win.seekAudio(sec)
+                    onStartRadioRequested: trk => win.startRadioFromTrack(trk)
+                    onDownloadTrackRequested: trk => win.downloadTrack(trk)
+                    onOpenFolderRequested: trk => win.openTrackFolder(trk)
+                    onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
+                    onCopyLinkRequested: text => {
+                        Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Frostify" "Đã sao chép liên kết vào clipboard"', "sh", text]);
+                    }
                 }
             }
 

@@ -69,12 +69,59 @@ Rectangle {
         }
     }
 
-    onTrackChanged: fetchLyrics()
+    property var songDetails: null
+    property var audioSpecs: null
+
+    signal viewAlbumRequested(var alb)
+    signal startRadioRequested(var trk)
+    signal downloadTrackRequested(var trk)
+    signal openFolderRequested(var trk)
+    signal copyLinkRequested(string text)
+
+    function fetchSongDetails() {
+        songDetails = null;
+        if (!track) return;
+        var vid = track.videoId || "";
+        if (!vid && track.path && track.path.startsWith("ytdl://")) {
+            vid = track.path.replace("ytdl://", "");
+        }
+        if (!vid && (track.title || track.name)) {
+            vid = (track.title || track.name) + " " + (track.artist || "");
+        }
+        if (vid) {
+            songDetailsProc.running = false;
+            songDetailsProc.command = [
+                "python3", "-u",
+                Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+                "song_details", vid
+            ];
+            songDetailsProc.running = true;
+        }
+        fetchAudioSpecs();
+    }
+
+    function fetchAudioSpecs() {
+        audioSpecsProc.running = false;
+        audioSpecsProc.command = [
+            "python3", "-u",
+            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/player_daemon.py",
+            "audio_specs"
+        ];
+        audioSpecsProc.running = true;
+    }
+
+    onTrackChanged: {
+        fetchLyrics();
+        fetchSongDetails();
+        delayedAudioSpecsTimer.restart();
+    }
     onCurrentTimeChanged: updateActiveLyric(false)
     onActiveLyricsChanged: Qt.callLater(function() { updateActiveLyric(true); })
     onVisibleChanged: {
         if (visible) {
             fetchLyrics();
+            fetchSongDetails();
+            delayedAudioSpecsTimer.restart();
             Qt.callLater(function() { updateActiveLyric(true); });
         }
     }
@@ -83,8 +130,8 @@ Rectangle {
     Component.onCompleted: {
         console.log("AmberolDetailView COMPLETED width:", width, "height:", height, "isCompact:", isCompact)
         fetchLyrics();
+        fetchSongDetails();
     }
-
 
     Process {
         id: lyricsProc
@@ -102,6 +149,47 @@ Rectangle {
                 }
             }
         }
+    }
+
+    Process {
+        id: songDetailsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var obj = JSON.parse(data);
+                    if (obj && typeof obj === "object") {
+                        root.songDetails = obj;
+                    }
+                } catch(e) {
+                    console.log("songDetailsProc error:", e);
+                }
+            }
+        }
+    }
+
+    Process {
+        id: audioSpecsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var obj = JSON.parse(data);
+                    if (obj && typeof obj === "object") {
+                        root.audioSpecs = obj;
+                    }
+                } catch(e) {
+                    console.log("audioSpecsProc error:", e);
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: delayedAudioSpecsTimer
+        interval: 1200
+        repeat: false
+        onTriggered: fetchAudioSpecs()
     }
 
     // Dynamic subtle album art background tint
@@ -304,99 +392,542 @@ Rectangle {
             Layout.fillHeight: true
             spacing: root.isCompact ? 0 : 28
 
-            // Left: Large Amberol Cover Card & Metadata (Visible when wide OR when compactTab == 'art')
-            ColumnLayout {
+            // Left: Large Amberol Cover Card & Detailed Song Metadata Inspector (Visible when wide OR when compactTab == 'art')
+            Flickable {
+                id: artScrollArea
                 visible: !root.isCompact || root.compactTab === "art"
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredWidth: 320
                 Layout.maximumWidth: root.isCompact ? 360 : 320
                 Layout.minimumWidth: 260
-                Layout.fillHeight: true
-                Layout.alignment: root.isCompact ? Qt.AlignHCenter : Qt.AlignTop
-                spacing: 16
+                contentWidth: width
+                contentHeight: artContentCol.height + 30
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
 
-                Rectangle {
-                    width: root.isCompact ? 280 : 300
-                    height: width
-                    Layout.preferredWidth: width
-                    Layout.preferredHeight: height
-                    Layout.alignment: Qt.AlignHCenter
-                    radius: 14
-                    color: "#181818"
-                    border.color: "#282828"
-                    border.width: 1
-                    clip: true
-
-                    Image {
-                        id: mainCover
-                        anchors.fill: parent
-                        source: root.track && root.track.image ? root.track.image : ""
-                        fillMode: Image.PreserveAspectCrop
-                        visible: status === Image.Ready
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: !mainCover.visible
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "#2d2d3a" }
-                            GradientStop { position: 1.0; color: "#141418" }
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 72
-                            font.bold: true
-                            color: "#444455"
-                        }
-                    }
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                 }
 
-                // Track Title & Artist Info
                 ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: root.isCompact ? 280 : 300
-                    Layout.maximumWidth: 320
+                    id: artContentCol
+                    width: artScrollArea.width
+                    spacing: 14
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: 4
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.track ? root.track.name : "No track selected"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 20
-                        font.bold: true
-                        color: Theme.textPrimary
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 2
-                        elide: Text.ElideRight
-                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
+                    // 1. Large Cover Art (260x260 in compact, 280x280 wide)
+                    Rectangle {
+                        width: root.isCompact ? 260 : 280
+                        height: width
+                        Layout.preferredWidth: width
+                        Layout.preferredHeight: height
+                        Layout.alignment: Qt.AlignHCenter
+                        radius: 12
+                        color: "#181818"
+                        border.color: "#282828"
+                        border.width: 1
+                        clip: true
+
+                        Image {
+                            id: mainCover
+                            anchors.fill: parent
+                            source: root.track && root.track.image ? root.track.image : ""
+                            fillMode: Image.PreserveAspectCrop
+                            visible: status === Image.Ready
+                            asynchronous: true
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: !mainCover.visible
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "#2d2d3a" }
+                                GradientStop { position: 1.0; color: "#141418" }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 72
+                                font.bold: true
+                                color: "#444455"
+                            }
+                        }
                     }
 
-                    Text {
+                    // 2. Track Title & Artist Info
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: root.track ? root.track.artist : "Unknown Artist"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        color: Theme.spotifyGreen
-                        font.bold: true
-                        elide: Text.ElideRight
-                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 4
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.track ? (root.track.title || root.track.name || "No track selected") : "No track selected"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 19
+                            font.bold: true
+                            color: Theme.textPrimary
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.track ? (root.track.artist || "Unknown Artist") : "Unknown Artist"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            color: Theme.spotifyGreen
+                            font.bold: true
+                            elide: Text.ElideRight
+                            horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
+                        }
+
+                        // Badges Row: [CODEC & BITRATE] [SOURCE] [YEAR]
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: root.isCompact ? Qt.AlignHCenter : Qt.AlignLeft
+                            spacing: 6
+
+                            // Codec Pill
+                            Rectangle {
+                                height: 20
+                                width: codecText.implicitWidth + 12
+                                radius: 4
+                                color: Qt.rgba(0.12, 0.12, 0.14, 0.9)
+                                border.color: Qt.rgba(1, 1, 1, 0.15)
+                                border.width: 1
+
+                                Text {
+                                    id: codecText
+                                    anchors.centerIn: parent
+                                    text: (root.audioSpecs ? root.audioSpecs.codec : "AAC") + " • " + (root.audioSpecs ? root.audioSpecs.bitrate_str : "192 kbps")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: "#1ed760"
+                                }
+                            }
+
+                            // Source Pill
+                            Rectangle {
+                                height: 20
+                                width: srcText.implicitWidth + 12
+                                radius: 4
+                                color: Qt.rgba(0.12, 0.12, 0.14, 0.9)
+                                border.color: Qt.rgba(1, 1, 1, 0.12)
+                                border.width: 1
+
+                                Text {
+                                    id: srcText
+                                    anchors.centerIn: parent
+                                    text: (root.track && root.track.isLocal) ? "LOCAL" : "YT MUSIC"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: Theme.textSecondary
+                                }
+                            }
+
+                            // Year Pill (if available)
+                            Rectangle {
+                                visible: !!yearText.text
+                                height: 20
+                                width: yearText.implicitWidth + 12
+                                radius: 4
+                                color: Qt.rgba(0.12, 0.12, 0.14, 0.9)
+                                border.color: Qt.rgba(1, 1, 1, 0.12)
+                                border.width: 1
+
+                                Text {
+                                    id: yearText
+                                    anchors.centerIn: parent
+                                    text: root.songDetails && root.songDetails.year ? root.songDetails.year : (root.track && root.track.year ? root.track.year : "")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: Theme.textSecondary
+                                }
+                            }
+                        }
                     }
 
-                    Text {
+                    // 3. Audio Engine Specs Card (Dark Glass Grid 2x2)
+                    Rectangle {
                         Layout.fillWidth: true
-                        text: root.track && root.track.album ? root.track.album : "Single / SimpMusic"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        color: Theme.textSecondary
-                        elide: Text.ElideRight
-                        horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.preferredHeight: 76
+                        Layout.alignment: Qt.AlignHCenter
+                        radius: 8
+                        color: "#161618"
+                        border.color: "#28282c"
+                        border.width: 1
+
+                        GridLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            columns: 2
+                            rowSpacing: 8
+                            columnSpacing: 12
+
+                            // 1. Codec
+                            ColumnLayout {
+                                spacing: 2
+                                Text {
+                                    text: "CODEC"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Theme.textMuted
+                                }
+                                Text {
+                                    text: root.audioSpecs ? root.audioSpecs.codec : "AAC"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                }
+                            }
+
+                            // 2. Bitrate
+                            ColumnLayout {
+                                spacing: 2
+                                Text {
+                                    text: "BITRATE"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Theme.textMuted
+                                }
+                                Text {
+                                    text: root.audioSpecs ? root.audioSpecs.bitrate_str : "192 kbps"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                }
+                            }
+
+                            // 3. Sample Rate
+                            ColumnLayout {
+                                spacing: 2
+                                Text {
+                                    text: "SAMPLE RATE"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Theme.textMuted
+                                }
+                                Text {
+                                    text: root.audioSpecs ? root.audioSpecs.sample_rate_str : "44.1 kHz"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                }
+                            }
+
+                            // 4. Channels
+                            ColumnLayout {
+                                spacing: 2
+                                Text {
+                                    text: "CHANNELS"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Theme.textMuted
+                                }
+                                Text {
+                                    text: root.audioSpecs ? root.audioSpecs.channels : "Stereo (2ch)"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                }
+                            }
+                        }
                     }
+
+                    // 4. Engagement & Community Stats Card (Views, Likes, Dislikes from Return YouTube Dislike API)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.preferredHeight: 74
+                        Layout.alignment: Qt.AlignHCenter
+                        radius: 8
+                        color: "#161618"
+                        border.color: "#28282c"
+                        border.width: 1
+                        visible: root.songDetails && (root.songDetails.views > 0 || root.songDetails.likes > 0)
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 8
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 14
+
+                                // Views
+                                RowLayout {
+                                    spacing: 5
+                                    SpotifyIcon {
+                                        source: "../assets/icons/eye-symbolic.svg"
+                                        iconSize: 13
+                                        color: Theme.textSecondary
+                                    }
+                                    Text {
+                                        text: root.songDetails ? root.songDetails.viewsStr : "--"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: Theme.textPrimary
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                // Likes
+                                RowLayout {
+                                    spacing: 5
+                                    SpotifyIcon {
+                                        source: "../assets/icons/thumb-up-symbolic.svg"
+                                        iconSize: 13
+                                        color: "#1ed760"
+                                    }
+                                    Text {
+                                        text: root.songDetails ? root.songDetails.likesStr : "--"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: Theme.textPrimary
+                                    }
+                                }
+
+                                // Dislikes
+                                RowLayout {
+                                    spacing: 5
+                                    SpotifyIcon {
+                                        source: "../assets/icons/thumb-down-symbolic.svg"
+                                        iconSize: 13
+                                        color: Theme.textMuted
+                                    }
+                                    Text {
+                                        text: root.songDetails ? root.songDetails.dislikesStr : "--"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: Theme.textSecondary
+                                    }
+                                }
+                            }
+
+                            // Like / Dislike Ratio Bar
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 4
+                                radius: 2
+                                color: "#333333"
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: parent.width * (root.songDetails ? (root.songDetails.likeRatio / 100.0) : 1.0)
+                                    radius: 2
+                                    color: "#1ed760"
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Album & Release Details Box
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.preferredHeight: albRow.implicitHeight + 16
+                        Layout.alignment: Qt.AlignHCenter
+                        radius: 8
+                        color: "#161618"
+                        border.color: "#28282c"
+                        border.width: 1
+
+                        RowLayout {
+                            id: albRow
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+
+                            SpotifyIcon {
+                                source: "../assets/icons/media-optical-audio-symbolic.svg"
+                                iconSize: 18
+                                color: Theme.spotifyGreen
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    text: "ALBUM / SINGLE"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: Theme.textMuted
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : "Single / SimpMusic")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Quick Action Chips Row
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.isCompact ? 260 : 280
+                        Layout.maximumWidth: 320
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 8
+
+                        // Action 1: Download or Open folder
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 32
+                            radius: 16
+                            color: actDlH.hovered ? "#282828" : "#1a1a1c"
+                            border.color: "#2c2c30"
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                SpotifyIcon {
+                                    source: (root.track && root.track.isLocal) ? "../assets/icons/folder-music-symbolic.svg" : "../assets/icons/download-symbolic.svg"
+                                    iconSize: 13
+                                    color: "#ffffff"
+                                }
+
+                                Text {
+                                    text: (root.track && root.track.isLocal) ? "Thư mục" : "Tải bài"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            HoverHandler { id: actDlH }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.track && root.track.isLocal) {
+                                        root.openFolderRequested(root.track);
+                                    } else {
+                                        root.downloadTrackRequested(root.track);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Action 2: Start Radio
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 32
+                            radius: 16
+                            color: actRadH.hovered ? "#282828" : "#1a1a1c"
+                            border.color: "#2c2c30"
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                SpotifyIcon {
+                                    source: "../assets/icons/radio-symbolic.svg"
+                                    iconSize: 13
+                                    color: Theme.spotifyGreen
+                                }
+
+                                Text {
+                                    text: "Radio"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            HoverHandler { id: actRadH }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.startRadioRequested(root.track)
+                            }
+                        }
+
+                        // Action 3: Copy Link
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 32
+                            radius: 16
+                            color: actCpH.hovered ? "#282828" : "#1a1a1c"
+                            border.color: "#2c2c30"
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                SpotifyIcon {
+                                    source: "../assets/icons/edit-select-all-symbolic.svg"
+                                    iconSize: 12
+                                    color: "#ffffff"
+                                }
+
+                                Text {
+                                    text: "Sao chép"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            HoverHandler { id: actCpH }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var link = (root.track && root.track.videoId)
+                                        ? ("https://music.youtube.com/watch?v=" + root.track.videoId)
+                                        : (root.track ? (root.track.path || "") : "");
+                                    root.copyLinkRequested(link);
+                                }
+                            }
+                        }
+                    }
+
+                    Item { Layout.preferredHeight: 12 }
                 }
-
-                Item { Layout.fillHeight: true }
             }
 
             // Right: Amberol Synced Lyrics Flow

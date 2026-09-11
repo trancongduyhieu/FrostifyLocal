@@ -10,6 +10,7 @@ import json
 import time
 import re
 import hashlib
+import urllib.request
 
 AUTH_FILE = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
 STREAM_CACHE_FILE = os.path.expanduser("~/.cache/frostify/stream_cache.json")
@@ -1150,13 +1151,147 @@ def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
 
     return {"success": True, "videoId": vid, "title": title, "artist": artist}
 
+def get_song_details(video_id):
+    """
+    Fetch comprehensive song metadata and engagement statistics:
+    - Title, Artist, Album, Year, Duration, Description
+    - View count, Like count
+    - Return YouTube Dislike API stats: Dislikes, Rating, Likes
+    """
+    if not video_id:
+        return {}
+
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    if len(clean_vid) != 11 or " " in clean_vid or "/" in clean_vid or "." in clean_vid:
+        try:
+            ytm = get_ytmusic_client()
+            search_res = ytm.search(clean_vid, filter="songs", limit=1)
+            if not search_res:
+                search_res = ytm.search(clean_vid, filter="videos", limit=1)
+            if search_res and search_res[0].get("videoId"):
+                clean_vid = search_res[0]["videoId"]
+            else:
+                return {}
+        except Exception as e:
+            sys.stderr.write(f"[resolve videoId error for '{clean_vid}']: {e}\n")
+            return {}
+
+    details = {
+        "videoId": clean_vid,
+        "title": "",
+        "artist": "",
+        "album": "",
+        "albumBrowseId": "",
+        "year": "",
+        "views": 0,
+        "viewsStr": "--",
+        "likes": 0,
+        "likesStr": "--",
+        "dislikes": 0,
+        "dislikesStr": "--",
+        "rating": 5.0,
+        "likeRatio": 100.0,
+        "description": "",
+        "publishDate": ""
+    }
+
+    # 1. Fetch YouTube Dislike & Engagement stats via Return YouTube Dislike API
+    try:
+        ryd_url = f"https://returnyoutubedislikeapi.com/votes?videoId={clean_vid}"
+        req = urllib.request.Request(ryd_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            ryd_data = json.loads(resp.read().decode("utf-8"))
+            likes = ryd_data.get("likes", 0)
+            dislikes = ryd_data.get("dislikes", 0)
+            rating = ryd_data.get("rating", 5.0)
+            view_count = ryd_data.get("viewCount", 0)
+
+            details["likes"] = likes
+            details["dislikes"] = dislikes
+            details["rating"] = round(rating, 2)
+            if view_count:
+                details["views"] = view_count
+                if view_count >= 1000000:
+                    details["viewsStr"] = f"{view_count / 1000000:.1f}M"
+                elif view_count >= 1000:
+                    details["viewsStr"] = f"{view_count / 1000:.1f}K"
+                else:
+                    details["viewsStr"] = str(view_count)
+
+            if likes >= 1000000:
+                details["likesStr"] = f"{likes / 1000000:.1f}M"
+            elif likes >= 1000:
+                details["likesStr"] = f"{likes / 1000:.1f}K"
+            else:
+                details["likesStr"] = str(likes)
+
+            if dislikes >= 1000000:
+                details["dislikesStr"] = f"{dislikes / 1000000:.1f}M"
+            elif dislikes >= 1000:
+                details["dislikesStr"] = f"{dislikes / 1000:.1f}K"
+            else:
+                details["dislikesStr"] = str(dislikes)
+
+            total_votes = likes + dislikes
+            if total_votes > 0:
+                details["likeRatio"] = round((likes / total_votes) * 100.0, 1)
+            else:
+                details["likeRatio"] = 100.0
+    except Exception as e:
+        sys.stderr.write(f"[RYD API error for {clean_vid}]: {e}\n")
+
+    # 2. Fetch YTMusic song details
+    try:
+        ytm = get_ytmusic_client()
+        song = ytm.get_song(clean_vid)
+        v_details = song.get("videoDetails", {})
+        details["title"] = v_details.get("title", "")
+        details["artist"] = v_details.get("author", "")
+
+        mf = song.get("microformat", {}).get("microformatDataRenderer", {})
+        pub_date = mf.get("publishDate", "") or mf.get("uploadDate", "")
+        if pub_date:
+            details["publishDate"] = pub_date[:10]
+            details["year"] = pub_date[:4]
+
+        desc = ""
+        if "description" in mf:
+            d_val = mf["description"]
+            desc = d_val.get("simpleText", "") if isinstance(d_val, dict) else str(d_val)
+        if not desc and "shortDescription" in v_details:
+            desc = v_details["shortDescription"]
+        details["description"] = desc[:500] if desc else ""
+
+        # Check views from videoDetails if RYD didn't provide
+        if not details["views"] and "viewCount" in v_details:
+            try:
+                vc = int(v_details["viewCount"])
+                details["views"] = vc
+                if vc >= 1000000:
+                    details["viewsStr"] = f"{vc / 1000000:.1f}M"
+                elif vc >= 1000:
+                    details["viewsStr"] = f"{vc / 1000:.1f}K"
+                else:
+                    details["viewsStr"] = str(vc)
+            except Exception:
+                pass
+    except Exception as e:
+        sys.stderr.write(f"[ytmusic get_song error for {clean_vid}]: {e}\n")
+
+    return details
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> [title] [artist] [pl_id]]")
+        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id>]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
-    if cmd == "home":
+    if cmd == "song_details" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        res = get_song_details(vid)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "home":
         res = get_personalized_home()
         print(json.dumps(res, ensure_ascii=False))
 

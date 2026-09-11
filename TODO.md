@@ -125,14 +125,19 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - **Albums**: Kệ ngang các Album liên quan trực tiếp đến từ khóa tìm kiếm (bấm vào mở danh sách bài trong album).
     - **Artists & Playlists**: Kệ các Playlist tổng hợp và kênh nghệ sĩ chính thức.
 
-- [ ] **16. Tab Artwork: Hiển Thị Chi Tiết Nghệ Sĩ, Lượt Xem/Thích/Không Thích & Mô Tả Bài Hát (SimpMusic Metadata Inspector)**
-  - *Mục tiêu*: Biến tab Artwork trong `AmberolDetailView` thành bảng thông tin chi tiết bài hát chuyên nghiệp như SimpMusic.
-  - *Dữ liệu tích hợp*:
-    - Tên nghệ sĩ kèm số lượng người đăng ký (Subscribers count, ví dụ: "mindfreakkk • 120K subscribers").
-    - Thời gian phát hành / Ngày tải lên (Publish / Upload Date).
-    - Lượt xem (View count), lượt thích (Like count).
-    - Lượt không thích (Dislike count - tích hợp API `https://returnyoutubedislikeapi.com/Votes?videoId={videoId}`).
-    - Mô tả bài hát (Song description / Credits / Lyrics text nếu có).
+- [x] **16. Tab Artwork: Hiển Thị Chi Tiết Nghệ Sĩ, Lượt Xem/Thích/Không Thích, Mô Tả & Thông Số Kỹ Thuật Audio (SimpMusic Metadata & Audio Specs Inspector - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Audio Specs Daemon**: Thêm action `audio_specs` trong `backend/player_daemon.py` đọc trực tiếp các thông số từ MPV Unix Domain Socket: codec (`audio-codec-name`), bitrate (`audio-bitrate` kbps), sample rate (`audio-params.samplerate` kHz) và kênh âm thanh (`audio-params.channels`).
+    - **Backend Song Details & Return YouTube Dislike API**: Thêm hàm `get_song_details` trong `backend/ytmusic_helper.py` tích hợp Return YouTube Dislike API (`https://returnyoutubedislikeapi.com/votes?videoId={videoId}`) mang lại số lượt xem (`viewsStr`), lượt thích (`likesStr`), lượt không thích (`dislikesStr`), điểm đánh giá (`rating`), và tỷ lệ thích (`likeRatio`). Hỗ trợ tự động phân giải ngầm qua `ytm.search` khi phát bài hát offline trong thư viện để vẫn lấy được đầy đủ thống kê online.
+    - **Artwork & Metadata Inspector Panel**: Thiết kế giao diện Dark Glass trong `components/AmberolDetailView.qml` gồm ảnh bìa bo tròn, các badge trạng thái (`CODEC • BITRATE`, `SOURCE`, `YEAR`), lưới thẻ 2x2 Audio Engine Specs (Codec, Bitrate, Sample Rate, Channels), thẻ tương tác Social Engagement (Lượt xem với icon con mắt, Thích với icon ngón tay cái, Không thích, thanh tiến trình tỷ lệ thích xanh neon), hộp chi tiết Album/Single với nút xem album, và cụm nút thao tác nhanh `[ 📥 Tải bài / 📁 Mở thư mục ]`, `[ 📻 Radio ]`, `[ 📋 Sao chép ]`.
+    - **Zero Emoji**: 100% icon sử dụng SVG chuẩn hệ thống (`assets/icons/thumb-up-symbolic.svg`, `thumb-down-symbolic.svg`, `eye-symbolic.svg`).
+
+- [x] **20. Pure Visual Skeleton Shimmer Lazy Loading (Tải Lười Dạng Khung Xương Xung Nhịp - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Loại bỏ triệt để dòng chữ Loading thô**: Xóa sạch toàn bộ các dòng chữ text nhàm chán như "Searching YouTube Music...", "Loading...", "Đang tạo đài phát...".
+    - **Component SkeletonTrackRow**: Tạo mới `components/SkeletonTrackRow.qml` với hiệu ứng xung nhịp thở mượt mà (`SequentialAnimation` độ mờ từ `0.25` đến `0.70`), mô phỏng chân thực thumbnail 40x40/48x48, thanh tiêu đề bài hát, thanh phụ đề nghệ sĩ và thanh thời lượng. Hỗ trợ thuộc tính `isCompact` cho hàng đợi sidebar.
+    - **Lưới Chính (SpotifyMainGrid)**: Hiển thị 8 dòng skeleton track row nhịp nhàng khi chuyển danh sách, bấm album, hoặc tìm kiếm.
+    - **Hàng Đợi Bên Cạnh (SpotifySidebar Queue)**: Khi bấm phát bài hát mới và hệ thống đang tải danh sách Automix Radio (`radioProc.running = true`), hàng đợi hiển thị bài hát hiện tại kèm huy hiệu `Queue (1+)` và 5 dòng skeleton thu nhỏ bên dưới. Khi radio tải xong, toàn bộ bài hát tự động xuất hiện mượt mà mà không làm giật lag hay gây cảm giác ứng dụng bị đơ.
 
 - [x] **17. Con Quay Loading Trực Tuyến (SimpMusic Circular Buffer Indicator - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:

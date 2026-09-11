@@ -55,6 +55,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 │   ├── ParticleBackground.qml      # Hiệu ứng hạt nền ambient
 │   ├── PlayerBar.qml               # Thanh phát nhạc điều khiển cơ bản
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass
+│   ├── SkeletonTrackRow.qml        # Khung xương shimmer tải lười không dùng text cho grid và queue
 │   ├── SpotifyHeader.qml           # Thanh tìm kiếm, tab lọc Spotify và Download pill
 │   ├── SpotifyIcon.qml             # Component icon SVG độc lập (chuẩn hóa icon toàn app)
 │   ├── SpotifyMainGrid.qml         # Grid danh sách bài hát, card hiển thị và nút [ ▶ Phát ] tuần tự
@@ -131,6 +132,20 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Toolbar cụm 4 nút: `[ ▶ Phát ]`, `[ 🔀 Phát ngẫu nhiên ]`, `[ + Hàng đợi ]`, `[ 📥 Tải Album ]`.
       - Sub-tab Switcher: `[ Bài hát (N) ]` | `[ Albums (N) ]` trong tab Downloads.
       - `components/HomeFeedView.qml`: Tự động nhận diện `type === "album"` hoặc `MPREb_` khi click card để chuyển vào chế độ xem chi tiết album.
+15. **Tải Lười Dạng Khung Xương Xung Nhịp (Pure Visual Skeleton Shimmer Lazy Loading)**:
+    - **Triết lý thiết kế**: Tuyệt đối không hiển thị các chuỗi text gây thô phèn như "Loading...", "Searching YouTube Music...", "Đang tạo đài phát...". Toàn bộ trạng thái chờ được thay bằng các thanh khung xương (skeleton placeholder) với hiệu ứng xung nhịp thở mượt mà (`SequentialAnimation` độ mờ từ `0.25` sang `0.70`).
+    - **Lưới chính (`SpotifyMainGrid.qml`)**: Sử dụng `Repeater` 8 dòng `SkeletonTrackRow.qml` khi `isLoading` (chuyển playlist, bấm album, tìm kiếm).
+    - **Hàng đợi (`SpotifySidebar.qml`)**: Nhận reactive property `isLoadingRadio: radioProc.running` từ `shell.qml`. Khi click phát bài hát mới từ Home/Search, hàng đợi lập tức giữ bài hiện tại và hiển thị huy hiệu `Queue (1+)` kèm 5 dòng skeleton thu nhỏ bên dưới. Khi radio nạp xong danh sách 50 bài, các skeleton biến mất nhường chỗ cho danh sách thật mà không gây giật lag hay trống rỗng đột ngột.
+16. **Bảng Điều Tra Siêu Dữ Liệu & Thông Số Kỹ Thuật Audio (Metadata & Audio Specs Inspector)**:
+    - **Backend Engine**:
+      - `backend/player_daemon.py`: Lệnh `audio_specs` truy xuất trực tiếp từ MPV Unix Domain Socket các trường `audio-codec-name`, `audio-bitrate`, `audio-params` (samplerate, channels) hiển thị thẻ 2x2 Dark Glass thời gian thực.
+      - `backend/ytmusic_helper.py`: Lệnh `song_details <videoId|query>` tích hợp API **Return YouTube Dislike** (`https://returnyoutubedislikeapi.com/votes?videoId={videoId}`) trả về số lượt xem (`viewsStr`), lượt thích (`likesStr`), lượt không thích (`dislikesStr`), điểm đánh giá (`rating`), và tỷ lệ thích (`likeRatio`). Tự động phân giải ngược từ `Title + Artist` qua `ytm.search` đối với các file nhạc offline nội bộ.
+    - **Panel QML (`AmberolDetailView.qml`)**:
+      - Tab Switcher pill: `[ Lời bài hát ]` | `[ Artwork & Chi tiết ]` khi hiển thị ở chế độ compact (< 720px) và hiển thị song song hai cột khi ở chế độ mở rộng.
+      - Thẻ thông số audio: CODEC, BITRATE, SAMPLE RATE, CHANNELS.
+      - Thẻ tương tác: Lượt xem (icon mắt), Lượt thích (icon like), Lượt không thích (icon dislike) kèm thanh tỷ lệ thích xanh neon (#1ed760).
+      - Hộp chi tiết Album và cụm nút tương tác nhanh: `[ 📥 Tải bài / 📁 Mở thư mục ]`, `[ 📻 Radio ]`, `[ 📋 Sao chép ]`.
+      - Tuân thủ 100% Zero Emoji: Sử dụng toàn bộ file SVG biểu tượng hệ thống.
 
 ---
 
