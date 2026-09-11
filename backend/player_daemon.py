@@ -175,6 +175,17 @@ def main():
         title_arg = sys.argv[3] if len(sys.argv) > 3 else ""
         artist_arg = sys.argv[4] if len(sys.argv) > 4 else ""
         art_arg = sys.argv[5] if len(sys.argv) > 5 else ""
+
+        # Immediately stop previous track so old audio and progress cease instantly
+        send_mpv_cmd(["stop"])
+
+        state_file = "/tmp/frostify_playback_state.json"
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "loading", "path": file_path, "timestamp": time.time()}, f)
+        except Exception:
+            pass
+
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path)
         send_mpv_cmd(["loadfile", stream_target, "replace"])
@@ -185,6 +196,12 @@ def main():
             send_mpv_cmd(["set_property", "force-media-title", disp_title])
         else:
             send_mpv_cmd(["set_property", "force-media-title", ""])
+
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
+        except Exception:
+            pass
         print("Playing:", file_path)
 
     elif action == "next":
@@ -209,12 +226,26 @@ def main():
                 pass
 
         if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
+            send_mpv_cmd(["stop"])
+            state_file = "/tmp/frostify_playback_state.json"
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
+            except Exception:
+                pass
+
             stream_target = resolve_media_path(tracks[idx])
             send_mpv_cmd(["loadfile", stream_target, "replace"])
             send_mpv_cmd(["set_property", "pause", False])
             if meta and meta.get("title"):
                 disp_title = f"{meta['title']} - {meta.get('artist', '')}".strip(" -")
                 send_mpv_cmd(["set_property", "force-media-title", disp_title])
+
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "playing", "path": tracks[idx], "timestamp": time.time()}, f)
+            except Exception:
+                pass
             print("Playing online track:", tracks[idx])
         elif tracks:
             send_mpv_cmd(["set_property", "force-media-title", ""])
@@ -265,6 +296,12 @@ def main():
 
     elif action == "stop":
         send_mpv_cmd(["stop"])
+        state_file = "/tmp/frostify_playback_state.json"
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "stopped", "timestamp": time.time()}, f)
+        except Exception:
+            pass
 
     elif action == "seek" and len(sys.argv) > 2:
         sec = float(sys.argv[2])
@@ -281,6 +318,18 @@ def main():
 
     elif action == "status":
         ensure_mpv()
+
+        is_loading = False
+        state_file = "/tmp/frostify_playback_state.json"
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 10.0:
+                        is_loading = True
+            except Exception:
+                pass
+
         pause = get_mpv_property("pause")
         time_pos = get_mpv_property("time-pos") or 0.0
         duration = get_mpv_property("duration") or 0.0
@@ -289,7 +338,7 @@ def main():
         vol = get_mpv_property("volume") or 100
         idle = get_mpv_property("idle-active")
 
-        has_file = bool(path and not idle)
+        has_file = bool(path and not idle) and not is_loading
 
         status = {
             "is_playing": (pause is False) and has_file,
@@ -297,7 +346,8 @@ def main():
             "time_pos": round(time_pos, 1) if has_file else 0.0,
             "duration": round(duration, 1) if has_file else 0.0,
             "filename": filename if has_file else "",
-            "volume": vol
+            "volume": vol,
+            "is_loading": is_loading
         }
         print(json.dumps(status))
 

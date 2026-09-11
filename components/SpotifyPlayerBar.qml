@@ -282,7 +282,7 @@ Rectangle {
                 spacing: 10
 
                 Text {
-                    text: root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime)
+                    text: root.isLoadingAudio ? "0:00" : root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     color: Theme.textSecondary
@@ -302,7 +302,7 @@ Rectangle {
                         height: parent.height
                         radius: 2
                         color: (scrubHover.hovered || root.isScrubbingProgress) ? Theme.spotifyGreen : "#ffffff"
-                        width: parent.width * Math.min(1.0, Math.max(0.0, root.totalDuration > 0 ? (scrubTrack.effectiveTime / root.totalDuration) : 0))
+                        width: parent.width * Math.min(1.0, Math.max(0.0, (root.totalDuration > 0 && !root.isLoadingAudio) ? (scrubTrack.effectiveTime / root.totalDuration) : 0))
                     }
 
                     // Interactive Thumb on Hover or Drag
@@ -313,7 +313,7 @@ Rectangle {
                         color: "#ffffff"
                         anchors.verticalCenter: parent.verticalCenter
                         x: Math.max(0, Math.min(parent.width - 12, progressFill.width - 6))
-                        visible: scrubHover.hovered || root.isScrubbingProgress
+                        visible: !root.isLoadingAudio && (scrubHover.hovered || root.isScrubbingProgress)
                     }
 
                     HoverHandler { id: scrubHover }
@@ -359,7 +359,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: root.fmtTime(root.totalDuration)
+                    text: (root.isLoadingAudio && root.totalDuration <= 0) ? "0:00" : root.fmtTime(root.totalDuration)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     color: Theme.textSecondary

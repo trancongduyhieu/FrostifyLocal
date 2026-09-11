@@ -482,7 +482,7 @@ Scope {
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.isLoadingAudio = true;
-        win.totalDuration = (trk.durationMs || 0) / 1000.0;
+        win.totalDuration = 0.0;
         win.isPlaying = true;
         win.showAmberolDetails = true;
 
@@ -1453,12 +1453,29 @@ Scope {
             onRead: data => {
                 try {
                     var s = JSON.parse(data);
-                    if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
-                    if (s.time_pos !== undefined && s.time_pos > 0) {
-                        win.currentTime = s.time_pos;
+                    var elapsed = Date.now() - win.trackChangeTimestamp;
+
+                    if (win.isLoadingAudio) {
+                        // While loading:
+                        // 1. Daemon says is_loading, OR
+                        // 2. Not enough time elapsed (< 400ms), OR
+                        // 3. MPV hasn't started playing positive time (time_pos <= 0)
+                        if (s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) {
+                            win.currentTime = 0.0;
+                            return;
+                        }
+                        // New track has begun streaming and playing!
                         win.isLoadingAudio = false;
+                        win.currentTime = s.time_pos;
+                        if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
+                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                    } else {
+                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        if (s.time_pos !== undefined && s.time_pos > 0) {
+                            win.currentTime = s.time_pos;
+                        }
+                        if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     }
-                    if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
 
                     // Sync track from filename if playing (cold start recovery only when currentTrack is null)
                     if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
@@ -1467,7 +1484,7 @@ Scope {
                     }
 
                     // Auto-advance or Repeat at song end
-                    if (win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.4) {
+                    if (!win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.4) {
                         if (win.isRepeat) {
                             win.seekAudio(0.0);
                         } else {
