@@ -19,11 +19,62 @@ Rectangle {
     property bool isPlaying: false
     property string sidebarTab: "playlists" // "playlists" or "queue"
 
+    property var customPlaylists: []
+
+    readonly property var allPlaylists: {
+        var res = [];
+        var seen = {};
+
+        // 1. Custom playlists first in every view
+        if (root.customPlaylists && Array.isArray(root.customPlaylists)) {
+            for (var c = 0; c < root.customPlaylists.length; c++) {
+                var cp = root.customPlaylists[c];
+                if (!cp) continue;
+                var ck = cp.id || cp.playlistId || ("cp_" + c);
+                if (!seen[ck]) {
+                    seen[ck] = true;
+                    res.push(cp);
+                }
+            }
+        }
+
+        // 2. If in Downloads view: ONLY local collections (never online playlists)
+        if (root.currentView === "library") {
+            if (root.playlists && Array.isArray(root.playlists)) {
+                for (var i = 0; i < root.playlists.length; i++) {
+                    var p = root.playlists[i];
+                    if (!p) continue;
+                    if (!p.isLocal && p.playlistId && !String(p.playlistId).startsWith("custom_pl_") && !p.isCustom) continue;
+                    var k = p.id || p.playlistId || ("pl_" + i);
+                    if (!seen[k]) {
+                        seen[k] = true;
+                        res.push(p);
+                    }
+                }
+            }
+        } else {
+            // 3. In Home view: online featured playlists
+            if (root.onlinePlaylists && Array.isArray(root.onlinePlaylists)) {
+                for (var j = 0; j < root.onlinePlaylists.length; j++) {
+                    var op = root.onlinePlaylists[j];
+                    if (!op) continue;
+                    var ok = op.id || op.playlistId || ("opl_" + j);
+                    if (!seen[ok]) {
+                        seen[ok] = true;
+                        res.push(op);
+                    }
+                }
+            }
+        }
+        return res;
+    }
+
     signal homeSelected()
     signal librarySelected()
     signal settingsRequested()
     signal playlistSelected(int index, var pl)
     signal onlinePlaylistSelected(var pl)
+    signal customPlaylistDeleteRequested(string playlistId)
     signal trackSelected(var trk)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
 
@@ -37,7 +88,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 4
 
-            // Home Button (Online YouTube Music)
+            // Home Button
             Rectangle {
                 Layout.fillWidth: true
                 height: 42
@@ -61,7 +112,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Home (Online)"
+                        text: "Home"
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -100,7 +151,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Downloads (Local)"
+                        text: "Downloads"
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -284,7 +335,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: root.currentView === "library" ? "Local Collections" : "Featured & Moods"
+                            text: root.currentView === "library" ? "Collections" : "Featured Playlists"
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -292,7 +343,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: (root.currentView === "library" ? (root.playlists ? root.playlists.length : 0) : ((root.onlinePlaylists && root.onlinePlaylists.length > 0) ? root.onlinePlaylists.length : (root.playlists ? root.playlists.length : 0))) + ""
+                            text: (root.allPlaylists ? root.allPlaylists.length : 0) + ""
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textMuted
@@ -308,7 +359,7 @@ Rectangle {
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-                        model: root.currentView === "library" ? root.playlists : ((root.onlinePlaylists && root.onlinePlaylists.length > 0) ? root.onlinePlaylists : root.playlists)
+                        model: root.allPlaylists
 
                         delegate: Rectangle {
                             id: plItem
@@ -316,8 +367,9 @@ Rectangle {
                             height: 52
                             radius: 6
 
-                            readonly property bool isLocal: root.currentView === "library" || !modelData.playlistId
-                            readonly property bool isSelected: isLocal ? (root.currentView === "library" && index === root.selectedIndex) : ((modelData.playlistId && modelData.playlistId === root.activePlaylistId) || (modelData.id && modelData.id === root.activePlaylistId))
+                            readonly property bool isCustom: !!modelData.isCustom || String(modelData.id || "").startsWith("custom_pl_")
+                            readonly property bool isLocal: isCustom || !!modelData.isLocal || !modelData.playlistId
+                            readonly property bool isSelected: (modelData.id && modelData.id === root.activePlaylistId) || (modelData.playlistId && modelData.playlistId === root.activePlaylistId)
 
                             color: isSelected ? Theme.bgHighlight : (plH.hovered ? Theme.bgCardHover : "transparent")
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -375,7 +427,7 @@ Rectangle {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.subtitle || (modelData.count ? (modelData.count + " songs") : (modelData.author || "YouTube Music"))
+                                        text: modelData.subtitle || (modelData.count ? (modelData.count + " songs") : (modelData.tracks ? (modelData.tracks.length + " songs") : (modelData.author || "Playlist")))
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textSecondary
@@ -410,17 +462,51 @@ Rectangle {
                                 }
                             }
 
+                            // Delete Custom Playlist Button (Direct child with high z and separate geometry)
+                            Item {
+                                id: delBtn
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 28
+                                height: 28
+                                visible: plItem.isCustom && plH.hovered
+                                z: 50
+
+                                HoverHandler { id: delH }
+
+                                SpotifyIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/user-trash-symbolic.svg"
+                                    iconSize: 14
+                                    color: delH.hovered ? "#ff5252" : Theme.textMuted
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    preventStealing: true
+                                    onClicked: mouse => {
+                                        mouse.accepted = true;
+                                        root.customPlaylistDeleteRequested(modelData.id || modelData.playlistId);
+                                    }
+                                }
+                            }
+
                             MouseArea {
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.right: (plItem.isCustom && plH.hovered) ? delBtn.left : parent.right
+                                z: 1
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    root.activePlaylistId = modelData.id || modelData.playlistId || "";
                                     if (plItem.isLocal) {
                                         root.selectedIndex = index;
                                         root.playlistSelected(index, modelData);
                                     } else {
-                                        root.activePlaylistId = modelData.playlistId || modelData.id || "";
                                         root.onlinePlaylistSelected(modelData);
-                                        root.playlistSelected(index, modelData);
                                     }
                                 }
                             }

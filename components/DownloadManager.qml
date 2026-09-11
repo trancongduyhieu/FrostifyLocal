@@ -6,6 +6,8 @@ Item {
     id: root
 
     property var downloadTasks: ({}) // videoId -> task object
+    property var tasksList: []
+    onDownloadTasksChanged: root.tasksList = root.getTasksList()
     property int activeDownloadsCount: 0
     property int batchTotal: 0
     property int batchCompleted: 0
@@ -77,6 +79,29 @@ Item {
             "python3", win.appDir + "/backend/download_manager.py", "cancel",
             videoId
         ]);
+        var updated = Object.assign({}, root.downloadTasks);
+        delete updated[videoId];
+        root.downloadTasks = updated;
+    }
+
+    function getTasksList() {
+        if (!root.downloadTasks) return [];
+        var arr = [];
+        for (var k in root.downloadTasks) {
+            arr.push(root.downloadTasks[k]);
+        }
+        return arr;
+    }
+
+    function clearCompleted() {
+        var updated = {};
+        for (var k in root.downloadTasks) {
+            var t = root.downloadTasks[k];
+            if (t.state === 1 || t.state === 2) {
+                updated[k] = t;
+            }
+        }
+        root.downloadTasks = updated;
     }
 
     function handleEvent(line) {

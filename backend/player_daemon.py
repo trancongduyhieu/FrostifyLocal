@@ -96,11 +96,11 @@ def resolve_media_path(file_path):
             if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
                 return cached.get("stream_url")
 
-            # In background, warm up the cache for fast seek
-            import threading
-            threading.Thread(target=ytmusic_helper.resolve_stream_url, args=(vid,), daemon=True).start()
+            # Resolve direct stream URL using android/ios bypass
+            res = ytmusic_helper.resolve_stream_url(vid)
+            if res and res.get("stream_url"):
+                return res.get("stream_url")
 
-            # Return direct watch URL for instant MPV playback without blocking Python
             return f"https://www.youtube.com/watch?v={vid}"
         except Exception as e:
             sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
@@ -273,6 +273,11 @@ def main():
     elif action == "volume" and len(sys.argv) > 2:
         vol = float(sys.argv[2])
         send_mpv_cmd(["set_property", "volume", vol])
+
+    elif action == "prewarm" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        if vid:
+            ytmusic_helper.resolve_stream_url(vid)
 
     elif action == "status":
         ensure_mpv()

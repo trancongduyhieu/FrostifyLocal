@@ -29,6 +29,39 @@ def get_duration(file_path):
         return "--:--", 0.0
 
 import sqlite3
+import hashlib
+
+THUMB_DIR = os.path.join(HOME, ".cache", "frostify", "thumbnails")
+os.makedirs(THUMB_DIR, exist_ok=True)
+
+def extract_embedded_cover(file_path):
+    """Extract embedded album art from audio file using ffmpeg and cache it."""
+    if not file_path or not os.path.exists(file_path):
+        return ""
+    
+    # Check if a sibling image exists (e.g. song.jpg, song.png, cover.jpg)
+    base_no_ext = os.path.splitext(file_path)[0]
+    for ext in (".jpg", ".jpeg", ".png", ".webp"):
+        sibling = base_no_ext + ext
+        if os.path.exists(sibling) and os.path.getsize(sibling) > 1000:
+            return sibling
+
+    # Create deterministic hash path in ~/.cache/frostify/thumbnails/
+    f_hash = hashlib.md5(file_path.encode("utf-8")).hexdigest()
+    out_thumb = os.path.join(THUMB_DIR, f"{f_hash}.jpg")
+
+    if os.path.exists(out_thumb) and os.path.getsize(out_thumb) > 1000:
+        return out_thumb
+
+    try:
+        cmd = ["ffmpeg", "-y", "-i", file_path, "-an", "-vcodec", "copy", out_thumb]
+        res = subprocess.run(cmd, capture_output=True, timeout=3)
+        if res.returncode == 0 and os.path.exists(out_thumb) and os.path.getsize(out_thumb) > 1000:
+            return out_thumb
+    except Exception:
+        pass
+
+    return ""
 
 def scan_library():
     tracks = []
@@ -106,6 +139,14 @@ def scan_library():
                     title = base
                 
                 thumb = find_thumbnail(title, artist)
+                if not thumb:
+                    thumb = extract_embedded_cover(full_path)
+
+                try:
+                    mtime = int(os.path.getmtime(full_path))
+                except Exception:
+                    mtime = 0
+
                 tracks.append({
                     "id": len(tracks) + 1,
                     "title": title.strip(),
@@ -115,7 +156,8 @@ def scan_library():
                     "path": full_path,
                     "filename": f,
                     "duration": "--:--",
-                    "image": thumb
+                    "image": thumb,
+                    "mtime": mtime
                 })
 
     # 2. Scan Downloads_Phone
@@ -131,6 +173,14 @@ def scan_library():
                     title = base
                 
                 thumb = find_thumbnail(title, artist)
+                if not thumb:
+                    thumb = extract_embedded_cover(full_path)
+
+                try:
+                    mtime = int(os.path.getmtime(full_path))
+                except Exception:
+                    mtime = 0
+
                 tracks.append({
                     "id": len(tracks) + 1,
                     "title": title.strip(),
@@ -140,7 +190,8 @@ def scan_library():
                     "path": full_path,
                     "filename": f,
                     "duration": "--:--",
-                    "image": thumb
+                    "image": thumb,
+                    "mtime": mtime
                 })
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
@@ -217,11 +268,59 @@ def delete_track(path="", filename="", title=""):
         print(json.dumps({"success": True, "deleted_files": deleted_files, "remaining_tracks": 0}))
         return True
 
+def batch_delete_tracks(paths):
+    deleted_files = []
+    if not isinstance(paths, list):
+        try:
+            paths = json.loads(paths)
+        except Exception:
+            paths = [paths]
+
+    paths_set = set(p for p in paths if p and not p.startswith("ytdl://"))
+    for p in paths_set:
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+                deleted_files.append(p)
+            except Exception as e:
+                print(f"Error removing {p}: {e}", file=sys.stderr)
+        lrc_path = os.path.splitext(p)[0] + ".lrc"
+        if os.path.exists(lrc_path):
+            try:
+                os.remove(lrc_path)
+                deleted_files.append(lrc_path)
+            except Exception:
+                pass
+
+    if os.path.exists(OUT_JSON):
+        try:
+            with open(OUT_JSON, "r", encoding="utf-8") as f:
+                tracks = json.load(f)
+            new_tracks = [t for t in tracks if t.get("path") not in paths_set]
+            for i, t in enumerate(new_tracks):
+                t["id"] = i + 1
+            tmp_json = OUT_JSON + ".tmp"
+            with open(tmp_json, "w", encoding="utf-8") as f:
+                json.dump(new_tracks, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_json, OUT_JSON)
+            print(json.dumps({
+                "success": True,
+                "deleted_count": len(deleted_files),
+                "remaining_tracks": len(new_tracks)
+            }))
+            return True
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            return False
+    return True
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "delete":
         p = sys.argv[2] if len(sys.argv) > 2 else ""
         fn = sys.argv[3] if len(sys.argv) > 3 else ""
         t = sys.argv[4] if len(sys.argv) > 4 else ""
         delete_track(p, fn, t)
+    elif len(sys.argv) > 1 and sys.argv[1] == "batch_delete" and len(sys.argv) > 2:
+        batch_delete_tracks(sys.argv[2])
     else:
         scan_library()

@@ -54,9 +54,11 @@ Scope {
     property string authAccountName: ""
     property string authAccountThumb: ""
     property bool syncHistoryToGoogle: true
+    property bool showSidebar: true
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
+    property var customPlaylists: []
     property var allTracks: []
     property var currentTracks: []
     property var browsingTracks: []
@@ -65,6 +67,7 @@ Scope {
     property var ytMusicTracks: []
     property bool isSearchingYT: false
     property string lastYTQuery: ""
+    property string mainSectionTitle: "Downloads"
 
     Timer {
         id: ytSearchDebounce
@@ -281,6 +284,7 @@ Scope {
                     if (Array.isArray(arr) && arr.length > 0) {
                         win.browsingTracks = arr;
                         win.currentView = "playlist";
+                        win.mainSectionTitle = playlistTracksProc.targetTitle;
                         mainGrid.sectionTitle = playlistTracksProc.targetTitle;
                     }
                 } catch(e) {
@@ -493,6 +497,25 @@ Scope {
         var tImage = trk.image || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
 
+        // Pre-warm the next track's direct stream URL in background so switching is instant
+        if (win.currentTracks && win.currentTracks.length > 1) {
+            var curIdx = -1;
+            for (var ci = 0; ci < win.currentTracks.length; ci++) {
+                if (win.isSameTrack(win.currentTracks[ci], trk)) {
+                    curIdx = ci;
+                    break;
+                }
+            }
+            var nextIdx = (curIdx !== -1 && curIdx + 1 < win.currentTracks.length) ? (curIdx + 1) : 0;
+            var nextTrk = win.currentTracks[nextIdx];
+            var nextVid = (nextTrk && (nextTrk.videoId || (nextTrk.path && nextTrk.path.startsWith("ytdl://"))))
+                ? (nextTrk.videoId || nextTrk.path.replace("ytdl://", ""))
+                : "";
+            if (nextVid) {
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "prewarm", nextVid]);
+            }
+        }
+
         if (startRadio && trk.videoId) {
             radioProc.running = false;
             radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", trk.videoId];
@@ -508,18 +531,51 @@ Scope {
     }
 
     function loadPlaylistTracks(pl) {
-        if (!pl || !pl.playlistId) return;
-        win.activePlaylistId = pl.playlistId || pl.id || "";
+        if (!pl) return;
+        var pid = pl.playlistId || pl.id || pl.browseId || "";
+        if (!pid) return;
+        win.activePlaylistId = pid;
         if (win.currentView !== "search" && win.currentView !== "playlist") {
             win.previousView = win.currentView;
         }
         win.currentView = "playlist";
-        mainGrid.sectionTitle = pl.title || "Playlist";
+        win.mainSectionTitle = pl.title || pl.name || "Playlist";
+        mainGrid.sectionTitle = pl.title || pl.name || "Playlist";
+
+        // Check if custom / local playlist
+        var isCustomPl = !!pl.isCustom || String(pid).startsWith("custom_pl_") || (pl.tracks && pl.tracks.length >= 0 && pl.isLocal);
+        if (isCustomPl) {
+            var foundTracks = pl.tracks || [];
+            if (win.customPlaylists) {
+                for (var i = 0; i < win.customPlaylists.length; i++) {
+                    if (win.customPlaylists[i].id === pid) {
+                        foundTracks = win.customPlaylists[i].tracks || [];
+                        break;
+                    }
+                }
+            }
+            win.browsingTracks = foundTracks;
+            win.isSearchingYT = false;
+            return;
+        }
+
+        win.browsingTracks = [];
         win.isSearchingYT = true;
         playlistTracksProc.running = false;
         playlistTracksProc.targetTitle = pl.title || "Playlist";
-        playlistTracksProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "playlist", pl.playlistId];
+        playlistTracksProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "playlist", pid];
         playlistTracksProc.running = true;
+    }
+
+    function deleteCustomPlaylist(plId) {
+        if (!plId) return;
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "delete", plId
+        ]);
+        refreshPlaylistsTimer.restart();
+        if (win.activePlaylistId === plId && win.currentView === "playlist") {
+            win.currentView = "home";
+        }
     }
 
     function checkAuthStatus() {
@@ -546,6 +602,7 @@ Scope {
     Component.onCompleted: {
         win.loadHomeFeed();
         win.checkAuthStatus();
+        win.loadCustomPlaylists();
     }
 
     // Master Container with Spotify Dark Aesthetic
@@ -565,8 +622,12 @@ Scope {
                 Layout.fillWidth: true
                 currentTab: win.currentTab
                 currentView: win.currentView
+                isSidebarVisible: win.showSidebar
 
                 onTabSelected: tab => win.filterByTab(tab)
+                onToggleSidebarRequested: {
+                    win.showSidebar = !win.showSidebar;
+                }
 
                 onBackRequested: {
                     if (win.currentView === "playlist" || win.currentView === "search") {
@@ -603,6 +664,9 @@ Scope {
                         win.filterLocalSearch(query);
                     }
                 }
+                onDownloadPopoverRequested: {
+                    downloadPopover.isOpen = !downloadPopover.isOpen;
+                }
             }
 
             // Main Content Area: 3-Column Desktop Layout (SimpMusic Optimized)
@@ -618,36 +682,40 @@ Scope {
                     id: leftSidebar
                     Layout.fillHeight: true
                     Layout.fillWidth: false
-                    Layout.preferredWidth: visible ? 240 : 0
-                    Layout.maximumWidth: visible ? 240 : 0
-                    Layout.minimumWidth: visible ? 240 : 0
+                    readonly property bool shouldBeVisible: win.showSidebar && (!win.showAmberolDetails || win.width >= 900)
+                    visible: shouldBeVisible
+                    Layout.preferredWidth: shouldBeVisible ? 240 : 0
+                    Layout.maximumWidth: shouldBeVisible ? 240 : 0
+                    Layout.minimumWidth: shouldBeVisible ? 240 : 0
                     playlists: win.playlists
                     onlinePlaylists: win.homeFeaturedPlaylists
+                    customPlaylists: win.customPlaylists
                     queueTracks: win.currentTracks
                     currentTrack: win.currentTrack
                     isPlaying: win.isPlaying
                     activePlaylistId: win.activePlaylistId
                     selectedIndex: win.selectedPlaylistIndex
                     currentView: win.currentView
-                    visible: !win.showAmberolDetails || win.width >= 900
 
                     onHomeSelected: {
                         if (win.currentView !== "home") win.previousView = win.currentView;
                         win.currentView = "home";
+                        win.mainSectionTitle = "Home";
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onLibrarySelected: {
                         if (win.currentView !== "library") win.previousView = win.currentView;
                         win.currentView = "library";
                         win.browsingTracks = win.allTracks;
-                        mainGrid.sectionTitle = "Downloads (Local)";
+                        win.mainSectionTitle = "Downloads";
+                        mainGrid.sectionTitle = "Downloads";
                         if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onSettingsRequested: {
                         settingsModal.visible = true;
                     }
                     onPlaylistSelected: (idx, pl) => {
-                        if (pl && pl.playlistId) {
+                        if (pl && (pl.playlistId || pl.id)) {
                             win.loadPlaylistTracks(pl);
                         } else {
                             if (win.currentView !== "library") win.previousView = win.currentView;
@@ -655,11 +723,13 @@ Scope {
                             win.selectedPlaylistIndex = idx;
                             if (pl && pl.id) win.selectPlaylist(pl.id);
                         }
-                        if (win.width < 1020) win.showAmberolDetails = false;
                     }
                     onOnlinePlaylistSelected: pl => {
                         win.loadPlaylistTracks(pl);
                         if (win.width < 1020) win.showAmberolDetails = false;
+                    }
+                    onCustomPlaylistDeleteRequested: plId => {
+                        win.deleteCustomPlaylist(plId);
                     }
                     onTrackSelected: trk => {
                         if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
@@ -706,7 +776,7 @@ Scope {
                         tracks: win.browsingTracks
                         currentTrack: win.currentTrack
                         isPlaying: win.isPlaying
-                        sectionTitle: win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Downloads & Local Library"
+                        sectionTitle: win.mainSectionTitle
                         isLoading: win.isSearchingYT
 
                         onTrackPlayRequested: trk => {
@@ -725,6 +795,9 @@ Scope {
                             win.showAmberolDetails = true;
                         }
                         onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                        onShufflePlayRequested: win.shufflePlayBrowsing()
+                        onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
+                        onCreatePlaylistRequested: trks => win.createCustomPlaylistFromTracks(trks)
                     }
                 }
 
@@ -758,7 +831,7 @@ Scope {
                 isShuffle: win.isShuffle
                 isRepeat: win.isRepeat
                 isLyricsActive: win.showAmberolDetails
-                isQueueActive: leftSidebar.sidebarTab === "queue"
+                isQueueActive: win.showSidebar
 
                 onPlayPauseClicked: win.togglePlay()
                 onNextClicked: win.playNext()
@@ -767,7 +840,7 @@ Scope {
                     win.showAmberolDetails = !win.showAmberolDetails;
                 }
                 onQueueClicked: {
-                    leftSidebar.sidebarTab = (leftSidebar.sidebarTab === "queue" ? "playlists" : "queue");
+                    win.showSidebar = !win.showSidebar;
                 }
                 onToggleShuffle: {
                     win.isShuffle = !win.isShuffle;
@@ -820,6 +893,8 @@ Scope {
 
         TrackContextMenu {
             id: trackContextMenu
+            dlMgr: downloadManager
+            customPlaylists: win.customPlaylists
             onPlayNextRequested: trk => win.insertTrackPlayNext(trk)
             onAddToQueueRequested: trk => win.appendTrackToQueue(trk)
             onStartRadioRequested: trk => {
@@ -828,7 +903,10 @@ Scope {
             onOpenFolderRequested: trk => win.openTrackFolder(trk)
             onDownloadTrackRequested: trk => win.downloadTrack(trk)
             onRemoveFromQueueRequested: trk => win.removeTrackFromQueue(trk)
+            onRemoveFromPlaylistRequested: (trk, plId) => win.removeTrackFromCustomPlaylist(plId, trk)
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
+            onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
+            onCreatePlaylistWithTrackRequested: trk => win.createCustomPlaylistFromTracks([trk])
         }
 
         DownloadManager {
@@ -836,6 +914,11 @@ Scope {
             onTaskCompleted: (videoId, title, path) => {
                 libLoader.reload();
             }
+        }
+
+        DownloadQueuePopover {
+            id: downloadPopover
+            dlMgr: downloadManager
         }
     }
 
@@ -910,7 +993,7 @@ Scope {
     LibraryLoader {
         id: libLoader
         onLoaded: {
-            win.playlists = libLoader.playlists;
+            win.playlists = (libLoader.playlists || []).concat(win.customPlaylists || []);
             win.allTracks = libLoader.allTracks;
             win.browsingTracks = win.allTracks;
             if (!win.currentTracks || win.currentTracks.length === 0) {
@@ -942,12 +1025,24 @@ Scope {
     function selectPlaylist(pid) {
         if (pid === "all") {
             win.browsingTracks = win.allTracks;
+            mainGrid.sectionTitle = "Downloads & All Tracks";
         } else if (pid === "simp") {
             win.browsingTracks = win.allTracks.filter(t => t.source === "SimpMusic");
+            mainGrid.sectionTitle = "SimpMusic Tracks";
         } else if (pid === "downloads") {
             win.browsingTracks = win.allTracks.filter(t => t.source === "Downloads");
+            mainGrid.sectionTitle = "Downloads";
         } else if (pid === "ado") {
             win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
+            mainGrid.sectionTitle = "Ado Collection";
+        } else if (pid && pid.startsWith("custom_pl_")) {
+            for (var i = 0; i < win.customPlaylists.length; i++) {
+                if (win.customPlaylists[i].id === pid) {
+                    win.browsingTracks = win.customPlaylists[i].tracks || [];
+                    mainGrid.sectionTitle = win.customPlaylists[i].title || "Playlist";
+                    break;
+                }
+            }
         }
     }
 
@@ -973,9 +1068,11 @@ Scope {
         if (q && q.trim() !== "") {
             win.currentView = "library";
             win.showAmberolDetails = false;
+            win.mainSectionTitle = 'Search: "' + q + '"';
             mainGrid.sectionTitle = 'Search: "' + q + '"';
         } else {
-            mainGrid.sectionTitle = win.currentTab === "ytmusic" ? "YouTube Music (Online)" : "Downloads & Local Library";
+            win.mainSectionTitle = win.currentTab === "ytmusic" ? "YouTube Music" : "Downloads";
+            mainGrid.sectionTitle = win.mainSectionTitle;
         }
         if (win.currentTab === "ytmusic") {
             win.lastYTQuery = q;
@@ -1181,6 +1278,120 @@ Scope {
     function downloadTrack(trk) {
         if (!trk) return;
         downloadManager.enqueue(trk);
+    }
+
+    function shufflePlayBrowsing() {
+        var sourceTracks = (win.browsingTracks && win.browsingTracks.length > 0) ? win.browsingTracks : win.allTracks;
+        if (!sourceTracks || sourceTracks.length === 0) return;
+        var shuffled = sourceTracks.slice();
+        for (var i = shuffled.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var temp = shuffled[i];
+            shuffled[i] = shuffled[j];
+            shuffled[j] = temp;
+        }
+        win.currentTracks = shuffled;
+        var firstTrk = shuffled[0];
+        if (firstTrk && ((firstTrk.path && firstTrk.path.startsWith("ytdl://")) || firstTrk.videoId)) {
+            win.playOnlineTrack(firstTrk, false);
+        } else {
+            win.playTrack(firstTrk);
+        }
+    }
+
+    function shufflePlayDownloads() {
+        win.shufflePlayBrowsing();
+    }
+
+    function batchDeleteTracks(paths) {
+        if (!paths || paths.length === 0) return;
+        var pathSet = {};
+        for (var i = 0; i < paths.length; i++) {
+            pathSet[paths[i]] = true;
+        }
+
+        var currentDeleted = win.currentTrack && pathSet[win.currentTrack.path];
+
+        win.currentTracks = win.currentTracks.filter(t => !pathSet[t.path]);
+        win.allTracks = win.allTracks.filter(t => !pathSet[t.path]);
+        win.browsingTracks = win.browsingTracks.filter(t => !pathSet[t.path]);
+
+        if (currentDeleted) {
+            if (win.isPlaying && win.currentTracks.length > 0) {
+                win.playNext();
+            } else {
+                win.isPlaying = false;
+                win.currentTrack = null;
+                win.currentTime = 0.0;
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
+            }
+        }
+
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/library.py", "batch_delete",
+            JSON.stringify(paths)
+        ]);
+    }
+
+    Process {
+        id: customPlaylistsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr)) {
+                        win.customPlaylists = arr;
+                        win.playlists = (libLoader.playlists || []).concat(arr);
+                    }
+                } catch(e) {
+                    console.log("customPlaylistsProc error:", e);
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: refreshPlaylistsTimer
+        interval: 300
+        repeat: false
+        onTriggered: win.loadCustomPlaylists()
+    }
+
+    function loadCustomPlaylists() {
+        customPlaylistsProc.running = false;
+        customPlaylistsProc.command = ["python3", "-u", win.appDir + "/backend/playlist_manager.py", "list"];
+        customPlaylistsProc.running = true;
+    }
+
+    function createCustomPlaylistFromTracks(tracks) {
+        if (!tracks || tracks.length === 0) return;
+        var plName = "Playlist #" + ((win.customPlaylists ? win.customPlaylists.length : 0) + 1);
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "create",
+            plName, JSON.stringify(tracks)
+        ]);
+        refreshPlaylistsTimer.restart();
+    }
+
+    function addTrackToCustomPlaylist(plId, track) {
+        if (!plId || !track) return;
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "add",
+            plId, JSON.stringify([track])
+        ]);
+        refreshPlaylistsTimer.restart();
+    }
+
+    function removeTrackFromCustomPlaylist(plId, track) {
+        if (!plId || !track) return;
+        var p = track.path || "";
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "remove",
+            plId, p
+        ]);
+        refreshPlaylistsTimer.restart();
+        win.browsingTracks = win.browsingTracks.filter(t => t.path !== p);
     }
 
     Process {

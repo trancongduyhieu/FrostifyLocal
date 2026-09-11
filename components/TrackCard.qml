@@ -13,8 +13,11 @@ Rectangle {
 
     property var track: null
     property bool isPlaying: false
+    property bool isSelectionMode: false
+    property bool isSelected: false
     signal playRequested(var trk)
     signal detailsRequested(var trk)
+    signal selectionToggled(var trk)
     signal contextMenuRequested(var trk, real globalX, real globalY)
 
     readonly property string trackVideoId: {
@@ -51,7 +54,11 @@ Rectangle {
             Image {
                 id: coverImg
                 anchors.fill: parent
-                source: root.track && root.track.image ? root.track.image : ""
+                source: {
+                    if (!root.track || !root.track.image) return "";
+                    var s = root.track.image;
+                    return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                }
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 visible: status === Image.Ready
@@ -135,6 +142,30 @@ Rectangle {
                     color: "#00a0cb"
                 }
             }
+
+            // Selection Checkbox
+            Rectangle {
+                id: selectBox
+                width: 26
+                height: 26
+                radius: 13
+                color: root.isSelected ? Theme.spotifyGreen : Qt.rgba(0.08, 0.08, 0.1, 0.85)
+                border.color: root.isSelected ? Theme.spotifyGreen : Qt.rgba(1, 1, 1, 0.6)
+                border.width: 1.5
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 6
+                z: 16
+                visible: root.isSelectionMode
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    visible: root.isSelected
+                    source: "../assets/icons/emblem-ok-symbolic.svg"
+                    iconSize: 13
+                    color: "#000000"
+                }
+            }
         }
 
         // Title
@@ -175,6 +206,10 @@ Rectangle {
         onClicked: mouse => {
             if (win && win.isContextMenuActive) {
                 mouse.accepted = true;
+                return;
+            }
+            if (root.isSelectionMode) {
+                root.selectionToggled(root.track);
                 return;
             }
             if (mouse.button === Qt.RightButton) {

@@ -265,6 +265,7 @@ class DownloadManager:
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": os.path.join(dl_dir, "%(title)s.%(ext)s"),
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb"]}},
             "writethumbnail": True,
             "embedthumbnail": True,
             "postprocessors": [
@@ -348,7 +349,7 @@ class DownloadManager:
         try:
             lib_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.py")
             if os.path.exists(lib_script):
-                subprocess.Popen(["python3", lib_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["python3", lib_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         except Exception:
             pass
 

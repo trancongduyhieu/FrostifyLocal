@@ -14,12 +14,15 @@ Rectangle {
     property var suggestions: []
     property bool isSearching: false
     property bool canGoBack: currentView !== "home"
+    property bool isSidebarVisible: true
 
     signal tabSelected(string tab)
     signal searchRequested(string query, string mode)
     signal searchSubmitted(string query, string mode)
     signal backRequested()
     signal forwardRequested()
+    signal downloadPopoverRequested()
+    signal toggleSidebarRequested()
 
     onCurrentViewChanged: {
         searchMode = (currentView === "library" ? "offline" : "online");
@@ -32,9 +35,33 @@ Rectangle {
         anchors.rightMargin: 20
         spacing: 14
 
-        // Navigation buttons: Back / Forward
+        // Navigation buttons: Sidebar Toggle / Back / Forward
         RowLayout {
             spacing: 8
+
+            // Left Sidebar Collapse / Expand Toggle
+            Rectangle {
+                width: 34
+                height: 34
+                radius: 17
+                color: sbM.containsMouse ? "#282828" : "#181818"
+                Behavior on color { ColorAnimation { duration: 100 } }
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/view-queue-symbolic.svg"
+                    iconSize: 15
+                    color: headerRoot.isSidebarVisible ? Theme.spotifyGreen : (sbM.containsMouse ? "#ffffff" : Theme.textMuted)
+                }
+
+                MouseArea {
+                    id: sbM
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: headerRoot.toggleSidebarRequested()
+                }
+            }
 
             Rectangle {
                 width: 34
@@ -243,16 +270,17 @@ Rectangle {
             }
         }
 
-        // Active Download Queue Pill (SimpMusic Style)
+        // Active Download Queue Pill (SimpMusic Style - Persistent & Interactive)
         Rectangle {
             id: downloadQueuePill
             Layout.preferredHeight: 34
             Layout.preferredWidth: dlRow.implicitWidth + 24
             radius: 17
-            color: dlMouse.containsMouse ? Qt.rgba(0.12, 0.12, 0.16, 0.95) : Qt.rgba(0.08, 0.08, 0.11, 0.85)
-            border.color: Qt.rgba(0, 200, 83, 0.4)
+            readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeDownloadsCount > 0
+            color: dlMouse.containsMouse ? Qt.rgba(0.14, 0.14, 0.18, 0.95) : Qt.rgba(0.08, 0.08, 0.11, 0.85)
+            border.color: hasActive ? Qt.rgba(0, 200, 83, 0.6) : (dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.12))
             border.width: 1
-            visible: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeDownloadsCount > 0
+            visible: true
 
             RowLayout {
                 id: dlRow
@@ -262,14 +290,24 @@ Rectangle {
                 DownloadingSpinner {
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 16
-                    running: true
+                    visible: downloadQueuePill.hasActive
+                    running: downloadQueuePill.hasActive
                     color: "#00c853"
                     iconSize: 14
                 }
 
+                SpotifyIcon {
+                    visible: !downloadQueuePill.hasActive
+                    source: "../assets/icons/download-symbolic.svg"
+                    iconSize: 14
+                    color: dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary
+                }
+
                 Text {
-                    text: "Downloading (" + (typeof downloadManager !== "undefined" && downloadManager ? downloadManager.activeDownloadsCount : 0) + ")"
-                    color: "#00c853"
+                    text: downloadQueuePill.hasActive
+                          ? ("Downloading (" + (downloadManager ? downloadManager.activeDownloadsCount : 0) + ")")
+                          : "Downloads"
+                    color: downloadQueuePill.hasActive ? "#00c853" : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -282,9 +320,7 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (typeof win !== "undefined" && win) {
-                        win.currentTab = "downloads";
-                    }
+                    headerRoot.downloadPopoverRequested();
                 }
             }
         }

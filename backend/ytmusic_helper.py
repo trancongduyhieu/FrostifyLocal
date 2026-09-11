@@ -765,28 +765,79 @@ def get_playlist_tracks(playlist_id, limit=50):
         return []
     yt = get_ytmusic_client()
     raw_tracks = []
+    tracks = []
 
-    # Radio and automix playlists have IDs starting with RD or VLRD
-    if playlist_id.startswith("RD") or playlist_id.startswith("VLRD"):
+    clean_id = playlist_id
+    if clean_id.startswith("VL"):
+        clean_id = clean_id[2:]
+
+    # Case 1: Album browseId (starts with MPREb_)
+    if clean_id.startswith("MPREb_") or playlist_id.startswith("MPREb_"):
+        try:
+            alb = yt.get_album(clean_id)
+            thumbs = alb.get("thumbnails", [])
+            alb_thumb = thumbs[-1].get("url", "") if thumbs else ""
+            if "w120" in alb_thumb or "w226" in alb_thumb:
+                alb_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', alb_thumb)
+
+            for t in alb.get("tracks", []):
+                if not t.get("thumbnails") and alb_thumb:
+                    t["thumbnails"] = [{"url": alb_thumb}]
+                norm = normalize_track(t)
+                if norm:
+                    tracks.append(norm)
+            if tracks:
+                cache_online_tracks(tracks)
+                return tracks
+        except Exception as e:
+            sys.stderr.write(f"[get_album error for {clean_id}]: {e}\n")
+
+    # Case 2: Radio and automix playlists (RD or VLRD)
+    if playlist_id.startswith("RD") or playlist_id.startswith("VLRD") or clean_id.startswith("RD"):
         try:
             res = yt.get_watch_playlist(playlistId=playlist_id, limit=limit)
             raw_tracks = res.get("tracks", [])
         except Exception as e:
-            sys.stderr.write(f"[get_watch_playlist for {playlist_id} error]: {e}\n")
+            try:
+                res = yt.get_watch_playlist(playlistId=clean_id, limit=limit)
+                raw_tracks = res.get("tracks", [])
+            except Exception as e2:
+                sys.stderr.write(f"[get_watch_playlist error for {playlist_id}]: {e} | {e2}\n")
 
+    # Case 3: Standard playlist
     if not raw_tracks:
         try:
             pl = yt.get_playlist(playlist_id, limit=limit)
             raw_tracks = pl.get("tracks", [])
         except Exception as e:
-            # Fallback to watch playlist if standard get_playlist throws
-            try:
-                res = yt.get_watch_playlist(playlistId=playlist_id, limit=limit)
-                raw_tracks = res.get("tracks", [])
-            except Exception as e2:
-                sys.stderr.write(f"[get_playlist_tracks error for {playlist_id}]: {e} | {e2}\n")
+            if playlist_id.startswith("VL"):
+                try:
+                    pl = yt.get_playlist(clean_id, limit=limit)
+                    raw_tracks = pl.get("tracks", [])
+                except Exception:
+                    pass
 
-    tracks = []
+            if not raw_tracks:
+                try:
+                    res = yt.get_watch_playlist(playlistId=playlist_id, limit=limit)
+                    raw_tracks = res.get("tracks", [])
+                except Exception:
+                    try:
+                        alb = yt.get_album(clean_id)
+                        thumbs = alb.get("thumbnails", [])
+                        alb_thumb = thumbs[-1].get("url", "") if thumbs else ""
+                        for t in alb.get("tracks", []):
+                            if not t.get("thumbnails") and alb_thumb:
+                                t["thumbnails"] = [{"url": alb_thumb}]
+                            norm = normalize_track(t)
+                            if norm:
+                                tracks.append(norm)
+                        if tracks:
+                            cache_online_tracks(tracks)
+                            return tracks
+                    except Exception as e_alb:
+                        sys.stderr.write(f"[get_playlist_tracks all fallback error for {playlist_id}]: {e} | {e_alb}\n")
+
     for t in raw_tracks:
         norm = normalize_track(t)
         if norm:
@@ -839,20 +890,18 @@ def resolve_stream_url(video_id):
         return cached
 
     try:
-        from yt_dlp.networking.impersonate import ImpersonateTarget
         import yt_dlp
 
-        target = ImpersonateTarget.from_str("chrome")
         ydl_opts = {
-            "format": "ba",
-            "impersonate": target,
             "quiet": True,
-            "no_warnings": True
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["android"]}}
         }
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            stream_url = info.get("url")
+            formats = [f for f in info.get("formats", []) if f.get("acodec") != "none"]
+            stream_url = formats[-1]["url"] if formats else info.get("url")
             duration = info.get("duration") or 0
             if stream_url:
                 res = {

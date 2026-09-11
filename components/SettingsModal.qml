@@ -113,7 +113,7 @@ Rectangle {
                         Layout.fillWidth: true
                         text: root.isLoggedIn
                               ? ("Connected: " + (root.accountName ? root.accountName : "Google Account"))
-                              : "Not Connected (Guest / Local Taste Mode)"
+                              : "Not Connected (Guest Mode)"
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true

@@ -20,6 +20,9 @@ Item {
     property bool isQueueItem: false
     property real targetX: 0
     property real targetY: 0
+    property var dlMgr: null
+    property var customPlaylists: []
+    property bool isPlaylistSubmenuOpen: false
 
     Timer {
         id: closeTimer
@@ -36,11 +39,15 @@ Item {
     signal openFolderRequested(var track)
     signal downloadTrackRequested(var track)
     signal removeFromQueueRequested(var track)
+    signal removeFromPlaylistRequested(var track, string playlistId)
     signal deleteTrackRequested(var track)
+    signal addToPlaylistRequested(var track, string playlistId)
+    signal createPlaylistWithTrackRequested(var track)
 
     function openAt(posTrack, xPos, yPos, queueItem) {
         closeTimer.stop();
         root.closingGuard = false;
+        root.isPlaylistSubmenuOpen = false;
         root.track = posTrack;
         root.isQueueItem = !!queueItem;
         root.targetX = xPos;
@@ -198,6 +205,48 @@ Item {
                 }
             }
 
+            // Action: Add to playlist
+            MenuItemButton {
+                text: "Add to playlist"
+                iconSource: "../assets/icons/folder-music-symbolic.svg"
+                onClicked: {
+                    root.isPlaylistSubmenuOpen = !root.isPlaylistSubmenuOpen;
+                }
+            }
+
+            // Expandable Playlist choices
+            Column {
+                visible: root.isPlaylistSubmenuOpen
+                width: parent.width
+                spacing: 2
+
+                MenuItemButton {
+                    text: "+ New Playlist"
+                    iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                    textColor: "#00c853"
+                    iconColor: "#00c853"
+                    onClicked: {
+                        var t = root.track;
+                        root.closeMenu();
+                        if (t) root.createPlaylistWithTrackRequested(t);
+                    }
+                }
+
+                Repeater {
+                    model: root.customPlaylists || []
+                    delegate: MenuItemButton {
+                        text: modelData.title || modelData.name || "Playlist"
+                        iconSource: "../assets/icons/folder-music-symbolic.svg"
+                        onClicked: {
+                            var t = root.track;
+                            var pid = modelData.id;
+                            root.closeMenu();
+                            if (t && pid) root.addToPlaylistRequested(t, pid);
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 width: parent.width - 16
                 height: 1
@@ -214,8 +263,8 @@ Item {
                     if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
                     return "";
                 }
-                property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(vid) : false
-                property real progress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(vid) : -1
+                property bool isDownloading: (root.dlMgr && vid) ? !!root.dlMgr.isDownloading(vid) : false
+                property real progress: (root.dlMgr && vid) ? root.dlMgr.getProgress(vid) : -1
 
                 text: isLocal ? "Open containing folder" : (isDownloading ? ("Downloading (" + Math.max(0, Math.round(progress)) + "%)...") : "Download track")
                 iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : (isDownloading ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/download-symbolic.svg")
@@ -243,7 +292,22 @@ Item {
                 visible: root.isQueueItem || (root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://")))
             }
 
-            // Action 5: Remove from Queue or Delete
+            // Action 5: Remove from Custom Playlist
+            MenuItemButton {
+                visible: typeof win !== "undefined" && win && win.currentView === "playlist" && win.activePlaylistId && win.activePlaylistId.startsWith("custom_pl_")
+                text: "Remove from playlist"
+                textColor: "#ff5252"
+                iconColor: "#ff5252"
+                iconSource: "../assets/icons/user-trash-symbolic.svg"
+                onClicked: {
+                    var t = root.track;
+                    var pid = (typeof win !== "undefined" && win) ? win.activePlaylistId : "";
+                    root.closeMenu();
+                    if (t && pid) root.removeFromPlaylistRequested(t, pid);
+                }
+            }
+
+            // Action 6: Remove from Queue or Delete
             MenuItemButton {
                 visible: root.isQueueItem || (root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://")))
                 text: root.isQueueItem ? "Remove from queue" : "Delete from library"

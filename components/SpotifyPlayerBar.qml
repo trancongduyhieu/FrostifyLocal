@@ -62,7 +62,11 @@ Rectangle {
                 Image {
                     id: miniCover
                     anchors.fill: parent
-                    source: root.currentTrack && root.currentTrack.image ? root.currentTrack.image : ""
+                    source: {
+                        if (!root.currentTrack || !root.currentTrack.image) return "";
+                        var s = root.currentTrack.image;
+                        return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                    }
                     fillMode: Image.PreserveAspectCrop
                     visible: status === Image.Ready
                 }
@@ -364,6 +368,33 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
+            // Lyrics button
+            Item {
+                width: 32; height: 32
+                HoverHandler { id: lyricsH }
+
+                SpotifyIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/view-lyrics-symbolic.svg"
+                    iconSize: 16
+                    color: root.isLyricsActive ? Theme.spotifyGreen : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
+                }
+
+                Rectangle {
+                    width: 4; height: 4; radius: 2
+                    color: Theme.spotifyGreen
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 2
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: root.isLyricsActive
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openDetailsRequested()
+                }
+            }
 
             // Queue button
             Item {
