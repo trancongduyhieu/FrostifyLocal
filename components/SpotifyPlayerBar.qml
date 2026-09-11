@@ -31,7 +31,7 @@ Rectangle {
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
     signal queueClicked()
-    signal openArtistRequested(string artistName)
+    signal openArtistRequested(string artistName, string channelId)
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -116,7 +116,12 @@ Rectangle {
                 Text {
                     id: artistLabel
                     Layout.fillWidth: true
-                    text: root.currentTrack ? root.currentTrack.artist : "Spotify Desktop"
+                    text: {
+                        if (!root.currentTrack) return "Spotify Desktop";
+                        var raw = String(root.currentTrack.artist || "").trim();
+                        var clean = raw.split(/\s*•\s*/)[0].replace(/\s*\d+([.,]\d+)?[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe).*/i, "").trim();
+                        return clean || raw || "Spotify Desktop";
+                    }
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     color: (root.currentTrack && artistMouse.containsMouse) ? Theme.spotifyGreen : Theme.textSecondary
@@ -129,7 +134,10 @@ Rectangle {
                         cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
                             if (root.currentTrack && root.currentTrack.artist) {
-                                root.openArtistRequested(root.currentTrack.artist);
+                                var raw = String(root.currentTrack.artist).trim();
+                                var clean = raw.split(/\s*•\s*/)[0].replace(/\s*\d+([.,]\d+)?[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe).*/i, "").trim();
+                                var ch = root.currentTrack.channelId || "";
+                                root.openArtistRequested(clean || raw, ch);
                             }
                         }
                     }
@@ -186,7 +194,9 @@ Rectangle {
                 // --- Prev Button ---
                 Item {
                     width: 32; height: 32
-                    HoverHandler { id: prevHover }
+                    opacity: root.currentTrack ? 1.0 : 0.4
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    HoverHandler { id: prevHover; enabled: !!root.currentTrack }
 
                     SpotifyIcon {
                         anchors.centerIn: parent
@@ -197,7 +207,8 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
+                        enabled: !!root.currentTrack
+                        cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: root.prevClicked()
                     }
                 }
@@ -207,10 +218,12 @@ Rectangle {
                     width: 36
                     height: 36
                     radius: 18
-                    color: playHover.hovered ? "#ffffff" : "#f0f0f0"
-                    scale: playHover.hovered ? 1.06 : 1.0
+                    opacity: root.currentTrack ? 1.0 : 0.65
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    color: (playHover.hovered && root.currentTrack) ? "#ffffff" : "#f0f0f0"
+                    scale: (playHover.hovered && root.currentTrack) ? 1.06 : 1.0
                     Behavior on scale { NumberAnimation { duration: 100 } }
-                    HoverHandler { id: playHover }
+                    HoverHandler { id: playHover; enabled: !!root.currentTrack }
 
                     // SimpMusic Circular Spinner when loading audio stream
                     CircularSpinner {
@@ -233,7 +246,8 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
+                        enabled: !!root.currentTrack
+                        cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: root.playPauseClicked()
                     }
                 }
@@ -241,7 +255,9 @@ Rectangle {
                 // --- Next Button ---
                 Item {
                     width: 32; height: 32
-                    HoverHandler { id: nextHover }
+                    opacity: root.currentTrack ? 1.0 : 0.4
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    HoverHandler { id: nextHover; enabled: !!root.currentTrack }
 
                     SpotifyIcon {
                         anchors.centerIn: parent
@@ -252,7 +268,8 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
+                        enabled: !!root.currentTrack
+                        cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: root.nextClicked()
                     }
                 }

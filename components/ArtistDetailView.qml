@@ -533,77 +533,9 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.albums && root.artistData.albums.length > 0)
 
                 // Header with title and pagination arrows
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Albums"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 22
-                        font.bold: true
-                        color: "#ffffff"
-                    }
-
-                    // Prev Arrow (<)
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: albPrevMouse.containsMouse ? "#38383c" : "#222226"
-                        opacity: (albumFlick.contentX > 10) ? 1.0 : 0.35
-                        visible: root.artistData && root.artistData.albums && root.artistData.albums.length > 4
-
-                        SpotifyIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/go-previous-symbolic.svg"
-                            iconSize: 14
-                            color: "#ffffff"
-                        }
-
-                        MouseArea {
-                            id: albPrevMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                var targetX = Math.max(0, albumFlick.contentX - 480);
-                                albAnim.to = targetX;
-                                albAnim.restart();
-                            }
-                        }
-                    }
-
-                    // Next Arrow (>)
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: albNextMouse.containsMouse ? "#38383c" : "#222226"
-                        opacity: (albumFlick.contentX < (albumFlick.contentWidth - albumFlick.width - 10)) ? 1.0 : 0.35
-                        visible: root.artistData && root.artistData.albums && root.artistData.albums.length > 4
-
-                        SpotifyIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/go-previous-symbolic.svg"
-                            rotation: 180
-                            iconSize: 14
-                            color: "#ffffff"
-                        }
-
-                        MouseArea {
-                            id: albNextMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                var maxX = Math.max(0, albumFlick.contentWidth - albumFlick.width);
-                                var targetX = Math.min(maxX, albumFlick.contentX + 480);
-                                albAnim.to = targetX;
-                                albAnim.restart();
-                            }
-                        }
-                    }
+                CarouselSectionHeader {
+                    title: "Albums"
+                    targetFlickable: albumFlick
                 }
 
                 Flickable {
@@ -614,13 +546,6 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     clip: true
-
-                    NumberAnimation on contentX {
-                        id: albAnim
-                        running: false
-                        duration: 280
-                        easing.type: Easing.OutCubic
-                    }
 
                     RowLayout {
                         id: albumRow
@@ -722,77 +647,9 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.singles && root.artistData.singles.length > 0)
 
                 // Header with title and pagination arrows
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Đĩa đơn & EPs"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 22
-                        font.bold: true
-                        color: "#ffffff"
-                    }
-
-                    // Prev Arrow (<)
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: singlePrevMouse.containsMouse ? "#38383c" : "#222226"
-                        opacity: (singleFlick.contentX > 10) ? 1.0 : 0.35
-                        visible: root.artistData && root.artistData.singles && root.artistData.singles.length > 4
-
-                        SpotifyIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/go-previous-symbolic.svg"
-                            iconSize: 14
-                            color: "#ffffff"
-                        }
-
-                        MouseArea {
-                            id: singlePrevMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                var targetX = Math.max(0, singleFlick.contentX - 480);
-                                singleAnim.to = targetX;
-                                singleAnim.restart();
-                            }
-                        }
-                    }
-
-                    // Next Arrow (>)
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: singleNextMouse.containsMouse ? "#38383c" : "#222226"
-                        opacity: (singleFlick.contentX < (singleFlick.contentWidth - singleFlick.width - 10)) ? 1.0 : 0.35
-                        visible: root.artistData && root.artistData.singles && root.artistData.singles.length > 4
-
-                        SpotifyIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/go-previous-symbolic.svg"
-                            rotation: 180
-                            iconSize: 14
-                            color: "#ffffff"
-                        }
-
-                        MouseArea {
-                            id: singleNextMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                var maxX = Math.max(0, singleFlick.contentWidth - singleFlick.width);
-                                var targetX = Math.min(maxX, singleFlick.contentX + 480);
-                                singleAnim.to = targetX;
-                                singleAnim.restart();
-                            }
-                        }
-                    }
+                CarouselSectionHeader {
+                    title: "Đĩa đơn & EPs"
+                    targetFlickable: singleFlick
                 }
 
                 Flickable {
@@ -803,13 +660,6 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     clip: true
-
-                    NumberAnimation on contentX {
-                        id: singleAnim
-                        running: false
-                        duration: 280
-                        easing.type: Easing.OutCubic
-                    }
 
                     RowLayout {
                         id: singleRow
@@ -910,12 +760,9 @@ Item {
                 spacing: 12
                 visible: !root.isLoading && (root.artistData && root.artistData.videos && root.artistData.videos.length > 0)
 
-                Text {
-                    text: "Video âm nhạc"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 22
-                    font.bold: true
-                    color: "#ffffff"
+                CarouselSectionHeader {
+                    title: "Video âm nhạc"
+                    targetFlickable: videoFlick
                 }
 
                 Flickable {
@@ -1034,12 +881,9 @@ Item {
                 spacing: 12
                 visible: !root.isLoading && (root.artistData && root.artistData.related && root.artistData.related.length > 0)
 
-                Text {
-                    text: "Nghệ sĩ liên quan"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 22
-                    font.bold: true
-                    color: "#ffffff"
+                CarouselSectionHeader {
+                    title: "Nghệ sĩ liên quan"
+                    targetFlickable: relFlick
                 }
 
                 Flickable {

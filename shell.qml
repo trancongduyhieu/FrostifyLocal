@@ -832,7 +832,7 @@ Scope {
                     if (!query || query.trim() === "") {
                         topHeader.suggestions = [];
                         if (mode === "offline") {
-                            win.currentTracks = win.allTracks;
+                            win.browsingTracks = win.allTracks;
                         }
                         return;
                     }
@@ -1136,7 +1136,13 @@ Scope {
                     win.isRepeat = !win.isRepeat;
                     win.saveSettings();
                 }
-                onOpenArtistRequested: name => win.loadArtistDetails(name)
+                onOpenArtistRequested: (name, chId) => {
+                    if (!chId && amberolView.songDetails) {
+                        if (amberolView.songDetails.channelId) chId = amberolView.songDetails.channelId;
+                        if (amberolView.songDetails.author) name = amberolView.songDetails.author;
+                    }
+                    win.loadArtistDetails(chId || name);
+                }
                 onSeekRequested: sec => win.seekAudio(sec)
                 onReqVolumeChange: vol => win.setVolume(vol)
             }
@@ -1330,24 +1336,8 @@ Scope {
             if (win.currentView === "library" || !win.browsingTracks || win.browsingTracks.length === 0) {
                 win.browsingTracks = win.allTracks;
             }
-            if (!win.currentTracks || win.currentTracks.length === 0) {
-                win.currentTracks = win.allTracks;
-            }
-
-            var restored = false;
-            if (sessionFileView.text()) {
-                try {
-                    var sData = JSON.parse(sessionFileView.text());
-                    if (sData.path) {
-                        var found = win.allTracks.find(t => t.path === sData.path || (t.filename && sData.path.endsWith(t.filename)));
-                        if (found) {
-                            win.currentTrack = found;
-                            win.totalDuration = (found.durationMs || 0) / 1000.0;
-                            restored = true;
-                        }
-                    }
-                } catch(e) {}
-            }
+            // Do not auto-populate win.currentTracks with allTracks!
+            // Queue remains empty until user explicitly clicks a track, album or playlist.
 
             if (!statusProcess.running) {
                 statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
@@ -1415,11 +1405,11 @@ Scope {
             return;
         }
         if (!q || q.trim() === "") {
-            win.currentTracks = win.allTracks;
+            win.browsingTracks = win.allTracks;
             return;
         }
         var lower = q.toLowerCase();
-        win.currentTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
+        win.browsingTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
     }
 
     function playTrack(trk) {
@@ -1443,10 +1433,6 @@ Scope {
     }
 
     function togglePlay() {
-        if (!win.currentTrack && win.currentTracks.length > 0) {
-            win.playTrack(win.currentTracks[0]);
-            return;
-        }
         if (!win.currentTrack) return;
         var targetPath = win.currentTrack.path || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "toggle", targetPath]);
@@ -1455,8 +1441,9 @@ Scope {
     }
 
     function playNext() {
-        if (!win.currentTracks || win.currentTracks.length === 0) return;
+        if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
         var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+        if (curIdx === -1) return;
         var nextIdx = 0;
         if (win.isShuffle && win.currentTracks.length > 1) {
             nextIdx = curIdx;
@@ -1464,7 +1451,7 @@ Scope {
                 nextIdx = Math.floor(Math.random() * win.currentTracks.length);
             }
         } else {
-            nextIdx = (curIdx >= 0) ? (curIdx + 1) : 0;
+            nextIdx = curIdx + 1;
             if (nextIdx >= win.currentTracks.length) {
                 nextIdx = 0;
             }
@@ -1480,12 +1467,13 @@ Scope {
     }
 
     function playPrev() {
-        if (!win.currentTracks || win.currentTracks.length === 0) return;
+        if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
         if (win.currentTime > 3.0) {
             win.seekAudio(0.0);
             return;
         }
         var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+        if (curIdx === -1) return;
         var prevIdx = (curIdx - 1 + win.currentTracks.length) % win.currentTracks.length;
         var prevTrk = win.currentTracks[prevIdx];
         if (prevTrk) {
@@ -1830,8 +1818,8 @@ Scope {
                         if (matched) win.currentTrack = matched;
                     }
 
-                    // Auto-advance or Repeat at song end
-                    if (!win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.4) {
+                    // Auto-advance or Repeat at song end (only when actively playing)
+                    if (win.isPlaying && !win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.4) {
                         if (win.isRepeat) {
                             win.seekAudio(0.0);
                         } else {

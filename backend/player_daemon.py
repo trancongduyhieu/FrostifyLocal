@@ -263,26 +263,17 @@ def main():
         ensure_mpv()
         path = get_mpv_property("path")
         idle = get_mpv_property("idle-active")
-        fallback_file = sys.argv[2] if len(sys.argv) > 2 else ""
+        target_file = sys.argv[2] if len(sys.argv) > 2 else ""
 
-        if not fallback_file:
-            session_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
-            if os.path.exists(session_file):
-                try:
-                    with open(session_file, "r", encoding="utf-8") as f:
-                        sess_data = json.load(f)
-                        fallback_file = sess_data.get("path", "")
-                except Exception:
-                    pass
-
-        if (not path or idle) and fallback_file:
-            stream_target = resolve_media_path(fallback_file)
-            send_mpv_cmd(["loadfile", stream_target, "replace"])
-            send_mpv_cmd(["set_property", "pause", False])
-            update_current_track_metadata(fallback_file)
-            print("Loaded and playing fallback:", fallback_file)
-        elif not path or idle:
-            print("MPV is idle and no track found")
+        if not path or idle:
+            if target_file:
+                stream_target = resolve_media_path(target_file)
+                send_mpv_cmd(["loadfile", stream_target, "replace"])
+                send_mpv_cmd(["set_property", "pause", False])
+                update_current_track_metadata(target_file)
+                print("Loaded and playing:", target_file)
+            else:
+                print("MPV is idle and no track specified")
         else:
             is_paused = get_mpv_property("pause")
             send_mpv_cmd(["set_property", "pause", not is_paused])

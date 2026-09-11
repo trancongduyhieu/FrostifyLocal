@@ -202,3 +202,11 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - **0ms Instant State Clean Reset**: Trong `components/AmberolDetailView.qml`, sự kiện `onTrackChanged` lập tức dọn sạch toàn bộ trạng thái của bài hát trước (`songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0`, `isLoadingDetails = true`).
     - **Đọc Blacklist Đồng Bộ Bộ Nhớ Trong 0ms**: Ngay khi `track` thay đổi, `onTrackChanged` tra cứu trực tiếp file blacklist `~/.config/noctalia/frostify_disliked_songs.json` qua `FileView`. Nếu bài hát mới nằm trong danh sách đen, nút Dislike lập tức sáng đỏ ngay trong 0ms; nếu không, trạng thái được reset tức thì về `"INDIFFERENT"`. Xóa bỏ vĩnh viễn hiện tượng bài hát mới bị "dính" nút Dislike đỏ của bài hát trước trong 1-2 giây chờ API.
 
+- [x] **24. Loại Bỏ Hiện Tượng Tự Động Phát Bài "Propose" Khi Đóng/Mở App (Disable Cold-Start Auto-Play & Clean Initial Queue - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Tách biệt hoàn toàn hàng đợi phát nhạc khởi động**: Xóa bỏ lệnh gán `win.currentTracks = win.allTracks` trong `LibraryLoader.onLoaded`, giữ hàng đợi `win.currentTracks` hoàn toàn trống `[]` lúc khởi động cho đến khi người dùng chủ động bấm phát bài hát hoặc playlist.
+    - **Bảo vệ `togglePlay()`, `playNext()` & `playPrev()`**: Khi chưa có bài hát nào được chọn (`!win.currentTrack`), các hàm này lập tức thoát (`return`), tuyệt đối không tự ý lấy bài hát index 0 ("9Lana - プロポーズ - propose") trong thư mục Downloads ra phát.
+    - **Bảo vệ vòng lặp Auto-advance**: Bổ sung cờ `win.isPlaying &&` vào điều kiện chuyển bài trong `statusProcess`, ngăn chặn việc tự động kích hoạt bài tiếp theo khi app ở trạng thái dừng hoặc tạm dừng.
+    - **Vô hiệu hóa auto-fallback trong MPV daemon**: Trong `backend/player_daemon.py`, loại bỏ cơ chế tự nạp file cũ từ session khi MPV đang idle.
+    - **Trạng thái trực quan trên thanh Player Bar**: Khi chưa chọn bài, nút Play, Prev, Next hiển thị mờ thanh lịch (opacity 0.65/0.4), con trỏ chuột dạng thường và khóa tương tác click.
+

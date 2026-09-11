@@ -215,13 +215,38 @@ def logout():
         pass
     return {"success": True}
 
+def clean_artist_name(raw_name):
+    if not raw_name:
+        return "YouTube Music"
+    s = str(raw_name).strip()
+    # Split by bullet point separator ' • '
+    parts = re.split(r'\s*•\s*', s)
+    for p in parts:
+        p_clean = p.strip()
+        if not p_clean:
+            continue
+        if re.search(r'\d+([.,]\d+)?\s*[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe)', p_clean, re.I):
+            continue
+        if p_clean.lower() in ("single", "album", "ep", "video", "bài hát", "nghệ sĩ", "artist"):
+            continue
+        return p_clean
+    return parts[0].strip() or "YouTube Music"
+
 def normalize_track(item):
     vid = item.get("videoId")
     if not vid or is_song_disliked(vid):
         return None
     title = item.get("title", "Unknown")
     artists = item.get("artists", [])
-    artist_name = ", ".join(a.get("name", "") for a in artists if a.get("name")) or "YouTube Music"
+    channel_id = ""
+    for a in artists:
+        if isinstance(a, dict) and a.get("id"):
+            channel_id = a.get("id")
+            break
+    artist_name = ", ".join(a.get("name", "") for a in artists if a.get("name")) or ""
+    if not artist_name:
+        artist_name = item.get("artist", "")
+    artist_name = clean_artist_name(artist_name)
     dur_str = item.get("duration", "--:--")
     dur_sec = item.get("duration_seconds") or 0
     thumbs = item.get("thumbnails", [])
@@ -230,7 +255,7 @@ def normalize_track(item):
     if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
         thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
 
-    return {
+    res = {
         "id": f"yt_{vid}",
         "title": title,
         "name": title,
@@ -242,6 +267,9 @@ def normalize_track(item):
         "durationMs": dur_sec * 1000,
         "image": thumb_url
     }
+    if channel_id:
+        res["channelId"] = channel_id
+    return res
 
 def get_recent_seed_track():
     sess_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
@@ -288,15 +316,27 @@ def _normalize_shelf_item(it, shelf_title=""):
         cols = r.get("flexColumns", [])
         title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
         artist = ""
+        channel_id = ""
         if len(cols) > 1:
             artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
-            artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+            for x in artist_runs:
+                txt = x.get("text", "").strip()
+                if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+                    continue
+                if not artist:
+                    artist = txt
+                    ep = x.get("navigationEndpoint", {}).get("browseEndpoint", {})
+                    if ep and ep.get("browseId"):
+                        channel_id = ep.get("browseId")
+            if not artist:
+                artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+        artist = clean_artist_name(artist)
         thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
         thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
         if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
             thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
         if vid and title:
-            return {
+            item_res = {
                 "id": f"yt_{vid}",
                 "type": "track",
                 "title": title,
@@ -310,12 +350,30 @@ def _normalize_shelf_item(it, shelf_title=""):
                 "durationMs": 0,
                 "image": thumb_url
             }
+            if channel_id:
+                item_res["channelId"] = channel_id
+            return item_res
 
     # 2. musicTwoRowItemRenderer
     elif "musicTwoRowItemRenderer" in it:
         r = it["musicTwoRowItemRenderer"]
         title = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
         sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+        sub_runs = r.get("subtitle", {}).get("runs", [])
+        artist_name = ""
+        channel_id = ""
+        for x in sub_runs:
+            txt = x.get("text", "").strip()
+            if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+                continue
+            if not artist_name:
+                artist_name = txt
+                ep = x.get("navigationEndpoint", {}).get("browseEndpoint", {})
+                if ep and ep.get("browseId"):
+                    channel_id = ep.get("browseId")
+        if not artist_name:
+            artist_name = clean_artist_name(sub)
+
         thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
         thumb_url = thumbs[-1].get("url", "") if thumbs else ""
         if "w120" in thumb_url or "w226" in thumb_url:
@@ -331,13 +389,13 @@ def _normalize_shelf_item(it, shelf_title=""):
         pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
 
         if vid and (not pl_id or "listen" in shelf_title.lower() or "favorite" in shelf_title.lower()):
-            return {
+            item_res = {
                 "id": f"yt_{vid}",
                 "type": "track",
                 "title": title,
                 "name": title,
-                "artist": sub or "YouTube Music",
-                "subtitle": sub or "YouTube Music",
+                "artist": artist_name or "YouTube Music",
+                "subtitle": artist_name or "YouTube Music",
                 "source": "YouTube Music",
                 "path": f"ytdl://{vid}",
                 "videoId": vid,
@@ -345,6 +403,9 @@ def _normalize_shelf_item(it, shelf_title=""):
                 "durationMs": 0,
                 "image": thumb_url
             }
+            if channel_id:
+                item_res["channelId"] = channel_id
+            return item_res
         elif pl_id and title:
             return {
                 "id": pl_id,
@@ -366,13 +427,19 @@ def _normalize_shelf_item(it, shelf_title=""):
             thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
 
         artist = ""
+        channel_id = ""
         if it.get("artists"):
             artist = ", ".join(a.get("name", "") for a in it.get("artists", []) if isinstance(a, dict))
+            for a in it.get("artists", []):
+                if isinstance(a, dict) and a.get("id"):
+                    channel_id = a.get("id")
+                    break
         elif it.get("description"):
             artist = it.get("description")
+        artist = clean_artist_name(artist)
 
         if vid and (not pl_id or "song" in str(it.get("videoType", "")).lower() or "atv" in str(it.get("videoType", "")).lower() or "listen" in shelf_title.lower() or "quick" in shelf_title.lower() or "cover" in shelf_title.lower() or "video" in shelf_title.lower() or "trending" in shelf_title.lower() or "favorite" in shelf_title.lower() or "long" in shelf_title.lower()):
-            return {
+            item_res = {
                 "id": f"yt_{vid}",
                 "type": "track",
                 "title": title,
@@ -386,6 +453,9 @@ def _normalize_shelf_item(it, shelf_title=""):
                 "durationMs": (it.get("duration_seconds") or 0) * 1000,
                 "image": thumb_url
             }
+            if channel_id:
+                item_res["channelId"] = channel_id
+            return item_res
         elif pl_id and title:
             return {
                 "id": pl_id,
@@ -582,16 +652,28 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
             cols = r.get("flexColumns", [])
             title_text = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
             artist = ""
+            channel_id = ""
             if len(cols) > 1:
                 artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
-                artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+                for x in artist_runs:
+                    txt = x.get("text", "").strip()
+                    if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+                        continue
+                    if not artist:
+                        artist = txt
+                        ep = x.get("navigationEndpoint", {}).get("browseEndpoint", {})
+                        if ep and ep.get("browseId"):
+                            channel_id = ep.get("browseId")
+                if not artist:
+                    artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+            artist = clean_artist_name(artist)
             thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
             if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
                 thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
             if vid and title_text and len(quick_picks) < max_qp:
                 if not any(q.get("videoId") == vid for q in quick_picks):
-                    quick_picks.append({
+                    qp_item = {
                         "id": f"yt_{vid}",
                         "title": title_text,
                         "name": title_text,
@@ -602,11 +684,29 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
                         "duration": "--:--",
                         "durationMs": 0,
                         "image": thumb_url
-                    })
+                    }
+                    if channel_id:
+                        qp_item["channelId"] = channel_id
+                    quick_picks.append(qp_item)
         elif "musicTwoRowItemRenderer" in it:
             r = it["musicTwoRowItemRenderer"]
             t_text = "".join(x.get("text", "") for x in r.get("title", {}).get("runs", []))
             sub = "".join(x.get("text", "") for x in r.get("subtitle", {}).get("runs", []))
+            sub_runs = r.get("subtitle", {}).get("runs", [])
+            artist_name = ""
+            channel_id = ""
+            for x in sub_runs:
+                txt = x.get("text", "").strip()
+                if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+                    continue
+                if not artist_name:
+                    artist_name = txt
+                    ep = x.get("navigationEndpoint", {}).get("browseEndpoint", {})
+                    if ep and ep.get("browseId"):
+                        channel_id = ep.get("browseId")
+            if not artist_name:
+                artist_name = clean_artist_name(sub)
+
             thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else ""
             if "w120" in thumb_url or "w226" in thumb_url:
@@ -621,18 +721,21 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
 
             if vid and (not pl_id or "listen again" in shelf_title.lower()):
                 if len(quick_picks) < max_qp and not any(q.get("videoId") == vid for q in quick_picks):
-                    quick_picks.append({
+                    qp_item = {
                         "id": f"yt_{vid}",
                         "title": t_text,
                         "name": t_text,
-                        "artist": sub or "YouTube Music",
+                        "artist": artist_name or "YouTube Music",
                         "source": "YouTube Music",
                         "path": f"ytdl://{vid}",
                         "videoId": vid,
                         "duration": "--:--",
                         "durationMs": 0,
                         "image": thumb_url
-                    })
+                    }
+                    if channel_id:
+                        qp_item["channelId"] = channel_id
+                    quick_picks.append(qp_item)
             elif pl_id and t_text and thumb_url:
                 if len(featured_playlists) < max_fp and not any(p.get("title") == t_text for p in featured_playlists):
                     featured_playlists.append({
@@ -895,15 +998,29 @@ def get_artist(channel_id_or_name):
     
     browse_id = clean_id
     if not (clean_id.startswith("UC") or clean_id.startswith("FEmusic_library_privately_owned_artist_detail")):
+        search_query = clean_artist_name(clean_id)
         try:
-            search_res = yt.search(clean_id, filter="artists")
+            search_res = yt.search(search_query, filter="artists")
             if search_res and len(search_res) > 0:
                 browse_id = search_res[0].get("browseId", "")
+            else:
+                # Fallback: search without filter and locate first artist browseId
+                gen_res = yt.search(search_query)
+                for it in gen_res:
+                    if it.get("resultType") == "artist" and it.get("browseId"):
+                        browse_id = it.get("browseId")
+                        break
+                    for a in it.get("artists", []):
+                        if isinstance(a, dict) and a.get("id"):
+                            browse_id = a.get("id")
+                            break
+                    if browse_id:
+                        break
         except Exception as e:
             sys.stderr.write(f"[get_artist search error for {clean_id}]: {e}\n")
             
     if not browse_id:
-        return {"metadata": {"name": clean_id, "title": clean_id}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
+        return {"metadata": {"name": clean_artist_name(clean_id), "title": clean_artist_name(clean_id)}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
 
     try:
         art = yt.get_artist(browse_id)

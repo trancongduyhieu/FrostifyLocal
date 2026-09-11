@@ -71,6 +71,7 @@ Rectangle {
 
     property var songDetails: null
     property var audioSpecs: null
+    readonly property bool isDetailsLoading: !songDetails || songDetailsProc.running
 
     signal viewAlbumRequested(var alb)
     signal startRadioRequested(var trk)
@@ -841,25 +842,64 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             anchors.margins: 10
-                            spacing: 2
+                            spacing: 3
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: (root.songDetails && root.songDetails.author) ? root.songDetails.author : (root.track ? (root.track.artist || "Unknown Artist") : "")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: "#ffffff"
-                                elide: Text.ElideRight
+                            // Shimmer placeholder state when loading
+                            ColumnLayout {
+                                visible: root.isDetailsLoading
+                                spacing: 6
+
+                                Rectangle {
+                                    width: 130
+                                    height: 14
+                                    radius: 4
+                                    color: "#38383e"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 80
+                                    height: 11
+                                    radius: 3
+                                    color: "#28282c"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                    }
+                                }
                             }
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: (root.songDetails && root.songDetails.subscribers) ? root.songDetails.subscribers : "Nghệ sĩ âm nhạc"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textMuted
-                                elide: Text.ElideRight
+                            // Loaded real info
+                            ColumnLayout {
+                                visible: !root.isDetailsLoading
+                                spacing: 2
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (root.songDetails && root.songDetails.author) ? root.songDetails.author : ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (root.songDetails && root.songDetails.subscribers) ? root.songDetails.subscribers : ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textMuted
+                                    elide: Text.ElideRight
+                                    visible: text !== ""
+                                }
                             }
                         }
 
@@ -884,7 +924,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
                         Layout.maximumWidth: 320
-                        Layout.preferredHeight: descCol.implicitHeight + 24
+                        Layout.preferredHeight: (root.isDetailsLoading ? descShimmerCol.implicitHeight : descRealCol.implicitHeight) + 24
                         Layout.alignment: Qt.AlignHCenter
                         radius: 12
                         color: "#161618"
@@ -901,160 +941,311 @@ Rectangle {
                             anchors.margins: 12
                             spacing: 8
 
-                            // 1. Release date
-                            Text {
+                            // --- SHIMMER SKELETON STATE (when root.isDetailsLoading) ---
+                            ColumnLayout {
+                                id: descShimmerCol
                                 Layout.fillWidth: true
-                                text: "Phát hành lúc " + ((root.songDetails && (root.songDetails.dateText || root.songDetails.publishDate)) ? (root.songDetails.dateText || root.songDetails.publishDate) : ((root.track && root.track.year) ? root.track.year : "Gần đây"))
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textMuted
-                            }
-
-                            // 2. View Count
-                            Text {
-                                Layout.fillWidth: true
-                                text: ((root.songDetails && root.songDetails.viewsStr && root.songDetails.viewsStr !== "--") ? root.songDetails.viewsStr : "100K+") + " lượt xem"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 16
-                                font.bold: true
-                                color: "#ffffff"
-                            }
-
-                            // 3. Interactive Likes & Dislikes Row
-                            RowLayout {
-                                Layout.fillWidth: true
+                                visible: root.isDetailsLoading
                                 spacing: 10
 
-                                // Like interactive button
+                                // 1. Release date shimmer
                                 Rectangle {
-                                    height: 28
-                                    Layout.preferredWidth: likeRow.implicitWidth + 16
-                                    radius: 14
-                                    color: root.currentLikeStatus === "LIKE" ? Qt.rgba(0.12, 0.84, 0.38, 0.20) : (likeH.hovered ? "#242428" : "#1a1a1d")
-                                    border.color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#2c2c30"
-                                    border.width: 1
-
-                                    RowLayout {
-                                        id: likeRow
-                                        anchors.centerIn: parent
-                                        spacing: 5
-
-                                        SpotifyIcon {
-                                            source: "../assets/icons/thumb-up-symbolic.svg"
-                                            iconSize: 12
-                                            color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
-                                        }
-
-                                        Text {
-                                            text: root.localLikesCount > 0 ? (root.songDetails ? root.songDetails.likesStr : "" + root.localLikesCount) + " thích" : "Thích"
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                            color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
-                                        }
-                                    }
-
-                                    HoverHandler { id: likeH }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.toggleLike()
+                                    width: 110
+                                    height: 12
+                                    radius: 3
+                                    color: "#28282c"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
                                     }
                                 }
 
-                                // Dislike interactive button
+                                // 2. View count shimmer
                                 Rectangle {
-                                    height: 28
-                                    Layout.preferredWidth: dislikeRow.implicitWidth + 16
-                                    radius: 14
-                                    color: root.currentLikeStatus === "DISLIKE" ? Qt.rgba(1.0, 0.25, 0.25, 0.20) : (dislikeH.hovered ? "#242428" : "#1a1a1d")
-                                    border.color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#2c2c30"
-                                    border.width: 1
-
-                                    RowLayout {
-                                        id: dislikeRow
-                                        anchors.centerIn: parent
-                                        spacing: 5
-
-                                        SpotifyIcon {
-                                            source: "../assets/icons/thumb-down-symbolic.svg"
-                                            iconSize: 12
-                                            color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#ffffff"
-                                        }
-
-                                        Text {
-                                            text: root.localDislikesCount > 0 ? (root.songDetails ? root.songDetails.dislikesStr : "" + root.localDislikesCount) + " không thích" : "Không thích"
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                            color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : Theme.textSecondary
-                                        }
-                                    }
-
-                                    HoverHandler { id: dislikeH }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.toggleDislike()
+                                    width: 150
+                                    height: 20
+                                    radius: 4
+                                    color: "#38383e"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
                                     }
                                 }
 
-                                Item { Layout.fillWidth: true }
-                            }
+                                // 3. Interactive Likes & Dislikes Row shimmer
+                                RowLayout {
+                                    spacing: 10
 
-                            // Like/Dislike Ratio mini bar
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 3
-                                radius: 1.5
-                                color: "#282828"
+                                    Rectangle {
+                                        width: 76
+                                        height: 28
+                                        radius: 14
+                                        color: "#242428"
+                                        SequentialAnimation on opacity {
+                                            running: root.isDetailsLoading
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                        }
+                                    }
 
+                                    Rectangle {
+                                        width: 84
+                                        height: 28
+                                        radius: 14
+                                        color: "#242428"
+                                        SequentialAnimation on opacity {
+                                            running: root.isDetailsLoading
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                        }
+                                    }
+                                }
+
+                                // 4. Like/Dislike Ratio mini bar shimmer
                                 Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: parent.width * (root.songDetails ? (root.songDetails.likeRatio / 100.0) : 1.0)
+                                    Layout.fillWidth: true
+                                    height: 3
                                     radius: 1.5
-                                    color: "#1ed760"
+                                    color: "#28282c"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+
+                                // 5. Description Header shimmer
+                                Rectangle {
+                                    width: 50
+                                    height: 12
+                                    radius: 3
+                                    color: "#38383e"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+
+                                // 6. Description Paragraph shimmer (staggered lines)
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 11
+                                        radius: 3
+                                        color: "#28282c"
+                                        SequentialAnimation on opacity {
+                                            running: root.isDetailsLoading
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.preferredWidth: Math.max(120, (infoDescCard.width - 24) * 0.85)
+                                        height: 11
+                                        radius: 3
+                                        color: "#28282c"
+                                        SequentialAnimation on opacity {
+                                            running: root.isDetailsLoading
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.preferredWidth: Math.max(90, (infoDescCard.width - 24) * 0.58)
+                                        height: 11
+                                        radius: 3
+                                        color: "#28282c"
+                                        SequentialAnimation on opacity {
+                                            running: root.isDetailsLoading
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                        }
+                                    }
                                 }
                             }
 
-                            // 4. Description Header
-                            Text {
-                                text: "Mô tả"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: "#ffffff"
-                            }
-
-                            // 5. Description Content Text
-                            Text {
-                                id: descText
+                            // --- LOADED REAL CONTENT (when !root.isDetailsLoading) ---
+                            ColumnLayout {
+                                id: descRealCol
                                 Layout.fillWidth: true
-                                text: (root.songDetails && root.songDetails.description) ? root.songDetails.description : "Không có mô tả cho bài hát này."
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                lineHeight: 1.3
-                                color: Theme.textSecondary
-                                wrapMode: Text.Wrap
-                                maximumLineCount: infoDescCard.isExpanded ? 100 : 4
-                                elide: infoDescCard.isExpanded ? Text.ElideNone : Text.ElideRight
-                            }
+                                visible: !root.isDetailsLoading
+                                spacing: 8
 
-                            // Expand / Collapse button
-                            Text {
-                                visible: descText.lineCount > 4 || (root.songDetails && root.songDetails.description && root.songDetails.description.length > 150)
-                                text: infoDescCard.isExpanded ? "Thu gọn ▲" : "Xem thêm ▼"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Theme.spotifyGreen
+                                // 1. Release date
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: {
+                                        var d = (root.songDetails && (root.songDetails.dateText || root.songDetails.publishDate)) ? (root.songDetails.dateText || root.songDetails.publishDate) : ((root.track && root.track.year) ? root.track.year : "");
+                                        return d ? ("Phát hành lúc " + d) : "Đã phát hành";
+                                    }
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textMuted
+                                }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: infoDescCard.isExpanded = !infoDescCard.isExpanded
+                                // 2. View Count
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: ((root.songDetails && root.songDetails.viewsStr && root.songDetails.viewsStr !== "--") ? root.songDetails.viewsStr : "0") + " lượt xem"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+
+                                // 3. Interactive Likes & Dislikes Row
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    // Like interactive button
+                                    Rectangle {
+                                        height: 28
+                                        Layout.preferredWidth: likeRow.implicitWidth + 16
+                                        radius: 14
+                                        color: root.currentLikeStatus === "LIKE" ? Qt.rgba(0.12, 0.84, 0.38, 0.20) : (likeH.hovered ? "#242428" : "#1a1a1d")
+                                        border.color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#2c2c30"
+                                        border.width: 1
+
+                                        RowLayout {
+                                            id: likeRow
+                                            anchors.centerIn: parent
+                                            spacing: 5
+
+                                            SpotifyIcon {
+                                                source: "../assets/icons/thumb-up-symbolic.svg"
+                                                iconSize: 12
+                                                color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                            }
+
+                                            Text {
+                                                text: root.localLikesCount > 0 ? (root.songDetails && root.songDetails.likesStr ? root.songDetails.likesStr : "" + root.localLikesCount) + " thích" : "Thích"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                            }
+                                        }
+
+                                        HoverHandler { id: likeH }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.toggleLike()
+                                        }
+                                    }
+
+                                    // Dislike interactive button
+                                    Rectangle {
+                                        height: 28
+                                        Layout.preferredWidth: dislikeRow.implicitWidth + 16
+                                        radius: 14
+                                        color: root.currentLikeStatus === "DISLIKE" ? Qt.rgba(1.0, 0.25, 0.25, 0.20) : (dislikeH.hovered ? "#242428" : "#1a1a1d")
+                                        border.color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#2c2c30"
+                                        border.width: 1
+
+                                        RowLayout {
+                                            id: dislikeRow
+                                            anchors.centerIn: parent
+                                            spacing: 5
+
+                                            SpotifyIcon {
+                                                source: "../assets/icons/thumb-down-symbolic.svg"
+                                                iconSize: 12
+                                                color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#ffffff"
+                                            }
+
+                                            Text {
+                                                text: root.localDislikesCount > 0 ? (root.songDetails && root.songDetails.dislikesStr ? root.songDetails.dislikesStr : "" + root.localDislikesCount) + " không thích" : "Không thích"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : Theme.textSecondary
+                                            }
+                                        }
+
+                                        HoverHandler { id: dislikeH }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.toggleDislike()
+                                        }
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+                                }
+
+                                // Like/Dislike Ratio mini bar
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 3
+                                    radius: 1.5
+                                    color: "#282828"
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        width: parent.width * (root.songDetails ? (root.songDetails.likeRatio / 100.0) : 1.0)
+                                        radius: 1.5
+                                        color: "#1ed760"
+                                    }
+                                }
+
+                                // 4. Description Header
+                                Text {
+                                    text: "Mô tả"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+
+                                // 5. Description Content Text
+                                Text {
+                                    id: descText
+                                    Layout.fillWidth: true
+                                    text: (root.songDetails && root.songDetails.description) ? root.songDetails.description : "Không có mô tả cho bài hát này."
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    lineHeight: 1.3
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: infoDescCard.isExpanded ? 100 : 4
+                                    elide: infoDescCard.isExpanded ? Text.ElideNone : Text.ElideRight
+                                }
+
+                                // Expand / Collapse button
+                                Text {
+                                    visible: descText.lineCount > 4 || (root.songDetails && root.songDetails.description && root.songDetails.description.length > 150)
+                                    text: infoDescCard.isExpanded ? "Thu gọn ▲" : "Xem thêm ▼"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: Theme.spotifyGreen
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: infoDescCard.isExpanded = !infoDescCard.isExpanded
+                                    }
                                 }
                             }
                         }
@@ -1096,7 +1287,22 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
 
+                                Rectangle {
+                                    visible: root.isDetailsLoading && (!root.track || !root.track.album)
+                                    width: 120
+                                    height: 12
+                                    radius: 3
+                                    color: "#28282c"
+                                    SequentialAnimation on opacity {
+                                        running: root.isDetailsLoading && (!root.track || !root.track.album)
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+
                                 Text {
+                                    visible: !(root.isDetailsLoading && (!root.track || !root.track.album))
                                     Layout.fillWidth: true
                                     text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : "Single")
                                     font.family: Theme.fontFamily
