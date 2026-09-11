@@ -75,6 +75,30 @@ def is_song_disliked(video_id):
     data = load_disliked_songs()
     return clean_vid in data
 
+ARTIST_AVATARS_FILE = os.path.expanduser("~/.cache/frostify/artist_avatars.json")
+
+def load_artist_avatars():
+    return load_json(ARTIST_AVATARS_FILE, {})
+
+def save_artist_avatars(data):
+    save_json(ARTIST_AVATARS_FILE, data)
+
+def cache_artist_avatar(artist_name, avatar_url):
+    if not artist_name or not avatar_url:
+        return
+    norm = str(artist_name).strip().lower()
+    data = load_artist_avatars()
+    if data.get(norm) != avatar_url:
+        data[norm] = avatar_url
+        save_artist_avatars(data)
+
+def get_cached_artist_avatar(artist_name):
+    if not artist_name:
+        return ""
+    norm = str(artist_name).strip().lower()
+    return load_artist_avatars().get(norm, "")
+
+
 def cache_online_tracks(tracks):
     try:
         data = load_json(ONLINE_TRACKS_FILE, {})
@@ -862,6 +886,164 @@ def get_album_details(browse_id):
         sys.stderr.write(f"[get_album_details error for {clean_id}]: {e}\n")
         return {"metadata": {}, "tracks": []}
 
+def get_artist(channel_id_or_name):
+    if not channel_id_or_name:
+        return {"metadata": {}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
+    
+    clean_id = str(channel_id_or_name).strip()
+    yt = get_ytmusic_client()
+    
+    browse_id = clean_id
+    if not (clean_id.startswith("UC") or clean_id.startswith("FEmusic_library_privately_owned_artist_detail")):
+        try:
+            search_res = yt.search(clean_id, filter="artists")
+            if search_res and len(search_res) > 0:
+                browse_id = search_res[0].get("browseId", "")
+        except Exception as e:
+            sys.stderr.write(f"[get_artist search error for {clean_id}]: {e}\n")
+            
+    if not browse_id:
+        return {"metadata": {"name": clean_id, "title": clean_id}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
+
+    try:
+        art = yt.get_artist(browse_id)
+        if not art:
+            return {"metadata": {"name": clean_id, "title": clean_id}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
+            
+        thumbs = art.get("thumbnails", [])
+        art_thumb = thumbs[-1].get("url", "") if thumbs else ""
+        if "w60" in art_thumb or "w120" in art_thumb or "w226" in art_thumb:
+            art_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', art_thumb)
+        elif "s60" in art_thumb or "s120" in art_thumb or "s226" in art_thumb:
+            art_thumb = re.sub(r'=s\d+.*', '=s960-c-k-c0x00ffffff-no-rj', art_thumb)
+            
+        artist_name = art.get("name", clean_id)
+        if artist_name and art_thumb:
+            cache_artist_avatar(artist_name, art_thumb)
+            
+        popular_tracks = []
+        raw_songs = art.get("songs", {}).get("results", [])
+        for t in raw_songs:
+            if not t.get("thumbnails") and art_thumb:
+                t["thumbnails"] = [{"url": art_thumb}]
+            norm = normalize_track(t)
+            if norm:
+                if not norm.get("artist"):
+                    norm["artist"] = artist_name
+                popular_tracks.append(norm)
+                
+        if popular_tracks:
+            cache_online_tracks(popular_tracks)
+            
+        singles_list = []
+        raw_singles = art.get("singles", {}).get("results", [])
+        for s in raw_singles:
+            s_thumbs = s.get("thumbnails", [])
+            s_thumb = s_thumbs[-1].get("url", "") if s_thumbs else ""
+            if "w60" in s_thumb or "w120" in s_thumb or "w226" in s_thumb:
+                s_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', s_thumb)
+            singles_list.append({
+                "title": s.get("title", ""),
+                "browseId": s.get("browseId", ""),
+                "year": str(s.get("year", "") or ""),
+                "image": s_thumb,
+                "type": "Single"
+            })
+            
+        albums_list = []
+        raw_albums = art.get("albums", {}).get("results", [])
+        for a in raw_albums:
+            a_thumbs = a.get("thumbnails", [])
+            a_thumb = a_thumbs[-1].get("url", "") if a_thumbs else ""
+            if "w60" in a_thumb or "w120" in a_thumb or "w226" in a_thumb:
+                a_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', a_thumb)
+            albums_list.append({
+                "title": a.get("title", ""),
+                "browseId": a.get("browseId", ""),
+                "year": str(a.get("year", "") or ""),
+                "image": a_thumb,
+                "type": "Album"
+            })
+            
+        videos_list = []
+        raw_videos = art.get("videos", {}).get("results", [])
+        for v in raw_videos:
+            v_thumbs = v.get("thumbnails", [])
+            v_thumb = v_thumbs[-1].get("url", "") if v_thumbs else ""
+            views_str = v.get("views", "") or ""
+            videos_list.append({
+                "title": v.get("title", ""),
+                "videoId": v.get("videoId", ""),
+                "views": views_str,
+                "image": v_thumb
+            })
+            
+        related_list = []
+        raw_related = art.get("related", {}).get("results", [])
+        for r in raw_related:
+            r_thumbs = r.get("thumbnails", [])
+            r_thumb = r_thumbs[-1].get("url", "") if r_thumbs else ""
+            if "w60" in r_thumb or "w120" in r_thumb or "w226" in r_thumb:
+                r_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', r_thumb)
+            r_name = r.get("title", "")
+            if r_name and r_thumb:
+                cache_artist_avatar(r_name, r_thumb)
+            related_list.append({
+                "name": r_name,
+                "title": r_name,
+                "browseId": r.get("browseId", ""),
+                "subscribers": r.get("subscribers", "") or "",
+                "image": r_thumb
+            })
+            
+        meta = {
+            "channelId": browse_id,
+            "browseId": browse_id,
+            "name": artist_name,
+            "title": artist_name,
+            "subscribers": art.get("subscribers", "") or "",
+            "views": art.get("views", "") or "",
+            "radioId": art.get("radioId", "") or "",
+            "shuffleId": art.get("shuffleId", "") or "",
+            "subscribed": bool(art.get("subscribed", False)),
+            "image": art_thumb,
+            "description": art.get("description", "") or ""
+        }
+        
+        return {
+            "metadata": meta,
+            "popular": popular_tracks,
+            "singles": singles_list,
+            "albums": albums_list,
+            "videos": videos_list,
+            "related": related_list
+        }
+    except Exception as e:
+        sys.stderr.write(f"[get_artist error for {clean_id}]: {e}\n")
+        return {"metadata": {"name": clean_id, "title": clean_id}, "popular": [], "singles": [], "albums": [], "videos": [], "related": []}
+
+def subscribe_artist_action(channel_id, subscribe=True):
+    clean_id = str(channel_id).strip()
+    yt = get_ytmusic_client()
+    res = {"channelId": clean_id, "subscribed": subscribe, "status": "ok"}
+    try:
+        if subscribe:
+            if hasattr(yt, "subscribe_artist"):
+                yt.subscribe_artist(clean_id)
+            else:
+                yt.subscribe_artists([clean_id])
+        else:
+            if hasattr(yt, "unsubscribe_artist"):
+                yt.unsubscribe_artist(clean_id)
+            else:
+                yt.unsubscribe_artists([clean_id])
+    except Exception as e:
+        sys.stderr.write(f"[subscribe_artist error for {clean_id}]: {e}\n")
+        res["error"] = str(e)
+        res["status"] = "error"
+    return res
+
+
 def get_playlist_tracks(playlist_id, limit=50):
     if not playlist_id:
         return []
@@ -1269,6 +1451,8 @@ def get_song_details(video_id):
                 thumbs = owner.get("thumbnail", {}).get("thumbnails", [])
                 if thumbs:
                     details["authorThumbnail"] = thumbs[-1].get("url", "").replace("s48", "s960").replace("s88", "s960")
+                    if details.get("artist"):
+                        cache_artist_avatar(details["artist"], details["authorThumbnail"])
                 details["description"] = sec.get("attributedDescription", {}).get("content", "")
             if "videoPrimaryInfoRenderer" in c:
                 prim = c["videoPrimaryInfoRenderer"]
@@ -1498,4 +1682,23 @@ if __name__ == "__main__":
         pl_id = sys.argv[5] if len(sys.argv) > 5 else None
         res = send_playback_tracking(vid, title, artist, pl_id)
         print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "artist" and len(sys.argv) > 2:
+        art_id = sys.argv[2]
+        res = get_artist(art_id)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "subscribe" and len(sys.argv) > 2:
+        channel_id = sys.argv[2]
+        sub = True
+        if len(sys.argv) > 3:
+            sub = str(sys.argv[3]).lower() in ("true", "1", "yes")
+        res = subscribe_artist_action(channel_id, sub)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "cached_avatar" and len(sys.argv) > 2:
+        name = sys.argv[2]
+        url = get_cached_artist_avatar(name)
+        print(json.dumps({"artist": name, "avatar": url}, ensure_ascii=False))
+
 

@@ -622,11 +622,11 @@ Rectangle {
                             height: 48
                             radius: 6
 
-                            readonly property bool isCurrent: root.currentTrack && (
+                            readonly property bool isCurrent: Boolean(root.currentTrack && modelData && (
                                 (modelData.videoId && root.currentTrack.videoId && modelData.videoId === root.currentTrack.videoId) ||
                                 (modelData.path && root.currentTrack.path && modelData.path === root.currentTrack.path) ||
                                 (modelData.id && root.currentTrack.id && modelData.id === root.currentTrack.id)
-                            )
+                            ))
 
                             color: isCurrent ? Theme.bgHighlight : (qRowH.hovered ? Theme.bgCardHover : "transparent")
                             Behavior on color { ColorAnimation { duration: 100 } }

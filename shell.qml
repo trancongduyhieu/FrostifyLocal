@@ -70,6 +70,10 @@ Scope {
     property bool isSearchingYT: false
     property string lastYTQuery: ""
     property string mainSectionTitle: "Downloads"
+    property var currentArtistData: null
+    property var artistHistoryStack: []
+    property bool isLoadingArtist: false
+    property var followedArtists: []
 
     Timer {
         id: ytSearchDebounce
@@ -345,6 +349,29 @@ Scope {
     }
 
     Process {
+        id: artistDetailsProc
+        property string targetArtist: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res && res.metadata) {
+                        win.currentArtistData = res;
+                    }
+                } catch(e) {
+                    console.log("artistDetailsProc parse error:", e);
+                } finally {
+                    win.isLoadingArtist = false;
+                }
+            }
+        }
+        onExited: {
+            win.isLoadingArtist = false;
+        }
+    }
+
+    Process {
         id: authStatusProc
         stdout: SplitParser {
             splitMarker: "\n"
@@ -604,6 +631,43 @@ Scope {
         }
     }
 
+    function loadArtistDetails(artistNameOrId) {
+        if (!artistNameOrId) return;
+        var artTarget = String(artistNameOrId).trim();
+        if (!artTarget) return;
+
+        if (win.currentView !== "artist") {
+            win.artistHistoryStack = [{ view: win.currentView, artist: null }];
+        } else if (win.currentArtistData && win.currentArtistData.metadata) {
+            win.artistHistoryStack.push({ view: "artist", artist: win.currentArtistData });
+        }
+
+        win.previousView = (win.currentView !== "artist") ? win.currentView : win.previousView;
+        win.currentView = "artist";
+        win.isLoadingArtist = true;
+        win.currentArtistData = null;
+
+        artistDetailsProc.running = false;
+        artistDetailsProc.targetArtist = artTarget;
+        artistDetailsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "artist", artTarget];
+        artistDetailsProc.running = true;
+    }
+
+    function goBackFromArtist() {
+        if (win.artistHistoryStack && win.artistHistoryStack.length > 0) {
+            var prev = win.artistHistoryStack.pop();
+            if (prev && prev.view === "artist" && prev.artist) {
+                win.currentArtistData = prev.artist;
+                win.currentView = "artist";
+                return;
+            } else if (prev && prev.view) {
+                win.currentView = prev.view;
+                return;
+            }
+        }
+        win.currentView = win.previousView || "home";
+    }
+
     function loadAlbumDetails(alb) {
         if (!alb) return;
         var albId = alb.browseId || alb.playlistId || alb.id || "";
@@ -639,6 +703,12 @@ Scope {
         if (!pl) return;
         var pid = pl.playlistId || pl.id || pl.browseId || "";
         if (!pid) return;
+
+        // Check if Artist
+        if (pl.type === "artist" || String(pid).startsWith("UC") || String(pid).startsWith("FEmusic_library_privately_owned_artist_detail")) {
+            win.loadArtistDetails(pid || pl.name || pl.title);
+            return;
+        }
 
         // Check if Album
         if (String(pid).startsWith("MPREb_") || pl.type === "album" || (pl.isLocal && String(pid).startsWith("local_alb_"))) {
@@ -864,14 +934,14 @@ Scope {
                     onTrackContextMenuRequested: (trk, gx, gy, isQ) => trackContextMenu.openAt(trk, gx, gy, isQ)
                 }
 
-                // Column 2: Center Main Content (Home Feed or Local Library)
+                // Column 2: Center Main Content (Home Feed, Local Library, or Artist Page)
                 StackLayout {
                     id: centerStack
                     visible: !win.showAmberolDetails || win.width >= 1020
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.minimumWidth: 400
-                    currentIndex: win.currentView === "home" ? 0 : 1
+                    currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : 1)
 
                     HomeFeedView {
                         id: homeView
@@ -954,6 +1024,56 @@ Scope {
                         onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
                         onCreatePlaylistRequested: trks => win.createCustomPlaylistFromTracks(trks)
                     }
+
+                    ArtistDetailView {
+                        id: artistView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        artistData: win.currentArtistData
+                        isLoading: win.isLoadingArtist
+                        currentTrack: win.currentTrack
+                        isPlaying: win.isPlaying
+                        followedArtists: win.followedArtists
+
+                        onBackRequested: win.goBackFromArtist()
+                        onPlayTrackRequested: (trk, index, trackList) => {
+                            if (win.isContextMenuActive) return;
+                            win.currentTracks = trackList.slice();
+                            win.playingPlaylistId = "";
+                            if (trk) {
+                                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                                    win.playOnlineTrack(trk, false);
+                                } else {
+                                    win.playTrack(trk);
+                                }
+                            }
+                        }
+                        onStartRadioRequested: item => {
+                            if (item && item.id) {
+                                win.startRadioFromTrack(item);
+                            }
+                        }
+                        onShuffleArtistRequested: artistObj => {
+                            if (artistObj && artistObj.popular && artistObj.popular.length > 0) {
+                                var shuffled = artistObj.popular.slice();
+                                for (var i = shuffled.length - 1; i > 0; i--) {
+                                    var j = Math.floor(Math.random() * (i + 1));
+                                    var temp = shuffled[i];
+                                    shuffled[i] = shuffled[j];
+                                    shuffled[j] = temp;
+                                }
+                                win.currentTracks = shuffled;
+                                win.playingPlaylistId = "";
+                                win.playOnlineTrack(shuffled[0], false);
+                            } else if (artistObj && artistObj.metadata && artistObj.metadata.shuffleId) {
+                                win.startRadioFromTrack({ id: artistObj.metadata.shuffleId, name: artistObj.metadata.name });
+                            }
+                        }
+                        onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
+                        onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
+                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                        onToggleFollowRequested: (chId, aName, currFollowed) => win.toggleFollowArtist(chId, aName, currFollowed)
+                    }
                 }
 
                 // Column 3: Amberol Detail View (Right Collapsible Panel)
@@ -977,6 +1097,7 @@ Scope {
                     onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
                     onRateSongRequested: (vid, rating) => win.rateSong(vid, rating)
                     onSongDisliked: trk => win.handleDislikedTrack(trk)
+                    onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
                     onCopyLinkRequested: text => {
                         Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Frostify" "Đã sao chép liên kết vào clipboard"', "sh", text]);
                     }
@@ -1015,6 +1136,7 @@ Scope {
                     win.isRepeat = !win.isRepeat;
                     win.saveSettings();
                 }
+                onOpenArtistRequested: name => win.loadArtistDetails(name)
                 onSeekRequested: sec => win.seekAudio(sec)
                 onReqVolumeChange: vol => win.setVolume(vol)
             }
@@ -1072,6 +1194,7 @@ Scope {
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
             onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
             onCreatePlaylistWithTrackRequested: trk => win.createCustomPlaylistFromTracks([trk])
+            onViewArtistRequested: trk => win.loadArtistDetails(trk.artist || trk.author)
         }
 
         DownloadManager {
@@ -1121,7 +1244,10 @@ Scope {
             if (obj.isShuffle !== undefined) win.isShuffle = !!obj.isShuffle;
             if (obj.isRepeat !== undefined) win.isRepeat = !!obj.isRepeat;
             if (obj.syncHistoryToGoogle !== undefined) win.syncHistoryToGoogle = !!obj.syncHistoryToGoogle;
-            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle);
+            if (obj.followedArtists !== undefined && Array.isArray(obj.followedArtists)) {
+                win.followedArtists = obj.followedArtists;
+            }
+            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle + ", followedCount=" + win.followedArtists.length);
         } catch(e) {}
     }
 
@@ -1129,12 +1255,53 @@ Scope {
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
             isRepeat: win.isRepeat,
-            syncHistoryToGoogle: win.syncHistoryToGoogle
+            syncHistoryToGoogle: win.syncHistoryToGoogle,
+            followedArtists: win.followedArtists
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/frostify_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
             data
         ]);
+    }
+
+    function toggleFollowArtist(channelId, artistName, isCurrentlyFollowed) {
+        var chId = channelId || "";
+        var aName = artistName || "";
+        if (!chId && !aName) return;
+
+        var nextState = !isCurrentlyFollowed;
+        var list = win.followedArtists ? win.followedArtists.slice(0) : [];
+        if (nextState) {
+            var exists = false;
+            for (var i = 0; i < list.length; i++) {
+                if ((chId && list[i].channelId === chId) || (aName && (list[i].name || "").toLowerCase() === aName.toLowerCase())) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                list.push({ channelId: chId, name: aName, timestamp: Date.now() });
+            }
+        } else {
+            var filtered = [];
+            for (var j = 0; j < list.length; j++) {
+                if ((chId && list[j].channelId === chId) || (aName && (list[j].name || "").toLowerCase() === aName.toLowerCase())) {
+                    continue;
+                }
+                filtered.push(list[j]);
+            }
+            list = filtered;
+        }
+        win.followedArtists = list;
+        win.saveSettings();
+
+        // Sync to YouTube Music if logged in and channelId is available
+        if (win.isAuthLoggedIn && chId) {
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/ytmusic_helper.py",
+                "subscribe", chId, nextState ? "true" : "false"
+            ]);
+        }
     }
 
     FileView {
@@ -1744,6 +1911,13 @@ Scope {
         }
         function closeContextMenu() {
             trackContextMenu.closeMenu();
+        }
+        function openArtist(artistNameOrId: string) {
+            win.visible = true;
+            win.loadArtistDetails(artistNameOrId);
+        }
+        function goBackFromArtist() {
+            win.goBackFromArtist();
         }
     }
 

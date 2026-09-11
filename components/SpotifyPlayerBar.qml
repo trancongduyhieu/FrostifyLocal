@@ -31,6 +31,7 @@ Rectangle {
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
     signal queueClicked()
+    signal openArtistRequested(string artistName)
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -113,12 +114,25 @@ Rectangle {
                 }
 
                 Text {
+                    id: artistLabel
                     Layout.fillWidth: true
                     text: root.currentTrack ? root.currentTrack.artist : "Spotify Desktop"
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
-                    color: Theme.textSecondary
+                    color: (root.currentTrack && artistMouse.containsMouse) ? Theme.spotifyGreen : Theme.textSecondary
                     elide: Text.ElideRight
+
+                    MouseArea {
+                        id: artistMouse
+                        anchors.fill: parent
+                        hoverEnabled: !!root.currentTrack
+                        cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: {
+                            if (root.currentTrack && root.currentTrack.artist) {
+                                root.openArtistRequested(root.currentTrack.artist);
+                            }
+                        }
+                    }
                 }
             }
         }

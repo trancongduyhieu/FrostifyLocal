@@ -43,6 +43,7 @@ Item {
     signal deleteTrackRequested(var track)
     signal addToPlaylistRequested(var track, string playlistId)
     signal createPlaylistWithTrackRequested(var track)
+    signal viewArtistRequested(var track)
 
     function openAt(posTrack, xPos, yPos, queueItem) {
         closeTimer.stop();
@@ -244,6 +245,18 @@ Item {
                             if (t && pid) root.addToPlaylistRequested(t, pid);
                         }
                     }
+                }
+            }
+
+            // Action: Go to artist
+            MenuItemButton {
+                visible: !!(root.track && (root.track.artist || root.track.author))
+                text: "Go to artist"
+                iconSource: "../assets/icons/folder-music-symbolic.svg"
+                onClicked: {
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t) root.viewArtistRequested(t);
                 }
             }
 

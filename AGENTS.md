@@ -156,6 +156,24 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Thẻ Nghệ Sĩ SimpMusic (140px): Avatar nghệ sĩ lớn, gradient scrim, badge `Nghệ sĩ`, tên và số lượng người đăng ký.
       - Thẻ Thống Kê & Mô Tả: Ngày phát hành, số lượt xem, nút Thích (xanh Spotify), nút Không Thích (đỏ neon), thanh tỷ lệ like neon, và khối mô tả mở rộng với nút `[ Xem thêm ▼ / Thu gọn ▲ ]`.
       - Khi bấm Không Thích: Lập tức ghi vào blacklist, loại bài khỏi `currentTracks`/`browsingTracks`, và tự động chuyển sang bài tiếp theo (`playNext()`).
+18. **Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn SimpMusic (Interactive Artist Page Suite - Item 21)**:
+    - **Backend Engine (`backend/ytmusic_helper.py`)**:
+      - `get_artist(channel_id_or_name)` tự động phân giải tên nghệ sĩ sang browseId và bóc tách metadata (avatar phân giải cao 544x544 / 960px, subscribers, views), top bài hát phổ biến ("Phổ biến"), carousels "Albums", "Đĩa đơn & EPs", "Video âm nhạc", danh sách tròn "Nghệ sĩ liên quan", và khối tiểu sử "Giới thiệu".
+      - `subscribe_artist_action(channel_id, subscribe)` tích hợp `ytmusic.subscribe_artist` / `unsubscribe_artist`.
+    - **Giao Diện QML (`components/ArtistDetailView.qml` & `shell.qml`)**:
+      - Top sticky bar với nút Back bo tròn `<` và navigation history stack (`artistHistoryStack`).
+      - Hero Artist Header: Avatar tròn 140px cắt mặt nạ chuẩn `MultiEffect`, badge `Nghệ sĩ`, tên nghệ sĩ 32px bold, cụm 3 nút `[ 📻 Đài phát ]`, `[ 🔀 Xáo trộn ]`, `[ 👤+ Theo dõi / ✔ Đã theo dõi ]`.
+      - Nút Theo dõi: Cơ chế Hybrid — lưu động vào `~/.config/noctalia/frostify_settings.json` (`win.followedArtists`, tuyệt đối không hardcode) và đồng bộ YouTube Music nếu có tài khoản.
+      - Danh sách "Phổ biến": Phát bài nạp hàng đợi `win.currentTracks`, chuột phải mở toàn diện `TrackContextMenu`.
+      - Carousels ngang: Albums, Đĩa đơn & EPs, Videos, và Nghệ sĩ liên quan (avatar tròn 108px `MultiEffect`).
+      - Đa điểm chạm điều hướng: Click tên nghệ sĩ trên `SpotifyPlayerBar`, thẻ nghệ sĩ trong `AmberolDetailView`, "Go to artist" trong `TrackContextMenu`.
+19. **Tối Ưu Avatar Nghệ Sĩ 0ms Cache & Shimmer Fallback (Item 22)**:
+    - Xóa bỏ triệt để biểu thức mượn tạm ảnh bài hát `track.image` trong `AmberolDetailView.qml`.
+    - Hiển thị Shimmer placeholder thở mượt mà (`SequentialAnimation` độ mờ 0.35 - 0.70) khi ảnh chưa sẵn sàng.
+    - Bộ nhớ đệm avatar `~/.cache/frostify/artist_avatars.json` ánh xạ tên nghệ sĩ sang thumbnail phân giải cao; QML nạp qua `FileView` hiển thị avatar trong 0ms khi bài hát vừa bắt đầu phát.
+20. **0ms State Clean Reset & Chống Rò Rỉ Trạng Thái Like/Dislike (Item 23)**:
+    - Trong `AmberolDetailView.qml`, sự kiện `onTrackChanged` lập tức reset `currentLikeStatus = "INDIFFERENT"`, `songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0` ngay trong 0ms.
+    - Đọc nhanh danh sách blacklist đồng bộ từ `frostify_disliked_songs.json` qua `FileView`: Nếu bài hát mới nằm trong blacklist, lập tức sáng đỏ `DISLIKE` ngay trong 0ms; nếu không, giữ nguyên `INDIFFERENT`. Ngăn chặn hoàn toàn hiện tượng bài mới bị "dính" nút Dislike đỏ của bài trước trong thời gian chờ API.
 
 ---
 

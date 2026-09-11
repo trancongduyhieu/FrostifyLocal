@@ -79,8 +79,52 @@ Rectangle {
     signal copyLinkRequested(string text)
     signal rateSongRequested(string videoId, string rating)
     signal songDisliked(var trk)
+    signal openArtistRequested(string artistName, string channelId)
 
-    property string currentLikeStatus: (songDetails && songDetails.likeStatus) ? songDetails.likeStatus : "INDIFFERENT"
+    property var artistAvatarsMap: ({})
+    property var dislikedSongsMap: ({})
+
+    FileView {
+        id: artistAvatarsFileView
+        path: Quickshell.env("HOME") + "/.cache/frostify/artist_avatars.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            try {
+                var txt = text();
+                if (txt && txt.length > 2) artistAvatarsMap = JSON.parse(txt);
+            } catch (e) {}
+        }
+    }
+
+    FileView {
+        id: dislikedFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_disliked_songs.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            try {
+                var txt = text();
+                if (txt && txt.length > 2) dislikedSongsMap = JSON.parse(txt);
+            } catch (e) {}
+        }
+    }
+
+    function isTrackDisliked(vid) {
+        if (!vid || !dislikedSongsMap) return false;
+        var clean = String(vid).replace("ytdl://", "").replace("yt_", "");
+        return !!dislikedSongsMap[clean];
+    }
+
+    readonly property string cachedArtistAvatar: {
+        var aName = (root.track && root.track.artist) ? root.track.artist.toLowerCase().trim() : "";
+        if (aName && artistAvatarsMap && artistAvatarsMap[aName]) {
+            return artistAvatarsMap[aName];
+        }
+        return "";
+    }
+
+    property string currentLikeStatus: "INDIFFERENT"
     property int localLikesCount: (songDetails && songDetails.likes) ? songDetails.likes : 0
     property int localDislikesCount: (songDetails && songDetails.dislikes) ? songDetails.dislikes : 0
 
@@ -89,6 +133,11 @@ Rectangle {
             currentLikeStatus = songDetails.likeStatus || "INDIFFERENT";
             localLikesCount = songDetails.likes || 0;
             localDislikesCount = songDetails.dislikes || 0;
+        } else {
+            var vid = track ? (track.videoId || (track.path && track.path.startsWith("ytdl://") ? track.path.replace("ytdl://", "") : "")) : "";
+            currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
+            localLikesCount = 0;
+            localDislikesCount = 0;
         }
     }
 
@@ -162,6 +211,12 @@ Rectangle {
     }
 
     onTrackChanged: {
+        songDetails = null;
+        var vid = track ? (track.videoId || (track.path && track.path.startsWith("ytdl://") ? track.path.replace("ytdl://", "") : "")) : "";
+        currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
+        localLikesCount = 0;
+        localDislikesCount = 0;
+
         fetchLyrics();
         fetchSongDetails();
         delayedAudioSpecsTimer.restart();
@@ -180,6 +235,14 @@ Rectangle {
     onWidthChanged: console.log("AmberolDetailView width:", width, "isCompact:", isCompact)
     Component.onCompleted: {
         console.log("AmberolDetailView COMPLETED width:", width, "height:", height, "isCompact:", isCompact)
+        try {
+            var aTxt = artistAvatarsFileView.text();
+            if (aTxt && aTxt.length > 2) artistAvatarsMap = JSON.parse(aTxt);
+        } catch(e) {}
+        try {
+            var dTxt = dislikedFileView.text();
+            if (dTxt && dTxt.length > 2) dislikedSongsMap = JSON.parse(dTxt);
+        } catch(e) {}
         fetchLyrics();
         fetchSongDetails();
     }
@@ -707,6 +770,7 @@ Rectangle {
 
                     // 4. SimpMusic Artist Card (Avatar, Label "Nghệ sĩ", Name & Subscribers)
                     Rectangle {
+                        id: artistCard
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
                         Layout.maximumWidth: 320
@@ -714,10 +778,24 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         radius: 12
                         color: "#161618"
-                        border.color: "#28282c"
+                        border.color: artistCardMouse.containsMouse ? "#3e3e46" : "#28282c"
                         border.width: 1
                         clip: true
                         visible: (root.songDetails && (root.songDetails.author || root.songDetails.authorThumbnail)) || (root.track && root.track.artist)
+
+                        // Shimmer placeholder when avatar is not yet loaded
+                        Rectangle {
+                            anchors.fill: artistImg
+                            color: "#202024"
+                            visible: artistImg.status !== Image.Ready
+                            
+                            SequentialAnimation on opacity {
+                                running: artistImg.status !== Image.Ready
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 0.35; to: 0.70; duration: 900; easing.type: Easing.InOutQuad }
+                                NumberAnimation { from: 0.70; to: 0.35; duration: 900; easing.type: Easing.InOutQuad }
+                            }
+                        }
 
                         // Artist Banner / Thumbnail image
                         Image {
@@ -726,7 +804,7 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             height: 108
-                            source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : (root.track && root.track.image ? root.track.image : "")
+                            source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : root.cachedArtistAvatar
                             fillMode: Image.PreserveAspectCrop
                             clip: true
                             asynchronous: true
@@ -782,6 +860,20 @@ Rectangle {
                                 font.pixelSize: 11
                                 color: Theme.textMuted
                                 elide: Text.ElideRight
+                            }
+                        }
+
+                        MouseArea {
+                            id: artistCardMouse
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onClicked: {
+                                var aName = (root.songDetails && root.songDetails.author) ? root.songDetails.author : (root.track ? (root.track.artist || "") : "");
+                                var aChannel = (root.songDetails && root.songDetails.channelId) ? root.songDetails.channelId : "";
+                                if (aName) {
+                                    root.openArtistRequested(aName, aChannel);
+                                }
                             }
                         }
                     }

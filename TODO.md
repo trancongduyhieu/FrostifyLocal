@@ -171,34 +171,34 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Frostify Local. Đã 
     - Xóa vĩnh viễn tệp âm thanh cục bộ trên đĩa cứng và cập nhật đồng bộ cache `library.json`, khắc phục triệt để lỗi bài hát xuất hiện trở lại sau khi khởi động lại ứng dụng.
     - Sửa lỗi khi xóa một bài trong tab Downloads không còn kích hoạt tự động phát toàn bộ danh sách bài hát tải về.
 
-- [ ] **21. Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn SimpMusic (SimpMusic Interactive Artist Page Suite)**
-  - *Tham chiếu trực quan*: 4 ảnh chụp giao diện từ SimpMusic do người dùng cung cấp (`media_1789131034612.jpg` đến `media_1789131034657.jpg`).
-  - *Nghiên cứu kiến trúc từ SimpMusic codebase* (`/home/apple/Applications/SimpMusic/composeApp/.../ArtistScreen.kt` & `ArtistPage.kt`):
-    - **Backend Engine**: Sử dụng `ytmusic.get_artist(channelId)` trích xuất toàn diện:
-      - `name`, `subscribers`, `views`, `thumbnails` (header banner và avatar tròn).
-      - `shuffleId` (phát ngẫu nhiên tất cả bài hát của nghệ sĩ), `radioId` (khởi tạo đài phát automix).
-      - Section 1: `songs` (Top bài hát hot nhất - "Phổ biến" / Popular).
-      - Section 2: `singles` (Kệ carousel ngang các "Đĩa đơn").
-      - Section 3: `albums` (Kệ carousel ngang các "Albums" phòng thu).
-      - Section 4: `videos` (Kệ carousel các "Video" âm nhạc chính thức).
-      - Section 5: `related` (Kệ danh sách avatar tròn "Nghệ sĩ liên quan" / Similar Artists).
-      - Section 6: `description` ("Mô tả" / Tiểu sử nghệ sĩ).
-    - **Kích hoạt & Điều hướng**: Cho phép bấm vào tên nghệ sĩ hoặc avatar nghệ sĩ từ bất kỳ đâu (Now Playing View, TrackCard, TrackRow, PlayerBar) để mở màn hình chi tiết nghệ sĩ (`ArtistDetailView.qml`).
-    - **Header & 3 Nút Hành Động**:
-      1. `[ 📻 Đài phát ]`: Khởi tạo và phát radio theo nghệ sĩ (`radioId`).
-      2. `[ 🔀 Xáo trộn ]`: Xáo trộn toàn bộ bài hát của nghệ sĩ (`shuffleId`).
-      3. `[ 👤+ Đăng ký ]`: Nút theo dõi / đăng ký kênh nghệ sĩ trên YouTube Music.
+- [x] **21. Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn SimpMusic (SimpMusic Interactive Artist Page Suite - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Engine & API Bóc Tách Chuyên Sâu**:
+      - `backend/ytmusic_helper.py`: Bổ sung `get_artist(channel_id_or_name)` tự động phân giải tên nghệ sĩ sang browseId và bóc tách cấu trúc nghệ sĩ đầy đủ từ YouTube Music: metadata (`name`, `subscribers`, `views`, avatar chất lượng cao `w544-h544-l90-rj` / `s960`), `radioId`, `shuffleId`, danh sách bài hát nổi tiếng ("Phổ biến" / Popular), carousels "Albums", "Đĩa đơn & EPs", "Video âm nhạc", danh sách tròn "Nghệ sĩ liên quan" (Similar Artists) và khối tiểu sử "Giới thiệu" (Description).
+      - Triển khai `subscribe_artist_action(channel_id, subscribe)` tương thích YouTube Music API (`ytmusic.subscribe_artist` / `unsubscribe_artist`). Thêm endpoint CLI `artist <query|id>` và `subscribe <id> <true|false>`.
+    - **Giao Diện QML Độc Lập Chuẩn Dark Glass (`components/ArtistDetailView.qml`)**:
+      - Hero Artist Header: Avatar tròn 140px sử dụng `MultiEffect` mask chuẩn viền sáng, huy hiệu `"Nghệ sĩ"` thanh lịch, tiêu đề tên nghệ sĩ lớn 32px đậm, lượt theo dõi và lượt xem.
+      - Cụm 3 nút hành động chuẩn SimpMusic:
+        1. `[ 📻 Đài phát ]`: Khởi tạo và phát ngay automix radio của nghệ sĩ.
+        2. `[ 🔀 Xáo trộn ]`: Xáo trộn toàn bộ bài hát phổ biến của nghệ sĩ vào hàng đợi.
+        3. `[ 👤+ Theo dõi / ✔ Đã theo dõi ]`: Cơ chế Hybrid thông minh — tự động đổi sang màu xanh Spotify khi đã theo dõi, lưu trạng thái động vào `~/.config/noctalia/frostify_settings.json` (tuyệt đối không hardcode) và đồng bộ trực tiếp lên tài khoản Google / YouTube Music nếu đã đăng nhập.
+      - Section "Phổ biến" (Popular Songs): Số thứ tự, bìa bài hát bo góc, soundwave xanh khi đang phát, hover play icon, click phát bài nạp danh sách vào hàng đợi (`win.currentTracks`), chuột phải mở toàn diện `TrackContextMenu`.
+      - Các Carousels cuộn ngang phong cách Spotify Desktop: "Albums", "Đĩa đơn & EPs", "Video âm nhạc", và "Nghệ sĩ liên quan" (avatar tròn 108px với `MultiEffect` mask). Nút phân trang `<` và `>` mượt mà.
+      - Khối "Giới thiệu" (Bio Description): Co giãn linh hoạt với nút `[ Xem thêm ▼ / Thu gọn ▲ ]`.
+    - **Tích Hợp Điều Hướng Toàn Diện (`shell.qml`, `SpotifyPlayerBar.qml`, `AmberolDetailView.qml`, `TrackContextMenu.qml`)**:
+      - Hỗ trợ navigation history stack (`artistHistoryStack`) với nút quay lại (Back `<`) mượt mà, chuyển đổi mượt giữa `home`, `library`, `playlist` và `artist`.
+      - Cho phép mở trang nghệ sĩ từ mọi nơi: Click tên nghệ sĩ trên thanh phát nhạc, click thẻ nghệ sĩ trong Now Playing, click "Go to artist" trong context menu, hoặc click nghệ sĩ liên quan.
 
-- [ ] **22. Tối Ưu Tốc Độ Nạp & Xóa Bỏ Hiện Tượng Nhảy Giật Ảnh Avatar Nghệ Sĩ (Instant Artist Avatar Cache & Shimmer Fallback)**
-  - *Hiện trạng lỗi*: Khi bấm vào bài hát (ví dụ bài hát của Not Again hoặc McPepii), avatar nghệ sĩ ban đầu hiển thị ảnh bìa bài hát (`track.image`), sau 1-2 giây khi API Innertube trả về thì avatar mới đột ngột nhảy sang ảnh của kênh nghệ sĩ, gây cảm giác giật và khó chịu.
-  - *Nguyên nhân gốc rễ*: Tại dòng 729 của `components/AmberolDetailView.qml`, biểu thức binding `source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : (root.track && root.track.image ? root.track.image : "")` đã lấy tạm ảnh bài hát làm avatar nghệ sĩ trong lúc chờ `authorThumbnail` tải xong.
-  - *Giải pháp*:
-    1. Xóa bỏ hoàn toàn việc fallback về ảnh bìa bài hát `track.image` cho avatar nghệ sĩ. Thay bằng khung xương mờ skeleton hoặc placeholder trung tính mượt mà.
-    2. Xây dựng bộ cache avatar nghệ sĩ cục bộ `~/.cache/frostify/artist_avatars.json` ánh xạ `artist_name -> authorThumbnail`. Khi phát bài hát của một nghệ sĩ đã từng phát trước đó, avatar nghệ sĩ sẽ hiển thị tức thì trong 0ms mà không cần đợi API.
+- [x] **22. Tối Ưu Tốc Độ Nạp & Xóa Bỏ Hiện Tượng Nhảy Giật Ảnh Avatar Nghệ Sĩ (Instant Artist Avatar Cache & Shimmer Fallback - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Xóa bỏ hoàn toàn fallback mượn tạm ảnh bìa bài hát**: Loại bỏ triệt để biểu thức mượn tạm `track.image` trong `components/AmberolDetailView.qml`, ngăn chặn hoàn toàn hiện tượng avatar nghệ sĩ nhảy giật từ ảnh bìa album sang ảnh chân dung sau 1-2 giây.
+    - **Hiệu ứng Khung Xương Xung Nhịp (Shimmer Placeholder)**: Khi avatar nghệ sĩ chưa tải xong hoặc đang nạp từ mạng, hiển thị hình khối mờ bo tròn với hoạt ảnh thở nhịp nhàng (`SequentialAnimation` độ mờ `0.35` $\leftrightarrow$ `0.70`).
+    - **Bộ Nhớ Đệm Avatar Nghệ Sĩ 0ms (`~/.cache/frostify/artist_avatars.json`)**:
+      - Backend daemon tự động trích xuất và lưu ảnh avatar nghệ sĩ phân giải cao vào file cache JSON ngay khi nạp chi tiết bài hát (`get_song_details`) hoặc trang nghệ sĩ (`get_artist`).
+      - QML nạp đồng bộ file cache qua `FileView`, binding ngay tức thì `cachedArtistAvatar` khi vừa chuyển bài hát, giúp hiển thị avatar nghệ sĩ trong 0ms đối với bất kỳ nghệ sĩ nào đã từng phát.
 
-- [ ] **23. Khắc Phục Lỗi Trễ & Rò Rỉ Trạng Thái Like/Dislike Khi Chuyển Bài (Instant State Clean Reset on Track Change)**
-  - *Hiện trạng lỗi*: Khi người dùng bấm Dislike một bài (ví dụ `Abnormality Dancin' Girl`) và hệ thống skip sang bài tiếp theo, bài tiếp theo vẫn hiển thị nút Dislike màu đỏ của bài cũ trong 1-2 giây rồi mới đổi lại thông tin đúng của bài mới.
-  - *Nguyên nhân gốc rễ*: Trong `components/AmberolDetailView.qml`, hàm `onTrackChanged` chỉ kích hoạt tiến trình nạp ngầm `fetchSongDetails()` mà không dọn sạch các thuộc tính trạng thái cục bộ (`currentLikeStatus`, `localLikesCount`, `localDislikesCount`, `songDetails`). Do đó, giao diện vẫn giữ nguyên trạng thái dislike của bài trước trong suốt thời gian API đang nạp bài mới.
-  - *Giải pháp*:
-    1. Trong `onTrackChanged`: Ngay lập tức reset `currentLikeStatus = "INDIFFERENT"`, `songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0`, `isLoadingDetails = true`.
-    2. Đọc nhanh trạng thái blacklist đồng bộ từ bộ nhớ: Kiểm tra ngay lập tức xem `track.id` có nằm trong blacklist hay không để cập nhật `currentLikeStatus = "DISLIKE"` ngay trong 0ms nếu đúng là bài đã bị dislike, ngăn chặn triệt để hiện tượng rò rỉ trạng thái bài cũ sang bài mới.
+- [x] **23. Khắc Phục Lỗi Trễ & Rò Rỉ Trạng Thái Like/Dislike Khi Chuyển Bài (Instant State Clean Reset on Track Change - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **0ms Instant State Clean Reset**: Trong `components/AmberolDetailView.qml`, sự kiện `onTrackChanged` lập tức dọn sạch toàn bộ trạng thái của bài hát trước (`songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0`, `isLoadingDetails = true`).
+    - **Đọc Blacklist Đồng Bộ Bộ Nhớ Trong 0ms**: Ngay khi `track` thay đổi, `onTrackChanged` tra cứu trực tiếp file blacklist `~/.config/noctalia/frostify_disliked_songs.json` qua `FileView`. Nếu bài hát mới nằm trong danh sách đen, nút Dislike lập tức sáng đỏ ngay trong 0ms; nếu không, trạng thái được reset tức thì về `"INDIFFERENT"`. Xóa bỏ vĩnh viễn hiện tượng bài hát mới bị "dính" nút Dislike đỏ của bài hát trước trong 1-2 giây chờ API.
+
