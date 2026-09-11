@@ -36,8 +36,11 @@ PanelWindow {
         right: true
     }
 
-    // Dynamic input mask: Only the squircle card is clickable, rest passes through to desktop
-    mask: Region {
+    // Dynamic input mask: Passes through desktop clicks when idle; full grab when dragging
+    mask: (dragArea.pressed || dragArea.drag.active) ? null : cardRegion
+
+    Region {
+        id: cardRegion
         item: widgetContainer
     }
 
@@ -107,10 +110,24 @@ PanelWindow {
     // =========================================================================
     Item {
         id: widgetContainer
-        x: Math.max(10, Math.min(root.width - width - 10, root.widgetX))
-        y: Math.max(10, Math.min(root.height - height - 10, root.widgetY))
+        x: root.widgetX
+        y: root.widgetY
         width: 216
         height: 216
+
+        Connections {
+            target: root
+            function onWidgetXChanged() {
+                if (!dragArea.drag.active) {
+                    widgetContainer.x = root.widgetX;
+                }
+            }
+            function onWidgetYChanged() {
+                if (!dragArea.drag.active) {
+                    widgetContainer.y = root.widgetY;
+                }
+            }
+        }
 
         // 1. Squircle Mask for pixel-perfect rounded corners (Zero corner bleed, zero dark gap)
         Rectangle {
@@ -176,43 +193,22 @@ PanelWindow {
             border.color: Qt.rgba(0, 0, 0, 0.30)
         }
 
-        // 4. Drag MouseArea covering whole card background
+        // 4. Native Drag MouseArea covering whole card background
         MouseArea {
             id: dragArea
             anchors.fill: parent
-            cursorShape: isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-            property point pressGlobalPos: Qt.point(0, 0)
-            property real dragStartX: 0
-            property real dragStartY: 0
-            property bool isDragging: false
-
-            onPressed: (mouse) => {
-                pressGlobalPos = mapToItem(root, mouse.x, mouse.y);
-                dragStartX = widgetContainer.x;
-                dragStartY = widgetContainer.y;
-                isDragging = false;
-            }
-
-            onPositionChanged: (mouse) => {
-                var cur = mapToItem(root, mouse.x, mouse.y);
-                var dx = cur.x - pressGlobalPos.x;
-                var dy = cur.y - pressGlobalPos.y;
-                if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-                    isDragging = true;
-                }
-                if (isDragging) {
-                    var maxX = root.width - widgetContainer.width - 10;
-                    var maxY = root.height - widgetContainer.height - 10;
-                    root.widgetX = Math.max(10, Math.min(maxX, Math.round(dragStartX + dx)));
-                    root.widgetY = Math.max(10, Math.min(maxY, Math.round(dragStartY + dy)));
-                }
-            }
+            drag.target: widgetContainer
+            drag.axis: Drag.XAndYAxis
+            drag.minimumX: 10
+            drag.minimumY: 10
+            drag.maximumX: (root.screen ? root.screen.width : 1920) - widgetContainer.width - 10
+            drag.maximumY: (root.screen ? root.screen.height : 1080) - widgetContainer.height - 10
+            cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
             onReleased: {
-                if (isDragging) {
-                    isDragging = false;
-                    root.savePositionRequested(root.widgetX, root.widgetY);
-                }
+                root.widgetX = widgetContainer.x;
+                root.widgetY = widgetContainer.y;
+                root.savePositionRequested(root.widgetX, root.widgetY);
             }
 
             onDoubleClicked: {

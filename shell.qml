@@ -820,6 +820,9 @@ Scope {
                 isSidebarVisible: win.showSidebar
 
                 onTabSelected: tab => win.filterByTab(tab)
+                onCloseWindowRequested: {
+                    win.visible = false;
+                }
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;
                 }

@@ -151,8 +151,12 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
             "artUrl": art_url,
             "path": file_path
         }
-        with open("/tmp/nutsty_current_track.json", "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False)
+        for track_file in ["/tmp/nutsty_current_track.json", "/tmp/frostify_current_track.json"]:
+            try:
+                with open(track_file, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, ensure_ascii=False)
+            except Exception:
+                pass
 
         session_file = os.path.expanduser("~/.config/noctalia/nutsty_session.json")
         os.makedirs(os.path.dirname(session_file), exist_ok=True)

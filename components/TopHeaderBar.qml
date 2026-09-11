@@ -23,6 +23,7 @@ Rectangle {
     signal forwardRequested()
     signal downloadPopoverRequested()
     signal toggleSidebarRequested()
+    signal closeWindowRequested()
 
     onCurrentViewChanged: {
         searchMode = (currentView === "library" ? "offline" : "online");
@@ -327,5 +328,30 @@ Rectangle {
         }
 
         Item { Layout.fillWidth: true }
+
+        // Window Close Button [ ✕ ] (Closes / Minimizes to Desktop Widget)
+        Rectangle {
+            id: closeBtn
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
+            radius: 16
+            color: closeMouse.containsMouse ? "#E81123" : "transparent"
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/window-close-symbolic.svg"
+                iconSize: 14
+                color: "#ffffff"
+            }
+
+            MouseArea {
+                id: closeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: headerRoot.closeWindowRequested()
+            }
+        }
     }
 }
