@@ -777,6 +777,16 @@ Scope {
     property bool isShuffle: false
     property bool isRepeat: false
     property bool showAmberolDetails: false
+    property real widgetX: 60
+    property real widgetY: 820
+
+    readonly property var nextTrack: {
+        if (!win.currentTrack || !win.currentTracks || win.currentTracks.length <= 1) return null;
+        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+        if (curIdx === -1) return null;
+        var nextIdx = (curIdx + 1) % win.currentTracks.length;
+        return win.currentTracks[nextIdx] || null;
+    }
 
     Shortcut {
         sequence: "F11"
@@ -1266,7 +1276,9 @@ Scope {
             if (obj.followedArtists !== undefined && Array.isArray(obj.followedArtists)) {
                 win.followedArtists = obj.followedArtists;
             }
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle + ", followedCount=" + win.followedArtists.length);
+            if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
+            if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
         } catch(e) {}
     }
 
@@ -1275,7 +1287,9 @@ Scope {
             isShuffle: win.isShuffle,
             isRepeat: win.isRepeat,
             syncHistoryToGoogle: win.syncHistoryToGoogle,
-            followedArtists: win.followedArtists
+            followedArtists: win.followedArtists,
+            widgetX: win.widgetX,
+            widgetY: win.widgetY
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
@@ -1953,6 +1967,39 @@ Scope {
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
         enabled: true
+    }
+
+    // =========================================================================
+    // Nutsty Desktop Music Mini Controller Widget (Layer Bottom)
+    // Active when Full Nutsty window is closed/minimized (!win.visible) and track is loaded
+    // =========================================================================
+    Loader {
+        id: desktopMusicWidgetLoader
+        active: !win.visible && win.currentTrack !== null
+        sourceComponent: Component {
+            DesktopMusicWidget {
+                currentTrack: win.currentTrack
+                nextTrack: win.nextTrack
+                currentTime: win.currentTime
+                duration: win.totalDuration
+                isPlaying: win.isPlaying
+                widgetX: win.widgetX
+                widgetY: win.widgetY
+
+                onPlayPauseClicked: win.togglePlay()
+                onNextClicked: win.playNext()
+                onPrevClicked: win.playPrev()
+                onSeekRequested: (sec) => win.seekAudio(sec)
+                onOpenFullAppRequested: {
+                    win.visible = true;
+                }
+                onSavePositionRequested: (newX, newY) => {
+                    win.widgetX = newX;
+                    win.widgetY = newY;
+                    win.saveSettings();
+                }
+            }
+        }
     }
 } // end appScope
 
