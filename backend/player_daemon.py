@@ -106,26 +106,24 @@ def resolve_media_path(file_path):
             sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
     return file_path
 
-def update_current_track_metadata(file_path):
+def update_current_track_metadata(file_path, title="", artist="", art_url=""):
     if not file_path:
         return
     try:
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        lib_json = os.path.join(app_dir, "library.json")
-        art_url = ""
-        title = ""
-        artist = ""
-        if os.path.exists(lib_json):
-            with open(lib_json, "r", encoding="utf-8") as f:
-                tracks = json.load(f)
-                for t in tracks:
-                    p = t.get("path", "")
-                    fn = t.get("filename", "")
-                    if p == file_path or (fn and file_path.endswith(fn)):
-                        art_url = t.get("image", "")
-                        title = t.get("title", "") or t.get("name", "")
-                        artist = t.get("artist", "")
-                        break
+        if not title:
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            lib_json = os.path.join(app_dir, "library.json")
+            if os.path.exists(lib_json):
+                with open(lib_json, "r", encoding="utf-8") as f:
+                    tracks = json.load(f)
+                    for t in tracks:
+                        p = t.get("path", "")
+                        fn = t.get("filename", "")
+                        if p == file_path or (fn and file_path.endswith(fn)):
+                            art_url = t.get("image", "")
+                            title = t.get("title", "") or t.get("name", "")
+                            artist = t.get("artist", "")
+                            break
 
         # Fallback to online tracks cache if not in local library
         if not title:
@@ -167,14 +165,17 @@ def update_current_track_metadata(file_path):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: player_daemon.py [play <path> | pause | resume | toggle | seek <sec> | stop | status]")
+        print("Usage: player_daemon.py [play <path> [title] [artist] [art_url] | pause | resume | toggle | seek <sec> | stop | status]")
         sys.exit(1)
 
     action = sys.argv[1].lower()
 
     if action == "play" and len(sys.argv) > 2:
         file_path = sys.argv[2]
-        meta = update_current_track_metadata(file_path)
+        title_arg = sys.argv[3] if len(sys.argv) > 3 else ""
+        artist_arg = sys.argv[4] if len(sys.argv) > 4 else ""
+        art_arg = sys.argv[5] if len(sys.argv) > 5 else ""
+        meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path)
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])

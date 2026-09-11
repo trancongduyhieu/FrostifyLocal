@@ -925,47 +925,50 @@ def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
             if not pt:
                 return False
 
-            playback_url = pt.get("videostatsPlaybackUrl", {}).get("baseUrl")
-            watchtime_url = pt.get("videostatsWatchtimeUrl", {}).get("baseUrl")
-            atr_url = pt.get("atrUrl", {}).get("baseUrl")
+            playback_url = pt.get("videostatsPlaybackUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
+            watchtime_url = pt.get("videostatsWatchtimeUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
+            atr_url = pt.get("atrUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
             if not playback_url or not watchtime_url:
                 return False
 
             cpn = "".join(random.choices(string.ascii_letters + string.digits + "-_", k=16))
             now_ms = str(int(time.time() * 1000))
-            headers = {
-                "X-Goog-Event-Time": now_ms,
-                "X-Goog-Request-Time": now_ms,
-            }
+            
+            # Use authenticated headers from yt.headers (includes fresh SAPISIDHASH, cookies, origin)
+            auth_headers = dict(yt.headers)
+            auth_headers["X-Goog-Event-Time"] = now_ms
+            auth_headers["X-Goog-Request-Time"] = now_ms
 
             # 1. Playback ping
             p1 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn}
             if p_id:
                 p1["list"] = p_id
                 p1["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-            yt._session.get(playback_url, params=p1, headers=headers, timeout=10)
+            yt._session.get(playback_url, params=p1, headers=auth_headers, timeout=10)
 
             # 2. Watchtime initial ping (st=0, et=5.54)
             p2 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn, "st": "0", "et": "5.54"}
             if p_id:
                 p2["list"] = p_id
                 p2["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-            yt._session.get(watchtime_url, params=p2, headers=headers, timeout=10)
+            auth_headers["X-Goog-Event-Time"] = str(int(time.time() * 1000))
+            auth_headers["X-Goog-Request-Time"] = auth_headers["X-Goog-Event-Time"]
+            yt._session.get(watchtime_url, params=p2, headers=auth_headers, timeout=10)
 
             # 3. Background delay 5s -> atr -> delay 0.5s -> second watchtime (12.xx seconds)
             def _async_follow_up():
                 try:
                     time.sleep(5.0)
+                    follow_headers = dict(yt.headers)
                     if atr_url:
                         p_atr = {"cpn": cpn}
                         if p_id:
                             p_atr["list"] = p_id
                             p_atr["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
                         now_atr = str(int(time.time() * 1000))
-                        yt._session.post(atr_url, params=p_atr, headers={
-                            "X-Goog-Event-Time": now_atr,
-                            "X-Goog-Request-Time": now_atr
-                        }, timeout=10)
+                        follow_headers["X-Goog-Event-Time"] = now_atr
+                        follow_headers["X-Goog-Request-Time"] = now_atr
+                        yt._session.post(atr_url, params=p_atr, headers=follow_headers, timeout=10)
 
                     time.sleep(0.5)
                     sec_watch = round(random.uniform(12.0, 13.5), 2)
@@ -980,10 +983,9 @@ def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
                         p3["list"] = p_id
                         p3["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
                     now_final = str(int(time.time() * 1000))
-                    yt._session.get(watchtime_url, params=p3, headers={
-                        "X-Goog-Event-Time": now_final,
-                        "X-Goog-Request-Time": now_final
-                    }, timeout=10)
+                    follow_headers["X-Goog-Event-Time"] = now_final
+                    follow_headers["X-Goog-Request-Time"] = now_final
+                    yt._session.get(watchtime_url, params=p3, headers=follow_headers, timeout=10)
                 except Exception as ex:
                     sys.stderr.write(f"[async tracking follow-up error]: {ex}\n")
 

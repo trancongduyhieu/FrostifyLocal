@@ -253,7 +253,14 @@ Scope {
                 try {
                     var arr = JSON.parse(data);
                     if (Array.isArray(arr) && arr.length > 0) {
-                        win.currentTracks = arr;
+                        var userQueued = [];
+                        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+                        if (curIdx >= 0 && curIdx < win.currentTracks.length - 1) {
+                            userQueued = win.currentTracks.slice(curIdx + 1);
+                        }
+                        var filteredRadio = arr.filter(rt => !win.isSameTrack(rt, win.currentTrack) && !userQueued.some(uq => win.isSameTrack(uq, rt)));
+                        var base = win.currentTrack ? [win.currentTrack] : [];
+                        win.currentTracks = base.concat(userQueued).concat(filteredRadio);
                     }
                 } catch(e) {
                     console.log("radioProc error:", e);
@@ -449,8 +456,21 @@ Scope {
         moodProc.running = true;
     }
 
-    function playOnlineTrack(trk) {
+    function isSameTrack(a, b) {
+        if (!a || !b) return false;
+        if (a.path && b.path && a.path === b.path) return true;
+        var vidA = a.videoId || (a.path && a.path.startsWith("ytdl://") ? a.path.replace("ytdl://", "") : "");
+        var vidB = b.videoId || (b.path && b.path.startsWith("ytdl://") ? b.path.replace("ytdl://", "") : "");
+        if (vidA && vidB && vidA === vidB) return true;
+        var nameA = a.title || a.name || "";
+        var nameB = b.title || b.name || "";
+        if (nameA && nameB && nameA === nameB && a.artist && b.artist && a.artist === b.artist) return true;
+        return false;
+    }
+
+    function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
+        if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
@@ -467,14 +487,23 @@ Scope {
         }
 
         var streamPath = trk.path || ("ytdl://" + trk.videoId);
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath]);
+        var tTitle = trk.title || trk.name || "";
+        var tArtist = trk.artist || "";
+        var tImage = trk.image || "";
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
 
-        if (trk.videoId) {
+        if (startRadio && trk.videoId) {
             radioProc.running = false;
             radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", trk.videoId];
             radioProc.running = true;
         }
         pollTimer.restart();
+    }
+
+    function startRadioFromTrack(trk) {
+        if (!trk) return;
+        win.currentTracks = [trk];
+        win.playOnlineTrack(trk, true);
     }
 
     function loadPlaylistTracks(pl) {
@@ -664,7 +693,7 @@ Scope {
                         isPlaying: win.isPlaying
 
                         onMoodSelected: (title, params) => win.selectMood(title, params)
-                        onTrackPlayRequested: trk => win.playOnlineTrack(trk)
+                        onTrackPlayRequested: trk => win.startRadioFromTrack(trk)
                         onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
                         onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                     }
@@ -684,7 +713,7 @@ Scope {
                                 win.currentTracks = win.browsingTracks;
                             }
                             if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
-                                win.playOnlineTrack(trk);
+                                win.playOnlineTrack(trk, false);
                             } else {
                                 win.playTrack(trk);
                             }
@@ -792,12 +821,7 @@ Scope {
             onPlayNextRequested: trk => win.insertTrackPlayNext(trk)
             onAddToQueueRequested: trk => win.appendTrackToQueue(trk)
             onStartRadioRequested: trk => {
-                if (trk && (trk.videoId || (trk.path && trk.path.startsWith("ytdl://")))) {
-                    var vid = trk.videoId || trk.path.replace("ytdl://", "");
-                    radioProc.running = false;
-                    radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", vid];
-                    radioProc.running = true;
-                }
+                if (trk) win.startRadioFromTrack(trk)
             }
             onOpenFolderRequested: trk => win.openTrackFolder(trk)
             onDownloadTrackRequested: trk => win.downloadTrack(trk)
@@ -870,27 +894,7 @@ Scope {
     FileView {
         id: sessionFileView
         path: "/tmp/frostify_current_track.json"
-        watchChanges: true
-        onFileChanged: {
-            reload();
-            if (Date.now() - win.trackChangeTimestamp < 3000) return;
-            try {
-                var raw = text();
-                if (!raw || raw.trim() === "") return;
-                var meta = JSON.parse(raw);
-                if (meta && meta.title) {
-                    if (!win.currentTrack || win.currentTrack.name !== meta.title) {
-                        win.currentTrack = {
-                            name: meta.title,
-                            title: meta.title,
-                            artist: meta.artist || "Unknown Artist",
-                            image: meta.artUrl || "",
-                            path: meta.path || ""
-                        };
-                    }
-                }
-            } catch(e) {}
-        }
+        watchChanges: false
     }
 
     // Library Data Loader
@@ -989,16 +993,10 @@ Scope {
             win.trackPlayback(trk);
         }
 
-        var curIdx = win.currentTracks.findIndex(t => t.path === trk.path);
-        if (curIdx < 0) curIdx = 0;
-
-        var paths = [];
-        for (var i = 0; i < win.currentTracks.length; i++) {
-            if (win.currentTracks[i] && win.currentTracks[i].path) {
-                paths.push(win.currentTracks[i].path);
-            }
-        }
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)]);
+        var tTitle = trk.title || trk.name || "";
+        var tArtist = trk.artist || "";
+        var tImage = trk.image || "";
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage]);
         pollTimer.restart();
     }
 
@@ -1015,8 +1013,8 @@ Scope {
     }
 
     function playNext() {
-        if (win.currentTracks.length === 0) return;
-        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && (t.path === win.currentTrack.path || (t.videoId && win.currentTrack.videoId === t.videoId)));
+        if (!win.currentTracks || win.currentTracks.length === 0) return;
+        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
         var nextIdx = 0;
         if (win.isShuffle && win.currentTracks.length > 1) {
             nextIdx = curIdx;
@@ -1024,29 +1022,36 @@ Scope {
                 nextIdx = Math.floor(Math.random() * win.currentTracks.length);
             }
         } else {
-            nextIdx = (curIdx + 1) % win.currentTracks.length;
+            nextIdx = (curIdx >= 0) ? (curIdx + 1) : 0;
+            if (nextIdx >= win.currentTracks.length) {
+                nextIdx = 0;
+            }
         }
         var nextTrk = win.currentTracks[nextIdx];
-        if (nextTrk.path && nextTrk.path.startsWith("ytdl://")) {
-            win.playOnlineTrack(nextTrk);
-        } else {
-            win.playTrack(nextTrk);
+        if (nextTrk) {
+            if ((nextTrk.path && nextTrk.path.startsWith("ytdl://")) || nextTrk.videoId) {
+                win.playOnlineTrack(nextTrk, false);
+            } else {
+                win.playTrack(nextTrk);
+            }
         }
     }
 
     function playPrev() {
-        if (win.currentTracks.length === 0) return;
+        if (!win.currentTracks || win.currentTracks.length === 0) return;
         if (win.currentTime > 3.0) {
             win.seekAudio(0.0);
             return;
         }
-        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && (t.path === win.currentTrack.path || (t.videoId && win.currentTrack.videoId === t.videoId)));
+        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
         var prevIdx = (curIdx - 1 + win.currentTracks.length) % win.currentTracks.length;
         var prevTrk = win.currentTracks[prevIdx];
-        if (prevTrk.path && prevTrk.path.startsWith("ytdl://")) {
-            win.playOnlineTrack(prevTrk);
-        } else {
-            win.playTrack(prevTrk);
+        if (prevTrk) {
+            if ((prevTrk.path && prevTrk.path.startsWith("ytdl://")) || prevTrk.videoId) {
+                win.playOnlineTrack(prevTrk, false);
+            } else {
+                win.playTrack(prevTrk);
+            }
         }
     }
 
@@ -1060,73 +1065,50 @@ Scope {
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
     }
 
-    function updateDaemonPlaylist() {
-        if (!win.currentTracks || win.currentTracks.length === 0) return;
-        var curIdx = 0;
-        if (win.currentTrack) {
-            curIdx = win.currentTracks.findIndex(t => (t.path && t.path === win.currentTrack.path) || (t.videoId && win.currentTrack.videoId === t.videoId));
-            if (curIdx < 0) curIdx = 0;
-        }
-        var paths = [];
-        for (var i = 0; i < win.currentTracks.length; i++) {
-            var trk = win.currentTracks[i];
-            if (trk) {
-                var p = trk.path || (trk.videoId ? ("ytdl://" + trk.videoId) : "");
-                if (p) paths.push(p);
-            }
-        }
-        if (paths.length > 0) {
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "set_playlist", String(curIdx), JSON.stringify(paths)]);
-        }
-    }
-
     function insertTrackPlayNext(trk) {
         if (!trk) return;
         if (!win.currentTracks || win.currentTracks.length === 0) {
             win.currentTracks = [trk];
-            if (trk.path && trk.path.startsWith("ytdl://")) win.playOnlineTrack(trk);
+            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
             else win.playTrack(trk);
             return;
         }
-        var curIdx = win.currentTracks.findIndex(t => win.currentTrack && ((t.path && t.path === win.currentTrack.path) || (t.videoId && win.currentTrack.videoId === t.videoId)));
-        var insertAt = (curIdx >= 0) ? curIdx + 1 : 0;
+        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+        var insertAt = (curIdx >= 0) ? (curIdx + 1) : 0;
         var updated = win.currentTracks.slice();
-        var dupIdx = updated.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        var dupIdx = updated.findIndex(t => win.isSameTrack(t, trk));
         if (dupIdx >= 0) {
             updated.splice(dupIdx, 1);
             if (dupIdx < insertAt) insertAt--;
         }
         updated.splice(insertAt, 0, trk);
         win.currentTracks = updated;
-        win.updateDaemonPlaylist();
     }
 
     function appendTrackToQueue(trk) {
         if (!trk) return;
         if (!win.currentTracks || win.currentTracks.length === 0) {
             win.currentTracks = [trk];
-            if (trk.path && trk.path.startsWith("ytdl://")) win.playOnlineTrack(trk);
+            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
             else win.playTrack(trk);
             return;
         }
         var updated = win.currentTracks.slice();
-        var dupIdx = updated.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        var dupIdx = updated.findIndex(t => win.isSameTrack(t, trk));
         if (dupIdx >= 0) {
             updated.splice(dupIdx, 1);
         }
         updated.push(trk);
         win.currentTracks = updated;
-        win.updateDaemonPlaylist();
     }
 
     function removeTrackFromQueue(trk) {
         if (!trk || !win.currentTracks) return;
-        var idx = win.currentTracks.findIndex(t => (t.path && t.path === trk.path) || (t.videoId && trk.videoId && t.videoId === trk.videoId));
+        var idx = win.currentTracks.findIndex(t => win.isSameTrack(t, trk));
         if (idx >= 0) {
             var updated = win.currentTracks.slice();
             updated.splice(idx, 1);
             win.currentTracks = updated;
-            win.updateDaemonPlaylist();
         }
     }
 
@@ -1189,12 +1171,10 @@ Scope {
                     if (s.time_pos !== undefined && s.time_pos > 0) win.currentTime = s.time_pos;
                     if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
 
-                    // Sync track from filename if playing (suppressed during track change transitions)
-                    if (Date.now() - win.trackChangeTimestamp > 3000 && s.filename && win.allTracks.length > 0) {
-                        if (!win.currentTrack || (win.currentTrack.path && !win.currentTrack.path.endsWith(s.filename))) {
-                            var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
-                            if (matched) win.currentTrack = matched;
-                        }
+                    // Sync track from filename if playing (cold start recovery only when currentTrack is null)
+                    if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
+                        var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
+                        if (matched) win.currentTrack = matched;
                     }
 
                     // Auto-advance or Repeat at song end
