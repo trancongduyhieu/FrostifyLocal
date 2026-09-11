@@ -87,7 +87,7 @@ Rectangle {
 
     FileView {
         id: artistAvatarsFileView
-        path: Quickshell.env("HOME") + "/.cache/frostify/artist_avatars.json"
+        path: Quickshell.env("HOME") + "/.cache/nutsty/artist_avatars.json"
         watchChanges: true
         onFileChanged: {
             reload();
@@ -100,7 +100,7 @@ Rectangle {
 
     FileView {
         id: dislikedFileView
-        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_disliked_songs.json"
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_disliked_songs.json"
         watchChanges: true
         onFileChanged: {
             reload();
@@ -348,7 +348,7 @@ Rectangle {
                 Behavior on color { ColorAnimation { duration: 120 } }
                 HoverHandler { id: backH }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 16
@@ -395,7 +395,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 15
-                        color: root.compactTab === "lyrics" ? Theme.spotifyGreen : (lyrH.hovered ? "#242424" : "transparent")
+                        color: root.compactTab === "lyrics" ? Theme.accentGreen : (lyrH.hovered ? "#242424" : "transparent")
                         Behavior on color { ColorAnimation { duration: 100 } }
                         HoverHandler { id: lyrH }
 
@@ -419,7 +419,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 15
-                        color: root.compactTab === "art" ? Theme.spotifyGreen : (artH.hovered ? "#242424" : "transparent")
+                        color: root.compactTab === "art" ? Theme.accentGreen : (artH.hovered ? "#242424" : "transparent")
                         Behavior on color { ColorAnimation { duration: 100 } }
                         HoverHandler { id: artH }
 
@@ -494,7 +494,7 @@ Rectangle {
                     text: root.track ? root.track.artist : "Unknown Artist"
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
-                    color: Theme.spotifyGreen
+                    color: Theme.accentGreen
                     font.bold: true
                     elide: Text.ElideRight
                 }
@@ -597,7 +597,7 @@ Rectangle {
                             text: root.track ? (root.track.artist || "Unknown Artist") : "Unknown Artist"
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
-                            color: Theme.spotifyGreen
+                            color: Theme.accentGreen
                             font.bold: true
                             elide: Text.ElideRight
                             horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
@@ -641,7 +641,7 @@ Rectangle {
                                 Text {
                                     id: srcText
                                     anchors.centerIn: parent
-                                    text: (root.track && root.track.isLocal) ? "LOCAL" : "YT MUSIC"
+                                    text: (root.track && root.track.isLocal) ? "LOCAL" : "CLOUD"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 10
                                     font.bold: true
@@ -769,7 +769,7 @@ Rectangle {
                         }
                     }
 
-                    // 4. SimpMusic Artist Card (Avatar, Label "Nghệ sĩ", Name & Subscribers)
+                    // 4. Nutsty Artist Card (Avatar, Label "Nghệ sĩ", Name & Subscribers)
                     Rectangle {
                         id: artistCard
                         Layout.fillWidth: true
@@ -918,7 +918,7 @@ Rectangle {
                         }
                     }
 
-                    // 5. SimpMusic Info & Description Card (Release Date, Views, Interactive Likes/Dislikes, Description)
+                    // 5. Nutsty Info & Description Card (Release Date, Views, Interactive Likes/Dislikes, Description)
                     Rectangle {
                         id: infoDescCard
                         Layout.fillWidth: true
@@ -1129,7 +1129,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             spacing: 5
 
-                                            SpotifyIcon {
+                                            AppIcon {
                                                 source: "../assets/icons/thumb-up-symbolic.svg"
                                                 iconSize: 12
                                                 color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
@@ -1166,7 +1166,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             spacing: 5
 
-                                            SpotifyIcon {
+                                            AppIcon {
                                                 source: "../assets/icons/thumb-down-symbolic.svg"
                                                 iconSize: 12
                                                 color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "#ffffff"
@@ -1239,7 +1239,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
-                                    color: Theme.spotifyGreen
+                                    color: Theme.accentGreen
 
                                     MouseArea {
                                         anchors.fill: parent
@@ -1251,7 +1251,7 @@ Rectangle {
                         }
                     }
 
-                    // 6. Album & Release Details Box (Clean, zero SimpMusic text)
+                    // 6. Album & Release Details Box (Clean, zero Nutsty text)
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.isCompact ? 260 : 280
@@ -1269,10 +1269,10 @@ Rectangle {
                             anchors.margins: 10
                             spacing: 10
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/media-optical-audio-symbolic.svg"
                                 iconSize: 18
-                                color: Theme.spotifyGreen
+                                color: Theme.accentGreen
                             }
 
                             ColumnLayout {
@@ -1351,7 +1351,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                SpotifyIcon {
+                                AppIcon {
                                     source: (root.track && root.track.isLocal) ? "../assets/icons/folder-music-symbolic.svg" : "../assets/icons/download-symbolic.svg"
                                     iconSize: 13
                                     color: "#ffffff"
@@ -1393,7 +1393,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                SpotifyIcon {
+                                AppIcon {
                                     source: "../assets/icons/radio-symbolic.svg"
                                     iconSize: 13
                                     color: "#ffffff"
@@ -1429,7 +1429,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                SpotifyIcon {
+                                AppIcon {
                                     source: "../assets/icons/edit-select-all-symbolic.svg"
                                     iconSize: 12
                                     color: "#ffffff"
@@ -1530,7 +1530,7 @@ Rectangle {
 
                             HoverHandler { id: lineHover }
 
-                            // Left Spotify green bar for active line
+                            // Left accent green bar for active line
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
@@ -1539,7 +1539,7 @@ Rectangle {
                                 anchors.bottomMargin: 4
                                 width: 3
                                 radius: 1.5
-                                color: Theme.spotifyGreen
+                                color: Theme.accentGreen
                                 visible: lyricRow.isCurrentLine
                             }
 

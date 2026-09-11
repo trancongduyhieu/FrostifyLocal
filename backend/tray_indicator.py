@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local System Tray Indicator (StatusNotifierItem)
+Nutsty System Tray Indicator (StatusNotifierItem)
 Enables background minimization, tray icon interaction, and quick controls.
 """
 import os
@@ -18,14 +18,14 @@ except Exception as e:
     sys.exit(1)
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ICON_PATH = os.path.join(APP_DIR, "assets", "frostify-symbolic.svg")
+ICON_PATH = os.path.join(APP_DIR, "assets", "nutsty-symbolic.svg")
 DAEMON_SCRIPT = os.path.join(APP_DIR, "backend", "player_daemon.py")
 SHELL_QML = os.path.join(APP_DIR, "shell.qml")
 
-def show_frostify_window(*args):
-    """Reopen or bring Frostify window to front via Quickshell IPC"""
+def show_nutsty_window(*args):
+    """Reopen or bring Nutsty window to front via Quickshell IPC"""
     subprocess.Popen([
-        "/usr/bin/quickshell", "ipc", "-p", SHELL_QML, "call", "frostify", "openWindow"
+        "/usr/bin/quickshell", "ipc", "-p", SHELL_QML, "call", "nutsty", "openWindow"
     ])
 
 def toggle_playback(*args):
@@ -40,8 +40,8 @@ def prev_track(*args):
     """Skip to previous track"""
     subprocess.Popen(["python3", DAEMON_SCRIPT, "prev"])
 
-def quit_frostify(*args):
-    """Completely terminate Frostify and its daemons"""
+def quit_nutsty(*args):
+    """Completely terminate Nutsty and its daemons"""
     subprocess.run(["/usr/bin/quickshell", "kill", "-p", SHELL_QML], stderr=subprocess.DEVNULL)
     subprocess.run(["python3", DAEMON_SCRIPT, "stop"], stderr=subprocess.DEVNULL)
     Gtk.main_quit()
@@ -51,8 +51,8 @@ def build_menu():
     menu = Gtk.Menu()
 
     # Open App
-    open_item = Gtk.MenuItem(label="Mở Frostify Local")
-    open_item.connect("activate", show_frostify_window)
+    open_item = Gtk.MenuItem(label="Mở Nutsty")
+    open_item.connect("activate", show_nutsty_window)
     menu.append(open_item)
 
     menu.append(Gtk.SeparatorMenuItem())
@@ -75,8 +75,8 @@ def build_menu():
     menu.append(Gtk.SeparatorMenuItem())
 
     # Exit
-    quit_item = Gtk.MenuItem(label="Thoát Frostify")
-    quit_item.connect("activate", quit_frostify)
+    quit_item = Gtk.MenuItem(label="Thoát Nutsty")
+    quit_item.connect("activate", quit_nutsty)
     menu.append(quit_item)
 
     menu.show_all()
@@ -88,11 +88,11 @@ def main():
 
     icon_name = ICON_PATH if os.path.exists(ICON_PATH) else "multimedia-audio-player"
     indicator = AppIndicator3.Indicator.new(
-        "frostify-local-tray",
+        "nutsty-tray",
         icon_name,
         AppIndicator3.IndicatorCategory.APPLICATION_STATUS
     )
-    indicator.set_title("Frostify Local")
+    indicator.set_title("Nutsty")
     indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
 
     menu, open_item = build_menu()

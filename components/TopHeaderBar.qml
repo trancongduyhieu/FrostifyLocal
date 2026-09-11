@@ -47,11 +47,11 @@ Rectangle {
                 color: sbM.containsMouse ? "#282828" : "#181818"
                 Behavior on color { ColorAnimation { duration: 100 } }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/view-queue-symbolic.svg"
                     iconSize: 15
-                    color: headerRoot.isSidebarVisible ? Theme.spotifyGreen : (sbM.containsMouse ? "#ffffff" : Theme.textMuted)
+                    color: headerRoot.isSidebarVisible ? Theme.accentGreen : (sbM.containsMouse ? "#ffffff" : Theme.textMuted)
                 }
 
                 MouseArea {
@@ -72,7 +72,7 @@ Rectangle {
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Behavior on opacity { NumberAnimation { duration: 100 } }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 14
@@ -100,7 +100,7 @@ Rectangle {
                 opacity: 0.4
                 Behavior on color { ColorAnimation { duration: 100 } }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 14
@@ -138,7 +138,7 @@ Rectangle {
                     anchors.rightMargin: 14
                     spacing: 10
 
-                    SpotifyIcon {
+                    AppIcon {
                         source: "../assets/icons/system-search-symbolic.svg"
                         iconSize: 16
                         color: searchInput.activeFocus ? "#ffffff" : Theme.textSecondary
@@ -176,7 +176,7 @@ Rectangle {
                         height: 20
                         visible: searchInput.text.length > 0
 
-                        SpotifyIcon {
+                        AppIcon {
                             anchors.centerIn: parent
                             source: "../assets/icons/window-close-symbolic.svg"
                             iconSize: 12
@@ -198,7 +198,7 @@ Rectangle {
                 }
             }
 
-            // Suggestions Dropdown Popup (SimpMusic style)
+            // Suggestions Dropdown Popup (Nutsty style)
             Rectangle {
                 id: suggestionsPopup
                 anchors.top: searchBarBox.bottom
@@ -236,7 +236,7 @@ Rectangle {
                             anchors.rightMargin: 10
                             spacing: 10
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: headerRoot.searchMode === "online" ? "../assets/icons/system-search-symbolic.svg" : "../assets/icons/audio-only-symbolic.svg"
                                 iconSize: 14
                                 color: sugArea.containsMouse ? "#ffffff" : Theme.textMuted
@@ -270,7 +270,7 @@ Rectangle {
             }
         }
 
-        // Active Download Queue Pill (SimpMusic Style - Persistent & Interactive)
+        // Active Download Queue Pill (Nutsty Style - Persistent & Interactive)
         Rectangle {
             id: downloadQueuePill
             Layout.preferredHeight: 34
@@ -292,12 +292,12 @@ Rectangle {
                     Layout.preferredHeight: 14
                     visible: downloadQueuePill.hasActive
                     running: downloadQueuePill.hasActive
-                    color: Theme.spotifyGreen
+                    color: Theme.accentGreen
                     size: 14
                     strokeWidth: 2
                 }
 
-                SpotifyIcon {
+                AppIcon {
                     visible: !downloadQueuePill.hasActive
                     source: "../assets/icons/download-symbolic.svg"
                     iconSize: 14
@@ -308,7 +308,7 @@ Rectangle {
                     text: downloadQueuePill.hasActive
                           ? ("Downloading (" + (downloadManager ? downloadManager.activeTasksCount : 0) + ")")
                           : "Downloads"
-                    color: downloadQueuePill.hasActive ? Theme.spotifyGreen : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                    color: downloadQueuePill.hasActive ? Theme.accentGreen : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

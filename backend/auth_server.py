@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local 1-Click Auth Webhook Server
+Nutsty 1-Click Auth Webhook Server
 Listens strictly on 127.0.0.1:17890 for cookie sync from browser extension
 """
 import os
@@ -127,11 +127,11 @@ def run_server():
     server_address = (HOST, PORT)
     try:
         httpd = HTTPServer(server_address, AuthWebhookHandler)
-        print(f"Frostify Auth Server listening on http://{HOST}:{PORT}")
+        print(f"Nutsty Auth Server listening on http://{HOST}:{PORT}")
         httpd.serve_forever()
     except OSError as e:
         if "Address already in use" in str(e):
-            print(f"Frostify Auth Server port {PORT} already active.")
+            print(f"Nutsty Auth Server port {PORT} already active.")
         else:
             sys.stderr.write(f"Auth server error: {e}\n")
 

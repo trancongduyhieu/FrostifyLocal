@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Frostify Local - Intelligent Adaptive Wallpaper Palette & Luminance Inversion Engine
+Nutsty - Intelligent Adaptive Wallpaper Palette & Luminance Inversion Engine
 Analyzes the desktop wallpaper and local lyric region (x: 14%..52%, y: 69%..77%).
 Detects light vs dark background contrast, extracts harmonic highlight colors,
-and outputs dynamic styling parameters to ~/.config/noctalia/frostify_palette.json.
+and outputs dynamic styling parameters to ~/.config/noctalia/nutsty_palette.json.
 """
 
 import sys
@@ -251,11 +251,14 @@ def main():
         "shadowAmbient": palette_info["shadowAmbient"]
     }
 
-    out_file = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+    out_file = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    # Legacy sync for Noctalia Bar
+    legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+    legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
-    local_out = Path(__file__).resolve().parent.parent / "assets" / "frostify_palette.json"
+    local_out = Path(__file__).resolve().parent.parent / "assets" / "nutsty_palette.json"
     local_out.parent.mkdir(parents=True, exist_ok=True)
     local_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
 

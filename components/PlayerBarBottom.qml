@@ -77,7 +77,7 @@ Rectangle {
                     anchors.fill: parent
                     visible: !miniCover.visible
                     color: "#282828"
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/folder-music-symbolic.svg"
                         iconSize: 22
@@ -117,14 +117,14 @@ Rectangle {
                     id: artistLabel
                     Layout.fillWidth: true
                     text: {
-                        if (!root.currentTrack) return "Spotify Desktop";
+                        if (!root.currentTrack) return "Nutsty Desktop";
                         var raw = String(root.currentTrack.artist || "").trim();
                         var clean = raw.split(/\s*•\s*/)[0].replace(/\s*\d+([.,]\d+)?[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe).*/i, "").trim();
-                        return clean || raw || "Spotify Desktop";
+                        return clean || raw || "Nutsty Desktop";
                     }
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
-                    color: (root.currentTrack && artistMouse.containsMouse) ? Theme.spotifyGreen : Theme.textSecondary
+                    color: (root.currentTrack && artistMouse.containsMouse) ? Theme.accentGreen : Theme.textSecondary
                     elide: Text.ElideRight
 
                     MouseArea {
@@ -167,17 +167,17 @@ Rectangle {
                     width: 32; height: 32
                     HoverHandler { id: shufHover }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                         iconSize: 16
-                        color: root.isShuffle ? Theme.spotifyGreen : (shufHover.hovered ? "#ffffff" : "#b3b3b3")
+                        color: root.isShuffle ? Theme.accentGreen : (shufHover.hovered ? "#ffffff" : "#b3b3b3")
                     }
 
                     // Green Active Indicator Dot
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: Theme.spotifyGreen
+                        color: Theme.accentGreen
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 2
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -198,7 +198,7 @@ Rectangle {
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     HoverHandler { id: prevHover; enabled: !!root.currentTrack }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-skip-backward-symbolic.svg"
                         iconSize: 18
@@ -225,7 +225,7 @@ Rectangle {
                     Behavior on scale { NumberAnimation { duration: 100 } }
                     HoverHandler { id: playHover; enabled: !!root.currentTrack }
 
-                    // SimpMusic Circular Spinner when loading audio stream
+                    // Nutsty Circular Spinner when loading audio stream
                     CircularSpinner {
                         anchors.centerIn: parent
                         size: 18
@@ -235,7 +235,7 @@ Rectangle {
                         visible: root.isLoadingAudio
                     }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: root.isPlaying ? 0 : 1
                         source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
@@ -259,7 +259,7 @@ Rectangle {
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     HoverHandler { id: nextHover; enabled: !!root.currentTrack }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-skip-forward-symbolic.svg"
                         iconSize: 18
@@ -279,17 +279,17 @@ Rectangle {
                     width: 32; height: 32
                     HoverHandler { id: repHover }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-playlist-repeat-symbolic.svg"
                         iconSize: 16
-                        color: root.isRepeat ? Theme.spotifyGreen : (repHover.hovered ? "#ffffff" : "#b3b3b3")
+                        color: root.isRepeat ? Theme.accentGreen : (repHover.hovered ? "#ffffff" : "#b3b3b3")
                     }
 
                     // Green Active Indicator Dot
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: Theme.spotifyGreen
+                        color: Theme.accentGreen
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 2
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -332,7 +332,7 @@ Rectangle {
                         id: progressFill
                         height: parent.height
                         radius: 2
-                        color: (scrubHover.hovered || root.isScrubbingProgress) ? Theme.spotifyGreen : "#ffffff"
+                        color: (scrubHover.hovered || root.isScrubbingProgress) ? Theme.accentGreen : "#ffffff"
                         width: parent.width * Math.min(1.0, Math.max(0.0, (root.totalDuration > 0 && !root.isLoadingAudio) ? (scrubTrack.effectiveTime / root.totalDuration) : 0))
                     }
 
@@ -416,16 +416,16 @@ Rectangle {
                 width: 32; height: 32
                 HoverHandler { id: lyricsH }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/view-lyrics-symbolic.svg"
                     iconSize: 16
-                    color: root.isLyricsActive ? Theme.spotifyGreen : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
+                    color: root.isLyricsActive ? Theme.accentGreen : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
                     width: 4; height: 4; radius: 2
-                    color: Theme.spotifyGreen
+                    color: Theme.accentGreen
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 2
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -444,16 +444,16 @@ Rectangle {
                 width: 32; height: 32
                 HoverHandler { id: queueH }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/view-queue-symbolic.svg"
                     iconSize: 16
-                    color: root.isQueueActive ? Theme.spotifyGreen : (queueH.hovered ? "#ffffff" : "#b3b3b3")
+                    color: root.isQueueActive ? Theme.accentGreen : (queueH.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
                     width: 4; height: 4; radius: 2
-                    color: Theme.spotifyGreen
+                    color: Theme.accentGreen
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 2
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -475,7 +475,7 @@ Rectangle {
                     width: 24; height: 24
                     HoverHandler { id: volIconHover }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
                         iconSize: 16
@@ -510,7 +510,7 @@ Rectangle {
                         id: volFill
                         height: parent.height
                         radius: 2
-                        color: (volH.hovered || root.isScrubbingVolume) ? Theme.spotifyGreen : "#ffffff"
+                        color: (volH.hovered || root.isScrubbingVolume) ? Theme.accentGreen : "#ffffff"
                         width: parent.width * (root.volume / 100.0)
                     }
 

@@ -86,7 +86,7 @@ Rectangle {
         return list;
     }
 
-    // Dynamic gradient banner on top (Spotify style)
+    // Dynamic gradient banner on top (Nutsty style)
     Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
@@ -156,7 +156,7 @@ Rectangle {
                                 GradientStop { position: 0.0; color: "#3a2255" }
                                 GradientStop { position: 1.0; color: "#1a1a1a" }
                             }
-                            SpotifyIcon {
+                            AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/media-optical-audio-symbolic.svg"
                                 iconSize: 54
@@ -368,7 +368,7 @@ Rectangle {
                         height: 36
                         width: playRow.implicitWidth + 24
                         radius: 18
-                        color: playH.hovered ? "#1ed760" : Theme.spotifyGreen
+                        color: playH.hovered ? "#1ed760" : Theme.accentGreen
                         scale: playH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
@@ -377,7 +377,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/media-playback-start-symbolic.svg"
                                 iconSize: 15
                                 color: "#000000"
@@ -416,7 +416,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                                 iconSize: 15
                                 color: "#ffffff"
@@ -456,7 +456,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/list-add-symbolic.svg"
                                 iconSize: 15
                                 color: "#ffffff"
@@ -496,7 +496,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/download-symbolic.svg"
                                 iconSize: 15
                                 color: "#ffffff"
@@ -623,7 +623,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 6
 
-                            SpotifyIcon {
+                            AppIcon {
                                 source: "../assets/icons/selection-mode-symbolic.svg"
                                 iconSize: 13
                                 color: root.isSelectionMode ? "#00c853" : (selH.hovered ? "#ffffff" : Theme.textSecondary)
@@ -735,7 +735,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                SpotifyIcon {
+                                AppIcon {
                                     source: "../assets/icons/folder-music-symbolic.svg"
                                     iconSize: 13
                                     color: "#ffffff"
@@ -773,7 +773,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                SpotifyIcon {
+                                AppIcon {
                                     source: "../assets/icons/user-trash-symbolic.svg"
                                     iconSize: 13
                                     color: "#ffffff"
@@ -804,7 +804,7 @@ Rectangle {
                             height: 28
                             HoverHandler { id: exitSelH }
 
-                            SpotifyIcon {
+                            AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/window-close-symbolic.svg"
                                 iconSize: 14
@@ -852,7 +852,7 @@ Rectangle {
 
                 Text {
                     visible: !root.isLoading && (!root.sortedTracks || root.sortedTracks.length === 0)
-                    text: root.isPlaylistView ? "This playlist is empty. Add songs using the context menu on any song!" : "No tracks found. Type in search bar to explore YouTube Music!"
+                    text: root.isPlaylistView ? "This playlist is empty. Add songs using the context menu on any song!" : "No tracks found. Type in search bar to explore online tracks!"
                     font.family: Theme.fontFamily
                     font.pixelSize: 14
                     color: Theme.textSecondary
@@ -905,7 +905,7 @@ Rectangle {
                                             GradientStop { position: 0.0; color: "#333333" }
                                             GradientStop { position: 1.0; color: "#181818" }
                                         }
-                                        SpotifyIcon {
+                                        AppIcon {
                                             anchors.centerIn: parent
                                             source: "../assets/icons/media-optical-audio-symbolic.svg"
                                             iconSize: 42
@@ -918,13 +918,13 @@ Rectangle {
                                         width: 38
                                         height: 38
                                         radius: 19
-                                        color: Theme.spotifyGreen
+                                        color: Theme.accentGreen
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 6
                                         visible: albCardMouse.containsMouse
 
-                                        SpotifyIcon {
+                                        AppIcon {
                                             anchors.centerIn: parent
                                             anchors.horizontalCenterOffset: 1
                                             source: "../assets/icons/media-playback-start-symbolic.svg"

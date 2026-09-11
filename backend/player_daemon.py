@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local MPV Audio Controller & IPC Bridge
+Nutsty MPV Audio Controller & IPC Bridge
 Controls playback losslessly via MPV socket and status polling
 """
 import os
@@ -10,9 +10,9 @@ import time
 import socket
 import subprocess
 
-MPV_SOCKET = "/tmp/frostify_mpv.sock"
-STATUS_FILE = "/tmp/frostify_status.json"
-COMMAND_FILE = "/tmp/frostify_cmd.pipe"
+MPV_SOCKET = "/tmp/nutsty_mpv.sock"
+STATUS_FILE = "/tmp/nutsty_status.json"
+COMMAND_FILE = "/tmp/nutsty_cmd.pipe"
 
 def ensure_mpv():
     """Ensure background MPV process is running with IPC socket"""
@@ -38,7 +38,7 @@ def ensure_mpv():
         "--no-video",
         f"--input-ipc-server={MPV_SOCKET}",
         "--audio-buffer=0.2",
-        "--title=frostify-audio",
+        "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
         "--ytdl-format=bestaudio/best"
@@ -77,7 +77,7 @@ def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
     return res.get("data")
 
-LAST_PATH_FILE = "/tmp/frostify_last_path"
+LAST_PATH_FILE = "/tmp/nutsty_last_path"
 
 def resolve_media_path(file_path):
     if not file_path:
@@ -127,7 +127,7 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
 
         # Fallback to online tracks cache if not in local library
         if not title:
-            online_json = os.path.expanduser("~/.cache/frostify/online_tracks.json")
+            online_json = os.path.expanduser("~/.cache/nutsty/online_tracks.json")
             if os.path.exists(online_json):
                 try:
                     with open(online_json, "r", encoding="utf-8") as f:
@@ -151,10 +151,10 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
             "artUrl": art_url,
             "path": file_path
         }
-        with open("/tmp/frostify_current_track.json", "w", encoding="utf-8") as f:
+        with open("/tmp/nutsty_current_track.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
 
-        session_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
+        session_file = os.path.expanduser("~/.config/noctalia/nutsty_session.json")
         os.makedirs(os.path.dirname(session_file), exist_ok=True)
         with open(session_file, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
@@ -179,7 +179,7 @@ def main():
         # Immediately stop previous track so old audio and progress cease instantly
         send_mpv_cmd(["stop"])
 
-        state_file = "/tmp/frostify_playback_state.json"
+        state_file = "/tmp/nutsty_playback_state.json"
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump({"state": "loading", "path": file_path, "timestamp": time.time()}, f)
@@ -214,7 +214,7 @@ def main():
 
     elif action == "set_playlist" and len(sys.argv) > 2:
         idx = int(sys.argv[2])
-        m3u_file = "/tmp/frostify_playlist.m3u"
+        m3u_file = "/tmp/nutsty_playlist.m3u"
         tracks = []
         meta = None
         if len(sys.argv) > 3:
@@ -227,7 +227,7 @@ def main():
 
         if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
             send_mpv_cmd(["stop"])
-            state_file = "/tmp/frostify_playback_state.json"
+            state_file = "/tmp/nutsty_playback_state.json"
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
@@ -287,7 +287,7 @@ def main():
 
     elif action == "stop":
         send_mpv_cmd(["stop"])
-        state_file = "/tmp/frostify_playback_state.json"
+        state_file = "/tmp/nutsty_playback_state.json"
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump({"state": "stopped", "timestamp": time.time()}, f)
@@ -311,7 +311,7 @@ def main():
         ensure_mpv()
 
         is_loading = False
-        state_file = "/tmp/frostify_playback_state.json"
+        state_file = "/tmp/nutsty_playback_state.json"
         if os.path.exists(state_file):
             try:
                 with open(state_file, "r", encoding="utf-8") as f:

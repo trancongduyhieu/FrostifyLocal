@@ -186,7 +186,7 @@ Rectangle {
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                     Behavior on opacity { NumberAnimation { duration: 150 } }
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/go-previous-symbolic.svg"
                                         iconSize: 14
@@ -216,7 +216,7 @@ Rectangle {
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                     Behavior on opacity { NumberAnimation { duration: 150 } }
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/go-previous-symbolic.svg"
                                         rotation: 180
@@ -283,13 +283,13 @@ Rectangle {
                                                 color: Qt.rgba(0, 0, 0, 0.4)
                                                 visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
 
-                                                SpotifyIcon {
+                                                AppIcon {
                                                     anchors.centerIn: parent
                                                     source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
                                                             ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                             : "../assets/icons/media-playback-start-symbolic.svg"
                                                     iconSize: 18
-                                                    color: Theme.spotifyGreen
+                                                    color: Theme.accentGreen
                                                 }
                                             }
                                         }
@@ -304,13 +304,13 @@ Rectangle {
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 13
                                                 font.bold: true
-                                                color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.spotifyGreen : Theme.textPrimary
+                                                color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.accentGreen : Theme.textPrimary
                                                 elide: Text.ElideRight
                                             }
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: modelData.artist || modelData.subtitle || "YouTube Music"
+                                                text: modelData.artist || modelData.subtitle || "Cloud Stream"
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
                                                 color: Theme.textSecondary
@@ -408,13 +408,13 @@ Rectangle {
                                                     width: 38
                                                     height: 38
                                                     radius: 19
-                                                    color: Theme.spotifyGreen
+                                                    color: Theme.accentGreen
                                                     anchors.right: parent.right
                                                     anchors.bottom: parent.bottom
                                                     anchors.margins: 6
                                                     visible: cardMouse.containsMouse
 
-                                                    SpotifyIcon {
+                                                    AppIcon {
                                                         anchors.centerIn: parent
                                                         anchors.horizontalCenterOffset: 1
                                                         source: "../assets/icons/media-playback-start-symbolic.svg"
@@ -437,7 +437,7 @@ Rectangle {
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: modelData.subtitle || modelData.artist || "YouTube Music"
+                                                text: modelData.subtitle || modelData.artist || "Cloud Stream"
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
                                                 color: Theme.textSecondary
@@ -549,13 +549,13 @@ Rectangle {
                                         color: Qt.rgba(0, 0, 0, 0.4)
                                         visible: qpMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
 
-                                        SpotifyIcon {
+                                        AppIcon {
                                             anchors.centerIn: parent
                                             source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
                                                     ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                     : "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 18
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                         }
                                     }
                                 }
@@ -571,13 +571,13 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.spotifyGreen : Theme.textPrimary
+                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.accentGreen : Theme.textPrimary
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.artist || "YouTube Music"
+                                        text: modelData.artist || "Cloud Stream"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         color: Theme.textSecondary
@@ -656,18 +656,18 @@ Rectangle {
                                         asynchronous: true
                                     }
 
-                                    // Spotify Floating Green Play Button on Hover
+                                    // Nutsty Floating Green Play Button on Hover
                                     Rectangle {
                                         width: 40
                                         height: 40
                                         radius: 20
-                                        color: Theme.spotifyGreen
+                                        color: Theme.accentGreen
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 8
                                         visible: plMouse.containsMouse
 
-                                        SpotifyIcon {
+                                        AppIcon {
                                             anchors.centerIn: parent
                                             anchors.horizontalCenterOffset: 1
                                             source: "../assets/icons/media-playback-start-symbolic.svg"

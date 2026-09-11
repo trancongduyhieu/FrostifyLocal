@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local Custom Playlist Manager
+Nutsty Custom Playlist Manager
 Manages user custom playlists saved in ~/.config/noctalia/custom_playlists.json
 """
 import os

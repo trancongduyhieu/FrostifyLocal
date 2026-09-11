@@ -231,7 +231,7 @@ Item {
 
     FileView {
         id: statusFileView
-        path: "/tmp/frostify_download_status.json"
+        path: "/tmp/nutsty_download_status.json"
         watchChanges: true
         onFileChanged: {
             reload();

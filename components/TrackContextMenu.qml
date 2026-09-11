@@ -362,7 +362,7 @@ Item {
             anchors.rightMargin: 10
             spacing: 10
 
-            SpotifyIcon {
+            AppIcon {
                 source: itemBtn.iconSource
                 color: btnHover.hovered ? itemBtn.textColor : itemBtn.iconColor
                 iconSize: 15

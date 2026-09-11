@@ -146,14 +146,14 @@ Rectangle {
                         Layout.preferredWidth: 84
                         Layout.preferredHeight: 18
                         radius: 4
-                        color: modelData.source === "SimpMusic" ? Qt.rgba(168/255, 85/255, 247/255, 0.2) : Qt.rgba(56/255, 189/255, 248/255, 0.2)
-                        border.color: modelData.source === "SimpMusic" ? "#a855f7" : "#38bdf8"
+                        color: modelData.source === "Nutsty Music" ? Qt.rgba(168/255, 85/255, 247/255, 0.2) : Qt.rgba(56/255, 189/255, 248/255, 0.2)
+                        border.color: modelData.source === "Nutsty Music" ? "#a855f7" : "#38bdf8"
                         border.width: 1
 
                         Text {
                             anchors.centerIn: parent
                             text: modelData.source
-                            color: modelData.source === "SimpMusic" ? "#d8b4fe" : "#7dd3fc"
+                            color: modelData.source === "Nutsty Music" ? "#d8b4fe" : "#7dd3fc"
                             font.pixelSize: 9
                             font.bold: true
                         }

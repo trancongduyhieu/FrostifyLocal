@@ -227,7 +227,7 @@ Item {
                                     anchors.centerIn: parent
                                     spacing: 8
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         source: "../assets/icons/radio-symbolic.svg"
                                         iconSize: 16
                                         color: "#ffffff"
@@ -275,7 +275,7 @@ Item {
                                     anchors.centerIn: parent
                                     spacing: 8
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                                         iconSize: 16
                                         color: "#ffffff"
@@ -308,8 +308,8 @@ Item {
                                 Layout.preferredHeight: 38
                                 Layout.preferredWidth: followRow.implicitWidth + 28
                                 radius: 19
-                                color: root.isFollowed ? Theme.spotifyGreen : (followBtnMouse.containsMouse ? "#2e2e34" : "#222226")
-                                border.color: root.isFollowed ? Theme.spotifyGreen : Qt.rgba(1, 1, 1, 0.18)
+                                color: root.isFollowed ? Theme.accentGreen : (followBtnMouse.containsMouse ? "#2e2e34" : "#222226")
+                                border.color: root.isFollowed ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.18)
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -318,7 +318,7 @@ Item {
                                     anchors.centerIn: parent
                                     spacing: 8
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         source: root.isFollowed ? "../assets/icons/emblem-ok-symbolic.svg" : "../assets/icons/list-add-symbolic.svg"
                                         iconSize: 15
                                         color: root.isFollowed ? "#000000" : "#ffffff"
@@ -430,21 +430,21 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: trackRowItem.isCurrentPlaying ? Theme.spotifyGreen : Theme.textMuted
+                                        color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : Theme.textMuted
                                         visible: !rowMouseArea.containsMouse && !trackRowItem.isCurrentPlaying
                                     }
 
                                     // Playing soundwave indicator
-                                    SpotifyIcon {
+                                    AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/media-optical-audio-symbolic.svg"
                                         iconSize: 16
-                                        color: Theme.spotifyGreen
+                                        color: Theme.accentGreen
                                         visible: trackRowItem.isCurrentPlaying && !rowMouseArea.containsMouse
                                     }
 
                                     // Play icon on hover
-                                    SpotifyIcon {
+                                    AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/media-playback-start-symbolic.svg"
                                         iconSize: 16
@@ -480,7 +480,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: trackRowItem.isCurrentPlaying ? Theme.spotifyGreen : (rowMouseArea.containsMouse ? "#ffffff" : "#e0e0e4")
+                                        color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : (rowMouseArea.containsMouse ? "#ffffff" : "#e0e0e4")
                                         elide: Text.ElideRight
                                     }
 
@@ -587,13 +587,13 @@ Item {
                                             width: 36
                                             height: 36
                                             radius: 18
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
                                             visible: albCardMouse.containsMouse
 
-                                            SpotifyIcon {
+                                            AppIcon {
                                                 anchors.centerIn: parent
                                                 anchors.horizontalCenterOffset: 1
                                                 source: "../assets/icons/media-playback-start-symbolic.svg"
@@ -701,13 +701,13 @@ Item {
                                             width: 36
                                             height: 36
                                             radius: 18
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
                                             visible: singleCardMouse.containsMouse
 
-                                            SpotifyIcon {
+                                            AppIcon {
                                                 anchors.centerIn: parent
                                                 anchors.horizontalCenterOffset: 1
                                                 source: "../assets/icons/media-playback-start-symbolic.svg"
@@ -815,11 +815,11 @@ Item {
                                             width: 34
                                             height: 34
                                             radius: 17
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                             anchors.centerIn: parent
                                             visible: vidCardMouse.containsMouse
 
-                                            SpotifyIcon {
+                                            AppIcon {
                                                 anchors.centerIn: parent
                                                 anchors.horizontalCenterOffset: 1
                                                 source: "../assets/icons/media-playback-start-symbolic.svg"
@@ -957,7 +957,7 @@ Item {
                                             anchors.fill: parent
                                             radius: 54
                                             color: "transparent"
-                                            border.color: relCardMouse.containsMouse ? Theme.spotifyGreen : Qt.rgba(1, 1, 1, 0.12)
+                                            border.color: relCardMouse.containsMouse ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.12)
                                             border.width: 1.5
                                         }
                                     }
@@ -968,7 +968,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: relCardMouse.containsMouse ? Theme.spotifyGreen : "#ffffff"
+                                        color: relCardMouse.containsMouse ? Theme.accentGreen : "#ffffff"
                                         horizontalAlignment: Text.AlignHCenter
                                         elide: Text.ElideRight
                                     }
@@ -1048,7 +1048,7 @@ Item {
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true
-                            color: Theme.spotifyGreen
+                            color: Theme.accentGreen
                             visible: ((root.artistData && root.artistData.metadata && root.artistData.metadata.description) ? root.artistData.metadata.description.length : 0) > 220
 
                             MouseArea {
@@ -1092,7 +1092,7 @@ Item {
                 border.width: 1
                 Behavior on color { ColorAnimation { duration: 100 } }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 16

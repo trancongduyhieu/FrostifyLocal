@@ -1,0 +1,12 @@
+{
+  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8ldk6.jpg",
+  "meanLuminance": 0.293,
+  "brightRatio": 0.0,
+  "isLightArea": false,
+  "theme": "crimson",
+  "baseTextColor": "#f8fafc",
+  "highlightColor": "#f4afb3",
+  "deadTextColor": "#f1f5f9",
+  "shadowDirectional": "#a6020305",
+  "shadowAmbient": "#66000000"
+}

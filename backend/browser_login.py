@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local - Native Google / YouTube Music Login Assistant
+Nutsty - Native Google / YouTube Music Login Assistant
 Launches an isolated browser app window for official Google login
 and automatically captures auth cookies via Chrome DevTools Protocol (CDP).
 Zero extension required, zero manual copy-pasting.
@@ -22,7 +22,7 @@ if BACKEND_DIR not in sys.path:
 import ytmusic_helper
 
 CDP_PORT = 19222
-PROFILE_DIR = os.path.expanduser("~/.config/frostify/browser_auth")
+PROFILE_DIR = os.path.expanduser("~/.config/nutsty/browser_auth")
 
 LOGIN_URL = (
     "https://accounts.google.com/ServiceLogin?"

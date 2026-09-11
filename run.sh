@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Frostify Local Entry Script
+# Nutsty Entry Script
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# If an instance of Frostify is already running, bring window to front via IPC
-if /usr/bin/quickshell ipc -p "$DIR/shell.qml" call frostify openWindow 2>/dev/null; then
-    echo "Frostify Local is already running, brought window to front."
+# If an instance of Nutsty is already running, bring window to front via IPC
+if /usr/bin/quickshell ipc -p "$DIR/shell.qml" call nutsty openWindow 2>/dev/null || /usr/bin/quickshell ipc -p "$DIR/shell.qml" call frostify openWindow 2>/dev/null; then
+    echo "Nutsty is already running, brought window to front."
     if ! pgrep -f "backend/tray_indicator.py" >/dev/null 2>&1; then
         /usr/bin/python3 "$DIR/backend/tray_indicator.py" >/dev/null 2>&1 &
     fi
@@ -27,6 +27,6 @@ if [ ! -f "$DIR/library.json" ] || [ "$1" == "--rescan" ]; then
     python3 "$DIR/backend/library.py"
 fi
 
-# Launch Frostify Local with Quickshell
-echo "Launching Frostify Local..."
+# Launch Nutsty with Quickshell
+echo "Launching Nutsty..."
 exec /usr/bin/quickshell -p "$DIR/shell.qml"

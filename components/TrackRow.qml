@@ -50,14 +50,14 @@ Rectangle {
             width: 24
             height: 24
 
-            SpotifyIcon {
+            AppIcon {
                 anchors.centerIn: parent
                 visible: mouseArea.containsMouse || row.isCurrentTrack
                 source: (row.isCurrentTrack && row.isPlaying)
                         ? "../assets/icons/media-playback-pause-symbolic.svg"
                         : "../assets/icons/media-playback-start-symbolic.svg"
                 iconSize: 14
-                color: row.isCurrentTrack ? Theme.spotifyGreen : Theme.textPrimary
+                color: row.isCurrentTrack ? Theme.accentGreen : Theme.textPrimary
             }
 
             Text {
@@ -108,7 +108,7 @@ Rectangle {
                 color: "#00c853"
             }
 
-            SpotifyIcon {
+            AppIcon {
                 anchors.centerIn: parent
                 visible: row.isDownloaded && !row.isDownloading
                 source: "../assets/icons/emblem-ok-symbolic.svg"
@@ -119,17 +119,17 @@ Rectangle {
 
         // Source Pill
         Rectangle {
-            width: row.trackSource === "SimpMusic" ? 76 : 70
+            width: row.trackSource === "Nutsty Music" ? 76 : 70
             height: 20
             radius: 10
-            color: row.trackSource === "SimpMusic" ? Qt.rgba(168/255, 85/255, 247/255, 0.2) : Qt.rgba(56/255, 189/255, 248/255, 0.2)
-            border.color: row.trackSource === "SimpMusic" ? "#a855f7" : "#38bdf8"
+            color: row.trackSource === "Nutsty Music" ? Qt.rgba(168/255, 85/255, 247/255, 0.2) : Qt.rgba(56/255, 189/255, 248/255, 0.2)
+            border.color: row.trackSource === "Nutsty Music" ? "#a855f7" : "#38bdf8"
             border.width: 1
 
             Text {
                 anchors.centerIn: parent
                 text: row.trackSource
-                color: row.trackSource === "SimpMusic" ? "#d8b4fe" : "#7dd3fc"
+                color: row.trackSource === "Nutsty Music" ? "#d8b4fe" : "#7dd3fc"
                 font.pixelSize: 10
                 font.bold: true
             }

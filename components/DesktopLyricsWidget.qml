@@ -65,7 +65,7 @@ PanelWindow {
 
     FileView {
         id: frostifyPaletteFile
-        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_palette.json"
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_palette.json"
         watchChanges: true
         onFileChanged: {
             this.reload();

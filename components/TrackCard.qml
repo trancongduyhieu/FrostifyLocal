@@ -83,13 +83,13 @@ Rectangle {
                 }
             }
 
-            // Spotify Floating Green Play Button on Hover
+            // Nutsty Floating Green Play Button on Hover
             Rectangle {
                 id: greenPlayBtn
                 width: 44
                 height: 44
                 radius: 22
-                color: Theme.spotifyGreen
+                color: Theme.accentGreen
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.margins: 8
@@ -101,7 +101,7 @@ Rectangle {
                 Behavior on opacity { NumberAnimation { duration: 150 } }
                 Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: root.isPlaying ? 0 : 1
                     source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
@@ -110,7 +110,7 @@ Rectangle {
                 }
             }
 
-            // SimpMusic Download State Badge (Spinner or Checkmark)
+            // Nutsty Download State Badge (Spinner or Checkmark)
             Rectangle {
                 id: downloadBadge
                 width: 26
@@ -134,7 +134,7 @@ Rectangle {
                     color: "#00c853"
                 }
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     visible: root.isDownloaded && !root.isDownloading
                     source: "../assets/icons/emblem-ok-symbolic.svg"
@@ -149,8 +149,8 @@ Rectangle {
                 width: 26
                 height: 26
                 radius: 13
-                color: root.isSelected ? Theme.spotifyGreen : Qt.rgba(0.08, 0.08, 0.1, 0.85)
-                border.color: root.isSelected ? Theme.spotifyGreen : Qt.rgba(1, 1, 1, 0.6)
+                color: root.isSelected ? Theme.accentGreen : Qt.rgba(0.08, 0.08, 0.1, 0.85)
+                border.color: root.isSelected ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.6)
                 border.width: 1.5
                 anchors.left: parent.left
                 anchors.top: parent.top
@@ -158,7 +158,7 @@ Rectangle {
                 z: 16
                 visible: root.isSelectionMode
 
-                SpotifyIcon {
+                AppIcon {
                     anchors.centerIn: parent
                     visible: root.isSelected
                     source: "../assets/icons/emblem-ok-symbolic.svg"

@@ -11,7 +11,7 @@ Scope {
 
     FloatingWindow {
         id: win
-        title: "Spotify"
+        title: "Nutsty"
         implicitWidth: 1280
         implicitHeight: 820
         color: "transparent"
@@ -790,7 +790,7 @@ Scope {
         win.refreshLocalAlbums();
     }
 
-    // Master Container with Spotify Dark Aesthetic
+    // Master Container with Nutsty Dark Aesthetic
     Rectangle {
         anchors.fill: parent
         radius: win.fullscreen ? 0 : Theme.radiusApp
@@ -801,8 +801,8 @@ Scope {
             anchors.fill: parent
             spacing: 8
 
-            // Top Spotify Header & Search
-            SpotifyHeader {
+            // Top Nutsty Header & Search
+            TopHeaderBar {
                 id: topHeader
                 Layout.fillWidth: true
                 currentTab: win.currentTab
@@ -856,7 +856,7 @@ Scope {
                 }
             }
 
-            // Main Content Area: 3-Column Desktop Layout (SimpMusic Optimized)
+            // Main Content Area: 3-Column Desktop Layout (Nutsty Optimized)
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -865,7 +865,7 @@ Scope {
                 spacing: 8
 
                 // Column 1: Left Navigation Sidebar
-                SpotifySidebar {
+                NavSidebar {
                     id: leftSidebar
                     Layout.fillHeight: true
                     Layout.fillWidth: false
@@ -962,7 +962,7 @@ Scope {
                         onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                     }
 
-                    SpotifyMainGrid {
+                    MainTrackGrid {
                         id: mainGrid
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1099,13 +1099,13 @@ Scope {
                     onSongDisliked: trk => win.handleDislikedTrack(trk)
                     onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
                     onCopyLinkRequested: text => {
-                        Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Frostify" "Đã sao chép liên kết vào clipboard"', "sh", text]);
+                        Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Nutsty" "Đã sao chép liên kết vào clipboard"', "sh", text]);
                     }
                 }
             }
 
             // Bottom Player Bar (Centered layout, Amberol SVGs, 240Hz responsive)
-            SpotifyPlayerBar {
+            PlayerBarBottom {
                 id: bottomPlayer
                 Layout.fillWidth: true
                 currentTrack: win.currentTrack
@@ -1148,7 +1148,7 @@ Scope {
             }
         }
 
-        // YouTube Music Settings / Google Account Modal
+        // Google Account / Cloud Settings Modal
         SettingsModal {
             id: settingsModal
             isLoggedIn: win.isAuthLoggedIn
@@ -1228,7 +1228,7 @@ Scope {
 
     FileView {
         id: settingsFileView
-        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_settings.json"
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_settings.json"
         watchChanges: true
         onFileChanged: {
             reload();
@@ -1242,8 +1242,21 @@ Scope {
         }
     }
 
+    FileView {
+        id: legacySettingsFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/frostify_settings.json"
+        onLoadedChanged: {
+            if (loaded && (!settingsFileView.loaded || !settingsFileView.text() || settingsFileView.text().trim() === "")) {
+                win.loadSettings();
+            }
+        }
+    }
+
     function loadSettings() {
         var raw = settingsFileView.text();
+        if (!raw || raw.trim() === "") {
+            raw = legacySettingsFileView.text();
+        }
         if (!raw || raw.trim() === "") return;
         try {
             var obj = JSON.parse(raw);
@@ -1253,7 +1266,7 @@ Scope {
             if (obj.followedArtists !== undefined && Array.isArray(obj.followedArtists)) {
                 win.followedArtists = obj.followedArtists;
             }
-            console.log("DEBUG Frostify settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle + ", followedCount=" + win.followedArtists.length);
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", syncHistoryToGoogle=" + win.syncHistoryToGoogle + ", followedCount=" + win.followedArtists.length);
         } catch(e) {}
     }
 
@@ -1265,7 +1278,7 @@ Scope {
             followedArtists: win.followedArtists
         });
         Quickshell.execDetached(["python3", "-c",
-            "import sys, os\np = os.path.expanduser('~/.config/noctalia/frostify_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
+            "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
             data
         ]);
     }
@@ -1301,7 +1314,7 @@ Scope {
         win.followedArtists = list;
         win.saveSettings();
 
-        // Sync to YouTube Music if logged in and channelId is available
+        // Sync subscription to cloud account if logged in and channelId is available
         if (win.isAuthLoggedIn && chId) {
             Quickshell.execDetached([
                 "python3", win.appDir + "/backend/ytmusic_helper.py",
@@ -1312,7 +1325,7 @@ Scope {
 
     FileView {
         id: authChangeFileView
-        path: "/tmp/frostify_auth_changed"
+        path: "/tmp/nutsty_auth_changed"
         watchChanges: true
         onFileChanged: {
             reload();
@@ -1323,7 +1336,7 @@ Scope {
 
     FileView {
         id: sessionFileView
-        path: "/tmp/frostify_current_track.json"
+        path: "/tmp/nutsty_current_track.json"
         watchChanges: false
     }
 
@@ -1351,9 +1364,9 @@ Scope {
         if (pid === "all") {
             win.browsingTracks = win.allTracks;
             mainGrid.sectionTitle = "Downloads & All Tracks";
-        } else if (pid === "simp") {
-            win.browsingTracks = win.allTracks.filter(t => t.source === "SimpMusic");
-            mainGrid.sectionTitle = "SimpMusic Tracks";
+        } else if (pid === "simp" || pid === "nutsty") {
+            win.browsingTracks = win.allTracks.filter(t => t.source === "Nutsty Music" || t.source === "Nutsty" || t.source === "Nutsty");
+            mainGrid.sectionTitle = "Nutsty Tracks";
         } else if (pid === "downloads") {
             win.browsingTracks = win.allTracks.filter(t => t.source === "Downloads");
             mainGrid.sectionTitle = "Downloads";
@@ -1377,7 +1390,7 @@ Scope {
         if (tab === "all") {
             win.browsingTracks = win.allTracks;
         } else if (tab === "music") {
-            win.browsingTracks = win.allTracks.filter(t => t.source === "SimpMusic" || t.source === "Downloads");
+            win.browsingTracks = win.allTracks.filter(t => t.source === "Nutsty Music" || t.source === "Downloads");
         } else if (tab === "ado") {
             win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
         } else if (tab === "ytmusic") {
@@ -1396,7 +1409,7 @@ Scope {
             win.mainSectionTitle = 'Search: "' + q + '"';
             mainGrid.sectionTitle = 'Search: "' + q + '"';
         } else {
-            win.mainSectionTitle = win.currentTab === "ytmusic" ? "YouTube Music" : "Downloads";
+            win.mainSectionTitle = win.currentTab === "ytmusic" ? "Cloud Stream" : "Downloads";
             mainGrid.sectionTitle = win.mainSectionTitle;
         }
         if (win.currentTab === "ytmusic") {
@@ -1833,6 +1846,27 @@ Scope {
     } // end win (FloatingWindow)
 
     IpcHandler {
+        target: "nutsty"
+        function openWindow() { frostifyIpc.openWindow(); }
+        function closeWindow() { frostifyIpc.closeWindow(); }
+        function toggle() { frostifyIpc.toggle(); }
+        function toggleDetails() { frostifyIpc.toggleDetails(); }
+        function openArtwork() { frostifyIpc.openArtwork(); }
+        function scrollArtworkDown() { frostifyIpc.scrollArtworkDown(); }
+        function dislikeCurrentTrack() { frostifyIpc.dislikeCurrentTrack(); }
+        function openSettings() { frostifyIpc.openSettings(); }
+        function closeSettings() { frostifyIpc.closeSettings(); }
+        function showLibrary() { frostifyIpc.showLibrary(); }
+        function showHome() { frostifyIpc.showHome(); }
+        function selectMood(title: string, params: string) { frostifyIpc.selectMood(title, params); }
+        function openContextMenuForTest(isQueue: bool, forceLocal: bool) { frostifyIpc.openContextMenuForTest(isQueue, forceLocal); }
+        function closeContextMenu() { frostifyIpc.closeContextMenu(); }
+        function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
+        function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
+    }
+
+    IpcHandler {
+        id: frostifyIpc
         target: "frostify"
         function openWindow() {
             win.visible = true;

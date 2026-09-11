@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Frostify Local Download Manager (SimpMusic Architecture)
+Nutsty Download Manager (Multi-Thread Architecture)
 - Real-time download queue & worker daemon
 - Audio extraction (192k AAC/M4A / Opus) via yt-dlp + FFmpeg
 - Embedded album art & ID3 metadata
 - Automatic synced lyrics (.lrc) fetching
 - Desktop notifications & batch summary
-- Unix domain socket IPC (/tmp/frostify_download.sock) & stdout JSON stream
+- Unix domain socket IPC (/tmp/nutsty_download.sock) & stdout JSON stream
 """
 
 import os
@@ -18,8 +18,8 @@ import select
 import threading
 import subprocess
 
-SOCKET_PATH = "/tmp/frostify_download.sock"
-STATUS_FILE = "/tmp/frostify_download_status.json"
+SOCKET_PATH = "/tmp/nutsty_download.sock"
+STATUS_FILE = "/tmp/nutsty_download_status.json"
 
 STATE_NOT_DOWNLOADED = 0
 STATE_PREPARING = 1
@@ -36,7 +36,7 @@ def get_download_dir():
 def send_desktop_notification(title, message):
     try:
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets/icons/download-symbolic.svg")
-        cmd = ["notify-send", title, message, "-a", "Frostify"]
+        cmd = ["notify-send", title, message, "-a", "Nutsty"]
         if os.path.exists(icon_path):
             cmd.extend(["-i", icon_path])
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -319,7 +319,7 @@ class DownloadManager:
             if downloaded_file:
                 self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
 
-            # Trigger library re-index so the new track appears in Frostify 0ms
+            # Trigger library re-index so the new track appears in Nutsty 0ms
             self._trigger_library_rescan()
             return True
 

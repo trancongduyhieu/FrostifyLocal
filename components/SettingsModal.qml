@@ -55,7 +55,7 @@ Rectangle {
                 Layout.fillWidth: true
 
                 Text {
-                    text: "YouTube Music Account"
+                    text: "Google & Cloud Account"
                     font.family: Theme.fontFamily
                     font.pixelSize: 18
                     font.bold: true
@@ -73,7 +73,7 @@ Rectangle {
 
                     HoverHandler { id: closeHover }
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 14
@@ -94,7 +94,7 @@ Rectangle {
                 height: 52
                 radius: 8
                 color: root.isLoggedIn ? "#16281e" : "#242424"
-                border.color: root.isLoggedIn ? Theme.spotifyGreen : "#3a3a3a"
+                border.color: root.isLoggedIn ? Theme.accentGreen : "#3a3a3a"
                 border.width: 1
 
                 RowLayout {
@@ -106,7 +106,7 @@ Rectangle {
                         width: 10
                         height: 10
                         radius: 5
-                        color: root.isLoggedIn ? Theme.spotifyGreen : "#777777"
+                        color: root.isLoggedIn ? Theme.accentGreen : "#777777"
                     }
 
                     Text {
@@ -117,7 +117,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
-                        color: root.isLoggedIn ? Theme.spotifyGreen : Theme.textPrimary
+                        color: root.isLoggedIn ? Theme.accentGreen : Theme.textPrimary
                         elide: Text.ElideRight
                     }
 
@@ -163,10 +163,10 @@ Rectangle {
                     anchors.margins: 12
                     spacing: 12
 
-                    SpotifyIcon {
+                    AppIcon {
                         source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                         iconSize: 18
-                        color: root.syncHistoryToGoogle ? Theme.spotifyGreen : Theme.textMuted
+                        color: root.syncHistoryToGoogle ? Theme.accentGreen : Theme.textMuted
                     }
 
                     ColumnLayout {
@@ -174,7 +174,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: "Sync Playback History to YouTube Music"
+                            text: "Sync Playback History to Cloud Account"
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -194,7 +194,7 @@ Rectangle {
                         width: 44
                         height: 24
                         radius: 12
-                        color: root.syncHistoryToGoogle ? Theme.spotifyGreen : "#3a3a3a"
+                        color: root.syncHistoryToGoogle ? Theme.accentGreen : "#3a3a3a"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -219,13 +219,13 @@ Rectangle {
                 }
             }
 
-            // 1-Click Native Login Button (SimpMusic Style)
+            // 1-Click Native Login Button (Nutsty Style)
             Rectangle {
                 Layout.fillWidth: true
                 height: 42
                 radius: 21
                 visible: !root.isLoggedIn
-                color: root.isProcessing ? "#1db95466" : (browserLoginMouse.containsMouse ? "#1ed760" : Theme.spotifyGreen)
+                color: root.isProcessing ? "#1db95466" : (browserLoginMouse.containsMouse ? "#1ed760" : Theme.accentGreen)
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {
@@ -284,7 +284,7 @@ Rectangle {
                     Layout.preferredHeight: 88
                     radius: 8
                     color: "#121212"
-                    border.color: authInput.activeFocus ? Theme.spotifyGreen : "#2c2c2c"
+                    border.color: authInput.activeFocus ? Theme.accentGreen : "#2c2c2c"
                     border.width: 1
 
                     ScrollView {
@@ -307,7 +307,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "1-Click Sync: If you use the SimpMusic Utils browser extension, click 'Sync to Frostify (1-Click)' in the extension, or click 'Paste from Clipboard' below."
+                    text: "1-Click Sync: If you use the browser extension, click 'Sync to Nutsty (1-Click)' in the extension, or click 'Paste from Clipboard' below."
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     color: "#888888"
@@ -321,7 +321,7 @@ Rectangle {
                 text: root.statusMessage
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
-                color: root.statusMessage.indexOf("Success") !== -1 ? Theme.spotifyGreen : "#ff5555"
+                color: root.statusMessage.indexOf("Success") !== -1 ? Theme.accentGreen : "#ff5555"
                 visible: root.statusMessage.length > 0
                 wrapMode: Text.Wrap
             }
@@ -397,7 +397,7 @@ Rectangle {
                     height: 38
                     width: 140
                     radius: 19
-                    color: root.isProcessing ? "#1db95488" : (saveMouse.containsMouse ? "#1ed760" : Theme.spotifyGreen)
+                    color: root.isProcessing ? "#1db95488" : (saveMouse.containsMouse ? "#1ed760" : Theme.accentGreen)
 
                     Text {
                         anchors.centerIn: parent

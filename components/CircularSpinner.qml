@@ -29,7 +29,7 @@ Item {
             ctx.lineCap = "round";
             ctx.strokeStyle = root.color;
 
-            // 270 degree arc matching SimpMusic / Material 3 circular progress indicator
+            // 270 degree arc matching Nutsty / Material 3 circular progress indicator
             ctx.beginPath();
             ctx.arc(center, center, radius, 0, 1.5 * Math.PI, false);
             ctx.stroke();

@@ -41,7 +41,7 @@ RowLayout {
         Behavior on color { ColorAnimation { duration: 100 } }
         Behavior on opacity { NumberAnimation { duration: 150 } }
 
-        SpotifyIcon {
+        AppIcon {
             anchors.centerIn: parent
             source: "../assets/icons/go-previous-symbolic.svg"
             iconSize: 14
@@ -75,7 +75,7 @@ RowLayout {
         Behavior on color { ColorAnimation { duration: 100 } }
         Behavior on opacity { NumberAnimation { duration: 150 } }
 
-        SpotifyIcon {
+        AppIcon {
             anchors.centerIn: parent
             source: "../assets/icons/go-previous-symbolic.svg"
             rotation: 180

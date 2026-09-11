@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Frostify Local Synced Lyrics Helper
+Nutsty Synced Lyrics Helper
 Hierarchy:
-1. Local .lrc file / Persistent cache (~/.cache/frostify/lyrics/<key>.lrc)
+1. Local .lrc file / Persistent cache (~/.cache/nutsty/lyrics/<key>.lrc)
 2. Online Synced Lyrics via `syncedlyrics` (LRCLIB -> NetEase -> Musixmatch) -> save cache
-3. Last Resort Fallback: SimpMusic SQLite Database (YouTube extracted auto-subtitles)
+3. Last Resort Fallback: Local SQLite Database
 """
 import sys
 import json
@@ -12,7 +12,7 @@ import os
 import re
 import sqlite3
 
-CACHE_DIR = os.path.expanduser("~/.cache/frostify/lyrics")
+CACHE_DIR = os.path.expanduser("~/.cache/nutsty/lyrics")
 
 def sanitize_filename(name):
     if not name:
@@ -65,8 +65,10 @@ def parse_lrc(lrc_text):
     results.sort(key=lambda x: x["time"])
     return results
 
-def get_lyrics_from_simpmusic(title, video_id=None):
-    db_path = os.path.expanduser('~/Music/SimpMusic/extracted/Music Database')
+def get_lyrics_from_local_db(title, video_id=None):
+    p1 = os.path.expanduser('~/Music/Nutsty/extracted/Music Database')
+    p2 = os.path.expanduser('~/Music/SimpMusic/extracted/Music Database')
+    db_path = p1 if os.path.exists(p1) else p2
     if not os.path.exists(db_path):
         return []
 
@@ -190,9 +192,9 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
         sys.stderr.write("[syncedlyrics not available, skipping online search]\n")
 
     # -------------------------------------------------------------------------
-    # TẦNG 3: Dự phòng cuối cùng (SimpMusic SQLite Database)
+    # TẦNG 3: Dự phòng cuối cùng (Local SQLite Database)
     # -------------------------------------------------------------------------
-    return get_lyrics_from_simpmusic(title, video_id)
+    return get_lyrics_from_local_db(title, video_id)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Frostify Local Library Scanner
-Scans tracks from SimpMusic and phone downloads into library.json
+Nutsty Library Scanner
+Scans tracks from local folders and phone downloads into library.json
 """
 import os
 import sys
 import json
 import subprocess
 import glob
-
 HOME = os.path.expanduser("~")
-SIMP_DIR = os.path.join(HOME, "Music", "SimpMusic", "Tracks")
+LOCAL_DIR = os.path.join(HOME, "Music", "Nutsty", "Tracks") if os.path.exists(os.path.join(HOME, "Music", "Nutsty", "Tracks")) else os.path.join(HOME, "Music", "SimpMusic", "Tracks")
 DOWNLOADS_DIR = os.path.join(HOME, "Music", "Downloads_Phone")
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "library.json")
 
@@ -31,7 +30,7 @@ def get_duration(file_path):
 import sqlite3
 import hashlib
 
-THUMB_DIR = os.path.join(HOME, ".cache", "frostify", "thumbnails")
+THUMB_DIR = os.path.join(HOME, ".cache", "nutsty", "thumbnails")
 os.makedirs(THUMB_DIR, exist_ok=True)
 
 def get_file_metadata(file_path):
@@ -78,7 +77,7 @@ def extract_embedded_cover(file_path):
         if os.path.exists(sibling) and os.path.getsize(sibling) > 1000:
             return sibling
 
-    # Create deterministic hash path in ~/.cache/frostify/thumbnails/
+    # Create deterministic hash path in ~/.cache/nutsty/thumbnails/
     f_hash = hashlib.md5(file_path.encode("utf-8")).hexdigest()
     out_thumb = os.path.join(THUMB_DIR, f"{f_hash}.jpg")
 
@@ -98,8 +97,10 @@ def extract_embedded_cover(file_path):
 def scan_library():
     tracks = []
 
-    # Build mapping from SimpMusic Database
-    db_path = os.path.join(HOME, "Music", "SimpMusic", "extracted", "Music Database")
+    # Build mapping from Local Database
+    p_db1 = os.path.join(HOME, "Music", "Nutsty", "extracted", "Music Database")
+    p_db2 = os.path.join(HOME, "Music", "SimpMusic", "extracted", "Music Database")
+    db_path = p_db1 if os.path.exists(p_db1) else p_db2
     title_artist_map = {}
     title_map = {}
     import re
@@ -143,32 +144,32 @@ def scan_library():
                 return title_artist_map[(lower_t, sub_a)]
 
         # 2. Exact title match ONLY when artist is generic/unknown
-        if lower_a in ("", "downloaded", "simpmusic", "unknown") and lower_t in title_map:
+        if lower_a in ("", "downloaded", "single", "unknown") and lower_t in title_map:
             return title_map[lower_t]
 
         # 3. Cleaned title match (without brackets/extra notes)
-        if lower_a in ("", "downloaded", "simpmusic", "unknown"):
+        if lower_a in ("", "downloaded", "single", "unknown"):
             c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
             if c_title in title_map:
                 return title_map[c_title]
 
         return ""
     
-    # 1. Scan SimpMusic
-    if os.path.exists(SIMP_DIR):
-        for f in sorted(os.listdir(SIMP_DIR)):
+    # 1. Scan Nutsty local library
+    if os.path.exists(LOCAL_DIR):
+        for f in sorted(os.listdir(LOCAL_DIR)):
             if f.endswith((".opus", ".m4a", ".mp3", ".webm", ".flac")):
-                full_path = os.path.join(SIMP_DIR, f)
+                full_path = os.path.join(LOCAL_DIR, f)
                 base = os.path.splitext(f)[0]
                 if " - " in base:
                     artist, title = base.split(" - ", 1)
                 else:
-                    artist = "SimpMusic"
+                    artist = "Unknown Artist"
                     title = base
                 
                 # Priority 1: Real embedded album art inside file
                 thumb = extract_embedded_cover(full_path)
-                # Priority 2: SimpMusic DB thumbnail match
+                # Priority 2: DB thumbnail match
                 if not thumb:
                     thumb = find_thumbnail(title, artist)
 
@@ -182,7 +183,7 @@ def scan_library():
                     "title": title.strip(),
                     "name": title.strip(),
                     "artist": artist.strip(),
-                    "source": "SimpMusic",
+                    "source": "Nutsty",
                     "path": full_path,
                     "filename": f,
                     "duration": "--:--",
@@ -213,7 +214,7 @@ def scan_library():
                 
                 # Priority 1: Real embedded album art inside file
                 thumb = extract_embedded_cover(full_path)
-                # Priority 2: SimpMusic DB thumbnail match
+                # Priority 2: DB thumbnail match
                 if not thumb:
                     thumb = find_thumbnail(title, artist)
 

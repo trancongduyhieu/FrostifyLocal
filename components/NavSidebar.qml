@@ -106,10 +106,10 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 14
 
-                    SpotifyIcon {
+                    AppIcon {
                         source: "../assets/icons/go-home-symbolic.svg"
                         iconSize: 18
-                        color: root.currentView === "home" ? Theme.spotifyGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "home" ? Theme.accentGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
 
                     Text {
@@ -118,7 +118,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
-                        color: root.currentView === "home" ? Theme.spotifyGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "home" ? Theme.accentGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
                 }
 
@@ -145,10 +145,10 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 14
 
-                    SpotifyIcon {
+                    AppIcon {
                         source: "../assets/icons/folder-music-symbolic.svg"
                         iconSize: 18
-                        color: root.currentView === "library" ? Theme.spotifyGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "library" ? Theme.accentGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
 
                     Text {
@@ -157,7 +157,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
-                        color: root.currentView === "library" ? Theme.spotifyGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "library" ? Theme.accentGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
                 }
 
@@ -184,7 +184,7 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 14
 
-                    SpotifyIcon {
+                    AppIcon {
                         source: "../assets/icons/preferences-system-symbolic.svg"
                         iconSize: 18
                         color: setH.hovered ? "#ffffff" : Theme.textSecondary
@@ -240,11 +240,11 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: 6
 
-                        SpotifyIcon {
+                        AppIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                             iconSize: 13
-                            color: root.sidebarTab === "playlists" ? Theme.spotifyGreen : (plTabH.hovered ? "#ffffff" : Theme.textSecondary)
+                            color: root.sidebarTab === "playlists" ? Theme.accentGreen : (plTabH.hovered ? "#ffffff" : Theme.textSecondary)
                         }
 
                         Text {
@@ -278,11 +278,11 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: 5
 
-                        SpotifyIcon {
+                        AppIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             source: "../assets/icons/view-queue-symbolic.svg"
                             iconSize: 13
-                            color: root.sidebarTab === "queue" ? Theme.spotifyGreen : (qTabH.hovered ? "#ffffff" : Theme.textSecondary)
+                            color: root.sidebarTab === "queue" ? Theme.accentGreen : (qTabH.hovered ? "#ffffff" : Theme.textSecondary)
                         }
 
                         Text {
@@ -301,7 +301,7 @@ Rectangle {
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: root.sidebarTab === "queue"
-                            color: root.sidebarTab === "queue" ? Theme.spotifyGreen : Theme.textMuted
+                            color: root.sidebarTab === "queue" ? Theme.accentGreen : Theme.textMuted
                         }
                     }
 
@@ -424,7 +424,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: plItem.isCurrentlyPlaying ? Theme.spotifyGreen : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
+                                        color: plItem.isCurrentlyPlaying ? Theme.accentGreen : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
                                         elide: Text.ElideRight
                                     }
 
@@ -451,7 +451,7 @@ Rectangle {
                                             width: 3
                                             height: index === 0 ? 10 : (index === 1 ? 14 : 8)
                                             radius: 1.5
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                             anchors.bottom: parent.bottom
 
                                             SequentialAnimation on height {
@@ -478,7 +478,7 @@ Rectangle {
 
                                 HoverHandler { id: delH }
 
-                                SpotifyIcon {
+                                AppIcon {
                                     anchors.centerIn: parent
                                     source: "../assets/icons/user-trash-symbolic.svg"
                                     iconSize: 14
@@ -561,7 +561,7 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 8
 
-                            SpotifyIcon {
+                            AppIcon {
                                 Layout.alignment: Qt.AlignHCenter
                                 source: "../assets/icons/view-queue-symbolic.svg"
                                 iconSize: 28
@@ -663,7 +663,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         font.bold: true
-                                        color: qItem.isCurrent ? Theme.spotifyGreen : Theme.textMuted
+                                        color: qItem.isCurrent ? Theme.accentGreen : Theme.textMuted
                                     }
 
                                     // Overlay equalizer if current and playing
@@ -682,7 +682,7 @@ Rectangle {
                                                     width: 2.5
                                                     height: index === 0 ? 8 : (index === 1 ? 12 : 6)
                                                     radius: 1
-                                                    color: Theme.spotifyGreen
+                                                    color: Theme.accentGreen
                                                     anchors.bottom: parent.bottom
 
                                                     SequentialAnimation on height {
@@ -708,13 +708,13 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         font.bold: true
-                                        color: qItem.isCurrent ? Theme.spotifyGreen : (qRowH.hovered ? "#ffffff" : Theme.textPrimary)
+                                        color: qItem.isCurrent ? Theme.accentGreen : (qRowH.hovered ? "#ffffff" : Theme.textPrimary)
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.artist || modelData.author || "YouTube Music"
+                                        text: modelData.artist || modelData.author || "Cloud Stream"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textSecondary

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frostify Local YouTube Music Helper
+Nutsty YouTube Music Helper
 Provides search, stream URL resolution, hybrid personalized home feed,
 mood categories, radio generation, and Google Account cookie integration.
 """
@@ -13,11 +13,11 @@ import hashlib
 import urllib.request
 
 AUTH_FILE = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
-STREAM_CACHE_FILE = os.path.expanduser("~/.cache/frostify/stream_cache.json")
-HOME_CACHE_FILE = os.path.expanduser("~/.cache/frostify/home_feed.json")
-ONLINE_TRACKS_FILE = os.path.expanduser("~/.cache/frostify/online_tracks.json")
-MOOD_CACHE_DIR = os.path.expanduser("~/.cache/frostify/moods")
-MOOD_CATS_FILE = os.path.expanduser("~/.cache/frostify/mood_categories.json")
+STREAM_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/stream_cache.json")
+HOME_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/home_feed.json")
+ONLINE_TRACKS_FILE = os.path.expanduser("~/.cache/nutsty/online_tracks.json")
+MOOD_CACHE_DIR = os.path.expanduser("~/.cache/nutsty/moods")
+MOOD_CATS_FILE = os.path.expanduser("~/.cache/nutsty/mood_categories.json")
 
 def load_json(filepath, default=None):
     if os.path.exists(filepath):
@@ -36,7 +36,7 @@ def save_json(filepath, data):
     except Exception:
         pass
 
-DISLIKED_SONGS_FILE = os.path.expanduser("~/.config/noctalia/frostify_disliked_songs.json")
+DISLIKED_SONGS_FILE = os.path.expanduser("~/.config/noctalia/nutsty_disliked_songs.json")
 
 def load_disliked_songs():
     return load_json(DISLIKED_SONGS_FILE, {})
@@ -75,7 +75,7 @@ def is_song_disliked(video_id):
     data = load_disliked_songs()
     return clean_vid in data
 
-ARTIST_AVATARS_FILE = os.path.expanduser("~/.cache/frostify/artist_avatars.json")
+ARTIST_AVATARS_FILE = os.path.expanduser("~/.cache/nutsty/artist_avatars.json")
 
 def load_artist_avatars():
     return load_json(ARTIST_AVATARS_FILE, {})
@@ -191,7 +191,7 @@ def save_auth(raw_text):
 
         os.replace(temp_file, AUTH_FILE)
         try:
-            with open("/tmp/frostify_auth_changed", "w") as f:
+            with open("/tmp/nutsty_auth_changed", "w") as f:
                 f.write(str(time.time()))
         except Exception:
             pass
@@ -209,7 +209,7 @@ def logout():
         except Exception:
             pass
     try:
-        with open("/tmp/frostify_auth_changed", "w") as f:
+        with open("/tmp/nutsty_auth_changed", "w") as f:
             f.write(str(time.time()))
     except Exception:
         pass
@@ -272,7 +272,7 @@ def normalize_track(item):
     return res
 
 def get_recent_seed_track():
-    sess_file = os.path.expanduser("~/.config/noctalia/frostify_session.json")
+    sess_file = os.path.expanduser("~/.config/noctalia/nutsty_session.json")
     if os.path.exists(sess_file):
         try:
             data = load_json(sess_file)
@@ -587,7 +587,7 @@ def get_personalized_home():
     if 'all_tracks_discovered' in locals() and all_tracks_discovered:
         cache_online_tracks(all_tracks_discovered)
 
-    # Load all existing cached moods from ~/.cache/frostify/moods/ into preloaded_moods for 0ms QML startup
+    # Load all existing cached moods from ~/.cache/nutsty/moods/ into preloaded_moods for 0ms QML startup
     preloaded = {}
     if os.path.exists(MOOD_CACHE_DIR):
         for f in os.listdir(MOOD_CACHE_DIR):
@@ -827,7 +827,7 @@ def get_mood_feed(params, title=""):
             sub = "".join(r.get("text", "") for r in header.get("strapline", {}).get("runs", []))
             shelves.append((t, sub, shelf.get("contents", [])))
 
-        # 2. Process continuation sections (SimpMusic continuation scraper for 50+ playlists)
+        # 2. Process continuation sections (Continuation scraper for 50+ playlists)
         from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
         from ytmusicapi.parsers.browsing import parse_mixed_content
         from ytmusicapi.continuations import get_continuations
@@ -1333,8 +1333,8 @@ def resolve_stream_url(video_id):
 
     return None
 
-PENDING_HISTORY_FILE = os.path.expanduser("~/.cache/frostify/pending_history.json")
-LOCAL_YT_MAPPINGS_FILE = os.path.expanduser("~/.cache/frostify/local_yt_mappings.json")
+PENDING_HISTORY_FILE = os.path.expanduser("~/.cache/nutsty/pending_history.json")
+LOCAL_YT_MAPPINGS_FILE = os.path.expanduser("~/.cache/nutsty/local_yt_mappings.json")
 
 def resolve_video_id_for_track(video_id, title="", artist=""):
     """If video_id is valid, return it. If local song, lookup via Title + Artist on YTMusic"""
@@ -1370,8 +1370,8 @@ def resolve_video_id_for_track(video_id, title="", artist=""):
 
 def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
     """
-    SimpMusic adaptation: sends playback tracking and watchtime to YouTube Music
-    so that Google Account records it in Watch History and updates personalized shelves.
+    Sends playback tracking and watchtime to Google account
+    so that account records it in Watch History and updates personalized shelves.
     """
     vid = resolve_video_id_for_track(video_id, title, artist)
     if not vid:
@@ -1685,7 +1685,7 @@ def get_song_details(video_id):
             pass
 
     # Ensure album is never empty or weird
-    if not details["album"] or details["album"].lower() == "single / simpmusic":
+    if not details["album"] or details["album"].lower() in ("single / simpmusic", "single / nutsty"):
         details["album"] = "Single"
 
     # Enforce blacklist check on likeStatus

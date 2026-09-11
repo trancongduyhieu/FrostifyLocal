@@ -39,7 +39,7 @@ Item {
         onClicked: root.close()
     }
 
-    // Popover Card - Minimalist Clean (#121212 Spotify Desktop, 8px radius)
+    // Popover Card - Minimalist Clean (#121212 Nutsty Desktop, 8px radius)
     Rectangle {
         id: popoverCard
         width: 390
@@ -77,10 +77,10 @@ Item {
                 Layout.fillWidth: true
                 spacing: 10
 
-                SpotifyIcon {
+                AppIcon {
                     source: "../assets/icons/download-symbolic.svg"
                     iconSize: 15
-                    color: root.activeTasks.length > 0 ? Theme.spotifyGreen : Theme.textSecondary
+                    color: root.activeTasks.length > 0 ? Theme.accentGreen : Theme.textSecondary
                 }
 
                 Text {
@@ -97,7 +97,7 @@ Item {
                     height: 18
                     width: actCountText.implicitWidth + 10
                     color: Qt.rgba(30, 215, 96, 0.15)
-                    border.color: Theme.spotifyGreen
+                    border.color: Theme.accentGreen
                     border.width: 1
 
                     Text {
@@ -107,7 +107,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 10
                         font.bold: true
-                        color: Theme.spotifyGreen
+                        color: Theme.accentGreen
                     }
                 }
 
@@ -124,7 +124,7 @@ Item {
                     ToolTip.text: "Mở thư mục tải xuống"
                     ToolTip.delay: 300
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/folder-music-symbolic.svg"
                         iconSize: 14
@@ -155,7 +155,7 @@ Item {
                     ToolTip.text: "Xóa danh sách đã tải xong"
                     ToolTip.delay: 300
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/edit-clear-all-symbolic.svg"
                         iconSize: 14
@@ -182,7 +182,7 @@ Item {
                     ToolTip.text: "Đóng"
                     ToolTip.delay: 300
 
-                    SpotifyIcon {
+                    AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 12
@@ -254,7 +254,7 @@ Item {
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
-                            color: Theme.spotifyGreen
+                            color: Theme.accentGreen
                         }
 
                         Repeater {
@@ -292,7 +292,7 @@ Item {
                                             anchors.centerIn: parent
                                             size: 16
                                             strokeWidth: 2
-                                            color: Theme.spotifyGreen
+                                            color: Theme.accentGreen
                                             running: true
                                         }
                                     }
@@ -322,7 +322,7 @@ Item {
                                             Rectangle {
                                                 height: parent.height
                                                 radius: 1.5
-                                                color: Theme.spotifyGreen
+                                                color: Theme.accentGreen
                                                 width: parent.width * Math.min(1.0, Math.max(0.0, (modelData.progress || 0) / 100.0))
                                                 Behavior on width { NumberAnimation { duration: 150 } }
                                             }
@@ -337,7 +337,7 @@ Item {
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 10
                                                 font.bold: true
-                                                color: Theme.spotifyGreen
+                                                color: Theme.accentGreen
                                             }
 
                                             Text {
@@ -372,7 +372,7 @@ Item {
                                         color: cancelH.hovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
                                         HoverHandler { id: cancelH }
 
-                                        SpotifyIcon {
+                                        AppIcon {
                                             anchors.centerIn: parent
                                             source: "../assets/icons/window-close-symbolic.svg"
                                             iconSize: 11
@@ -420,10 +420,10 @@ Item {
                                     anchors.margins: 6
                                     spacing: 8
 
-                                    SpotifyIcon {
+                                    AppIcon {
                                         source: "../assets/icons/emblem-ok-symbolic.svg"
                                         iconSize: 14
-                                        color: Theme.spotifyGreen
+                                        color: Theme.accentGreen
                                     }
 
                                     ColumnLayout {
