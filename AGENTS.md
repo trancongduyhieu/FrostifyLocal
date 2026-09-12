@@ -44,11 +44,13 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 │   └── ytmusic_helper.py           # Engine YouTube Music: personalized home, continuation scrapers, radio
 ├── components/
 │   ├── AmberolDetailView.qml       # Màn hình chi tiết bài hát, đĩa xoay và lyric cuộn Amberol
+│   ├── AppleMusicDesktopLyrics.qml # Mẫu 2: Parametric Multi-Line Engine (5 dòng, DoF quang học, phosphor bloom)
 │   ├── CircularSpinner.qml         # Con quay loading xoay tròn phong cách Nutsty (270° arc Canvas)
-│   ├── DesktopLyricsWidget.qml     # Widget lyric nổi trên màn hình desktop (Wayland Layer Shell)
+│   ├── DesktopLyricsWidget.qml     # Universal Lyrics Harness (Host Layer-Shell, kéo thả toàn màn hình, palette sync)
 │   ├── DownloadManager.qml         # State manager đồng bộ tác vụ tải xuống từ download_manager.py
 │   ├── DownloadQueuePopover.qml    # Popover quản lý hàng đợi tải xuống Minimalist Clean (#121212)
 │   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, Gacha pop, đổ bóng
+│   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Presentation view Gacha / Anime Pop (1-line Instrument Serif)
 │   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels và track grids
 │   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
 │   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
@@ -196,29 +198,35 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *Quy Tắc Bo Góc Đồng Tâm (Concentric Rounded Corners)*: Bắt buộc tuân thủ công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$ cho mọi card bài hát, thumbnail và icon. Nếu khung ngoài bo góc 30px và khoảng cách lề (padding/border margin) là 6px thì phần tử bên trong (ảnh bìa/icon) phải bo góc chính xác $30 - 6 = 24\text{px}$, tuyệt đối không dùng bán kính bo góc tùy tiện làm vỡ đường cong đồng tâm.
       - *Sóng Equalizer 6 Cột Cyan*: `AudioPlayingIndicator` vẽ thuần trên Canvas (thay thế Lottie), 6 thanh viên thuốc dao động đối xứng từ tâm giữa (y=75), màu xanh Cyan cố định khi bài hát đang phát.
 
-23. **Kiến Trúc Desktop Lyrics Mẫu 2: Apple Music 5-Line Fluid Sync & Tọa Độ Đa Tầng (Apple Music 5-Line Fluid Sync Suite)**:
-    - **Cơ Chế Khung Nhìn 5 Dòng Quang Học (5-Slot Optical Depth of Field)**:
-      - *Tệp cốt lõi*: `components/AppleMusicDesktopLyrics.qml`, `components/DesktopLyricsWidget.qml`, `components/SettingsModal.qml`.
-      - *Hệ thống 6 slot trượt mượt mà* (Slot 0..4 hiển thị, Slot 5 là buffer cuộn dưới đáy):
-        - *Slot 0 (Dòng vừa hát xong)*: `blur: 0.35`, `opacity: 0.58`, `scale: 0.97`, trôi ngược lên trên mờ dần.
-        - *Slot 1 (Dòng đang hát trực tiếp)*: `blur: 0.0`, `opacity: 1.0`, `scale: 1.0`. Chữ sắc nét tuyệt đối, đồng bộ từng từ/ký tự karaoke với hiệu ứng phát quang lân tinh (phosphorescent white bloom `MultiEffect`).
-        - *Slot 2 (Dòng kế tiếp)*: `blur: 0.35`, `opacity: 0.58`, `scale: 0.97`.
-        - *Slot 3 (Dòng xa)*: `blur: 0.60`, `opacity: 0.38`, `scale: 0.93`.
-        - *Slot 4 (Dòng rất xa)*: `blur: 0.85`, `opacity: 0.18`, `scale: 0.84`. Độ mờ sương mù quang học sâu nhất, tạo hiệu ứng chiều sâu vô cực (infinite perspective).
+23. **Kiến Trúc Universal Lyrics Harness & Parametric Multi-Line Engine (Desktop Lyrics Architecture Suite)**:
+    - **Triết Lý Thiết Kế Universal Harness & Presentation Plugins (Tách Biệt Host vs UI)**:
+      - *Host Duy Nhất (`components/DesktopLyricsWidget.qml`)*: Đóng vai trò là Universal Harness quản lý tập trung toàn bộ hạ tầng:
+        - Layer-shell window (`WlrLayershell.layer: WlrLayer.Bottom`),
+        - Dynamic palette extraction (`nutsty_palette.json`) với `delayedPaletteTimer`,
+        - Lưu trữ và đồng bộ tọa độ (`nutsty_settings.json`),
+        - Vùng kéo thả toàn năng duy nhất (`universalDragArea` với `z: 100`),
+        - Kéo thả tự do không rào cản (`drag.maximumX: Math.max(0, root.width - 120)`),
+        - Thích ứng chiều rộng động sát mép phải (`Math.min(currentPresetMaxWidth, Math.max(120, root.width - containerBox.x))`),
+        - Loại bỏ 100% tooltip, badge, hoặc viền hover nhằm bảo tồn vẻ đẹp trong suốt điện ảnh của hình nền desktop.
+      - *Presentation Plugins Thuần Túy (Pure UI Views)*: Các mẫu lyric chỉ tập trung vào việc render văn bản và hiệu ứng chuyển động, hoàn toàn không chứa mã nguồn kéo thả hay lưu trữ tọa độ:
+        - `components/GachaAnimeLyricsView.qml`: Mẫu 1 — Gacha / Anime Pop (1-line Instrument Serif, staggered baselines, Gacha pop và falling fade-down exit).
+        - `components/AppleMusicDesktopLyrics.qml`: Mẫu 2 — Apple Music Parametric Multi-Line Engine.
+      - *Mở Rộng Vô Hạn Không Lặp Code (Zero Redundant Boilerplate)*: Khi bổ sung mẫu mới (Mẫu 3, 4, 5...) trong tương lai, chỉ cần tạo file QML presentation view và gán vào Host Harness. Không bao giờ phải viết lại logic kéo thả, lưu tọa độ hay bắt biên màn hình.
+    - **Cơ Chế Parametric Multi-Line & Công Thức Chiều Sâu Quang Học (Parametric DoF Engine)**:
+      - Thuộc tính cấu hình số dòng: `property int visibleLinesCount: 5` (dễ dàng đổi thành 3, 5, 7 dòng mà không cần sửa cấu trúc component).
+      - Tự động sinh các dòng tiếp theo bằng `Repeater` (`model: root.visibleLinesCount`), áp dụng các công thức quang học toán học liên tục theo khoảng cách dòng $s$:
+        - *Độ trong suốt*: $\text{calcBaseOpacity}(s) = \max(0.08, 0.58 - 0.20 \times (s - 2))$. Slot 1 = 1.0, Slot 2 = 0.58, Slot 3 = 0.38, Slot 4 = 0.18.
+        - *Độ mờ quang học*: $\text{calcBaseBlur}(s) = \min(0.95, 0.35 + 0.25 \times (s - 2))$. Slot 1 = 0.0, Slot 2 = 0.35, Slot 3 = 0.60, Slot 4 = 0.85 (tạo cảm giác xa dần vào hậu cảnh vô cực).
+        - *Tỷ lệ phối cảnh*: $\text{calcBaseScale}(s) = \max(0.70, 1.0 - 0.05 - 0.09 \times (s - 2))$. Slot 1 = 1.0, Slot 2 = 1.0, Slot 3 = 0.93, Slot 4 = 0.84.
     - **Thuật Toán Perspective Scaling Tránh Giật Font (GPU Transform Origin)**:
       - Sử dụng `transformOrigin: Item.Left` kết hợp thuộc tính `scale` của QML thay vì thay đổi trực tiếp `font.pixelSize`. Điều này giúp GPU scale texture nguyên vẹn, loại bỏ triệt để hiện tượng rasterize lại font chữ gây khựng khung hình (stutter/jank).
     - **Chuyển Màu Mượt Mà Liên Tục (Color Lerp Continuity)**:
       - Khắc phục hiện tượng giật màu (color jump/flash) khi dòng 1 chuyển lên dòng 0: Thuộc tính `sungColor` nội suy mượt từ `#ffffff` về `colPendingText` thông qua `ColorAnimation` trong suốt thời gian `rollAnimation` (450ms).
     - **Phát Quang Đơn Điểm Ký Tự Karaoke (Single-Character Phosphorescent Glow)**:
       - Tại mỗi thời điểm, chỉ duy nhất ký tự/từ đang hát được kích hoạt hiệu ứng bloom sáng rực rỡ (`glowEffect`). Các từ đã hát xong giữ màu trắng tĩnh tinh khiết (`#ffffff`), các từ chưa hát mang màu xám mờ (`colPendingText`).
-    - **Kiến Trúc Kéo Thả Tự Do & Zero-Clutter (Clean Anime Desktop Drag & Drop)**:
-      - Hỗ trợ kéo thả tự do độc lập cho cả Mẫu 1 (`preset1Box`) và Mẫu 2 (`container`).
-      - *Loại bỏ bức tường chặn biên phải (Unrestricted Right Drag)*: `drag.maximumX` được mở rộng toàn bộ chiều rộng màn hình (`root.width - 120`), giải phóng hoàn toàn vùng trời và cảnh quan bên phải màn hình desktop (vượt qua giới hạn cũ 826px / 48% màn hình).
-      - *Thích ứng chiều rộng động (Dynamic Width Adaptation)*: `width: Math.min(containerWidth, Math.max(120, root.width - x))` giúp khối lyric tự co giãn vừa vặn khi kéo sát mép phải, cho phép các dòng chữ dài tự động elide `...` mượt mà ngay tại rìa màn hình thay vì bị cắt xén thô.
-      - Xóa bỏ triệt để mọi badge, tooltip hoặc viền `[✓] Kéo để dời` khi hover chuột, bảo tồn 100% độ trong suốt và vẻ đẹp điện ảnh của hình nền desktop.
     - **Đồng Bộ Tọa Độ Tự Động & Đặt Lại Mặc Định Tức Thì (Reactive Auto-Reset Binding)**:
       - Tọa độ lưu bền vững vào `~/.config/noctalia/nutsty_settings.json` (`desktopLyricsCustomX`, `desktopLyricsCustomY`).
-      - Nút "Đặt lại mặc định" trong SettingsModal đặt lại `-1`, kích hoạt reactive handlers `onCustomXChanged` và `onCustomYChanged` trong cả 2 preset đưa widget về vị trí mặc định (`defaultX`/`defaultY` hoặc `activeX`/`activeY`) ngay trong 0ms mà không làm đứt reactive binding.
+      - Nút "Đặt lại mặc định" trong SettingsModal đặt lại `-1`, kích hoạt reactive handlers `onCustomXChanged` và `onCustomYChanged` trong Host Harness đưa widget về vị trí mặc định (`defaultX`/`defaultY`) ngay trong 0ms mà không làm đứt reactive binding.
 
 ---
 

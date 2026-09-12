@@ -7,12 +7,15 @@ import Quickshell.Wayland
 PanelWindow {
     id: root
 
+    // =========================================================================
+    // Core Lyrics Data & State
+    // =========================================================================
     property var activeLyrics: []
     property real currentTime: 0.0
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
-    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 3-Line
+    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync
     property int customX: -1
     property int customY: -1
 
@@ -31,7 +34,9 @@ PanelWindow {
         right: true
     }
 
-    // Instrument Serif (Cinematic Typeface) & Fonts
+    // =========================================================================
+    // Cinematic Typefaces (Instrument Serif)
+    // =========================================================================
     FontLoader {
         id: instrumentSerifFont
         source: "../assets/fonts/InstrumentSerif-Regular.ttf"
@@ -108,236 +113,98 @@ PanelWindow {
     readonly property bool isLightArea: !!root.frostifyPalette.isLightArea
 
     // =========================================================================
-    // Synchronized Timing Engine (Single Line Active + Deep Languid Exiting Fade)
+    // Universal Positioning & Dynamic Sizing Engine
     // =========================================================================
-    property int currentLyricIndex: -1
-    property real currentLineStart: 0.0
-    property real currentLineEnd: 0.0
-    property real lineProgress: 0.0
+    readonly property int defaultX: Math.round(root.width * 0.14)
+    readonly property int defaultY: (root.lyricsPreset === 1) ? Math.round(root.height * 0.725) : Math.round(root.height * 0.62)
 
-    property string activeLineText: ""
-    property string fadingLineText: ""
-
-    // Raised position on the maid skirt/lap area (y ≈ 72.5%)
-    readonly property int activeY: Math.round(root.height * 0.725)
-    readonly property int activeX: Math.round(root.width * 0.145)
-
-    onCurrentTimeChanged: updateProgress()
-    onActiveLyricsChanged: updateProgress()
-
-    function updateProgress() {
-        if (!activeLyrics || activeLyrics.length === 0) {
-            currentLyricIndex = -1;
-            lineProgress = 0.0;
-            activeLineText = "";
-            fadingLineText = "";
-            return;
-        }
-
-        var idx = -1;
-        for (var i = 0; i < activeLyrics.length; i++) {
-            var startTime = activeLyrics[i].time;
-            var nextTime = (i + 1 < activeLyrics.length) ? activeLyrics[i + 1].time : (startTime + 5.0);
-            if (currentTime >= startTime && currentTime < nextTime) {
-                idx = i;
-                currentLineStart = startTime;
-                currentLineEnd = nextTime;
-                var duration = Math.max(0.4, nextTime - startTime);
-                lineProgress = Math.min(1.0, Math.max(0.0, (currentTime - startTime) / duration));
-                break;
-            }
-        }
-
-        if (idx !== currentLyricIndex) {
-            if (currentLyricIndex >= 0 && idx > currentLyricIndex && activeLyrics && currentLyricIndex < activeLyrics.length) {
-                // Completed previous line -> trigger smooth, deep fade-down exit!
-                triggerFadeOutLine(activeLyrics[currentLyricIndex].text);
-            }
-            currentLyricIndex = idx;
-            if (idx >= 0 && activeLyrics && idx < activeLyrics.length) {
-                activeLineText = activeLyrics[idx].text;
-            } else {
-                activeLineText = "";
-            }
-        }
-    }
+    readonly property int currentPresetMaxWidth: (root.lyricsPreset === 1)
+        ? Math.min(740, Math.round(root.width * 0.45))
+        : Math.min(880, Math.round(root.width * 0.55))
 
     onCustomXChanged: {
-        preset1Box.x = (customX >= 0) ? customX : activeX;
+        containerBox.x = (customX >= 0) ? customX : defaultX;
     }
     onCustomYChanged: {
-        preset1Box.y = (customY >= 0) ? customY : activeY;
+        containerBox.y = (customY >= 0) ? customY : defaultY;
     }
     onWidthChanged: {
-        if (customX < 0) preset1Box.x = activeX;
+        if (customX < 0) containerBox.x = defaultX;
     }
     onHeightChanged: {
-        if (customY < 0) preset1Box.y = activeY;
+        if (customY < 0) containerBox.y = defaultY;
     }
     Component.onCompleted: {
-        preset1Box.x = (customX >= 0) ? customX : activeX;
-        preset1Box.y = (customY >= 0) ? customY : activeY;
-    }
-
-    function triggerFadeOutLine(oldText) {
-        fadingLineText = oldText;
-        fadingContainer.opacity = 0.78;
-        fadingContainer.y = 0;
-        fadingContainer.rotation = 0;
-        fadeDownExitAnim.restart();
+        containerBox.x = (customX >= 0) ? customX : defaultX;
+        containerBox.y = (customY >= 0) ? customY : defaultY;
     }
 
     // =========================================================================
-    // PRESET 1: Gacha / Pop Anime Instrument Serif (1 Active Line + Falling Fade)
+    // Universal Draggable Container Box (Zero-clutter, full-screen freedom)
     // =========================================================================
-    readonly property int maxBoxWidth: Math.min(740, Math.round(root.width * 0.45))
-
     Item {
-        id: preset1Box
-        x: (root.customX >= 0) ? root.customX : root.activeX
-        y: (root.customY >= 0) ? root.customY : root.activeY
-        width: Math.min(root.maxBoxWidth, Math.max(120, root.width - preset1Box.x))
-        height: 120
-        visible: root.enabled && root.lyricsPreset === 1 && root.activeLyrics.length > 0 && (root.activeLineText !== "" || root.fadingLineText !== "")
+        id: containerBox
+        x: (root.customX >= 0) ? root.customX : root.defaultX
+        y: (root.customY >= 0) ? root.customY : root.defaultY
+        width: Math.min(root.currentPresetMaxWidth, Math.max(120, root.width - containerBox.x))
+        height: (root.lyricsPreset === 1) ? 120 : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)
+        visible: root.enabled && root.activeLyrics && root.activeLyrics.length > 0
 
+        // Universal Full-Screen Drag Area (Shared across ALL presets)
         MouseArea {
-            id: preset1DragArea
+            id: universalDragArea
             anchors.fill: parent
+            z: 100
             hoverEnabled: true
             cursorShape: containsMouse ? Qt.SizeAllCursor : Qt.ArrowCursor
-            drag.target: preset1Box
+            drag.target: containerBox
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
             drag.maximumX: Math.max(0, root.width - 120)
             drag.minimumY: 0
-            drag.maximumY: Math.max(0, root.height - preset1Box.height)
+            drag.maximumY: Math.max(0, root.height - containerBox.height)
 
             onReleased: {
-                root.positionChanged(preset1Box.x, preset1Box.y);
+                root.positionChanged(containerBox.x, containerBox.y);
             }
         }
 
-        // EXITING LINE: Sinks deep (+52px), lingers gracefully, then fades smoothly to 0
-        Item {
-            id: fadingContainer
-            x: 0
-            y: 0
-            width: parent.width
-            height: 68
-            transformOrigin: Item.Left
-            opacity: 0.0
-            visible: fadingLineText !== "" && opacity > 0.01
-
-            EnchantingSentence {
-                id: fadingSentence
-                anchors.fill: parent
-                text: root.fadingLineText
-                progress: 1.0
-                isActive: false
-                isDead: true
-                fontFamily: root.magicFontFamily
-                fontSize: 35
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colDeadText: root.colDeadText
-                colShadowDirectional: root.colShadowDir
-                colShadowAmbient: root.colShadowAmb
-                isLightArea: root.isLightArea
-            }
-
-            SequentialAnimation {
-                id: fadeDownExitAnim
-
-                ParallelAnimation {
-                    NumberAnimation {
-                        target: fadingContainer
-                        property: "y"
-                        from: 0
-                        to: 52
-                        duration: 1600
-                        easing.type: Easing.OutCubic
-                    }
-                    NumberAnimation {
-                        target: fadingContainer
-                        property: "rotation"
-                        from: 0
-                        to: 1.8
-                        duration: 1600
-                        easing.type: Easing.OutCubic
-                    }
-                    SequentialAnimation {
-                        NumberAnimation {
-                            target: fadingContainer
-                            property: "opacity"
-                            from: 0.78
-                            to: 0.65
-                            duration: 450
-                            easing.type: Easing.Linear
-                        }
-                        NumberAnimation {
-                            target: fadingContainer
-                            property: "opacity"
-                            from: 0.65
-                            to: 0.0
-                            duration: 1150
-                            easing.type: Easing.OutQuad
-                        }
-                    }
-                }
-
-                ScriptAction {
-                    script: {
-                        root.fadingLineText = "";
-                    }
-                }
-            }
+        // =====================================================================
+        // Preset 1: Gacha / Anime Pop View Plugin
+        // =====================================================================
+        GachaAnimeLyricsView {
+            id: gachaView
+            anchors.fill: parent
+            visible: root.lyricsPreset === 1
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            magicFontFamily: root.magicFontFamily
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colDeadText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
         }
 
-        // ACTIVE LYRIC LINE: 1-Line only
-        Item {
-            id: activeContainer
-            x: 0
-            y: 0
-            width: parent.width
-            height: 68
-
-            EnchantingSentence {
-                id: activeSentence
-                anchors.fill: parent
-                text: root.activeLineText
-                progress: root.lineProgress
-                isActive: root.currentLyricIndex >= 0
-                isDead: false
-                fontFamily: root.magicFontFamily
-                fontSize: 35
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colDeadText: root.colDeadText
-                colShadowDirectional: root.colShadowDir
-                colShadowAmbient: root.colShadowAmb
-                isLightArea: root.isLightArea
-            }
-        }
-    }
-
-    // =========================================================================
-    // PRESET 2: Apple Music 3-Line Fluid Sync (Depth-of-Field + Neon Karaoke Wipe)
-    // =========================================================================
-    AppleMusicDesktopLyrics {
-        anchors.fill: parent
-        visible: root.enabled && root.lyricsPreset === 2
-        activeLyrics: root.activeLyrics
-        currentTime: root.currentTime
-        isPlaying: root.isPlaying
-        currentTrack: root.currentTrack
-        colHighlight: root.colHighlight
-        colActiveText: root.colActiveText
-        colShadowDir: root.colShadowDir
-        colShadowAmb: root.colShadowAmb
-        customX: root.customX
-        customY: root.customY
-        onPositionChanged: (newX, newY) => {
-            root.positionChanged(newX, newY);
+        // =====================================================================
+        // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
+        // =====================================================================
+        AppleMusicDesktopLyrics {
+            id: appleMusicView
+            anchors.fill: parent
+            visible: root.lyricsPreset === 2
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            currentTrack: root.currentTrack
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colPendingText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            visibleLinesCount: 5
         }
     }
 }
