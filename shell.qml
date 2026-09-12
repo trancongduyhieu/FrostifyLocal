@@ -57,7 +57,7 @@ Scope {
     property string authAccountThumb: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
-    property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric
+    property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property bool showSidebar: true

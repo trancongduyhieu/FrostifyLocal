@@ -18,7 +18,7 @@ Rectangle {
     property bool syncHistoryToGoogle: true
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
-    property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 3-Line
+    property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur
     property int customX: -1
     property int customY: -1
 
@@ -733,6 +733,80 @@ Rectangle {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.selectLyricsPresetRequested(2)
+                }
+            }
+
+            // Card Mẫu 3: Minimalist Slide-Up Motion Blur (2 Dòng Tối Giản Điện Ảnh)
+            Rectangle {
+                Layout.fillWidth: true
+                height: 48
+                radius: 8
+                color: root.lyricsPreset === 3 ? "#1e2a22" : (p3Hover.hovered ? "#282828" : "#242424")
+                border.color: root.lyricsPreset === 3 ? Theme.accentGreen : "#3a3a3a"
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 120 } }
+                HoverHandler { id: p3Hover }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    Rectangle {
+                        width: 20
+                        height: 20
+                        radius: 10
+                        color: "transparent"
+                        border.color: root.lyricsPreset === 3 ? Theme.accentGreen : "#666666"
+                        border.width: 2
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: Theme.accentGreen
+                            visible: root.lyricsPreset === 3
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: "Mẫu 3: Tối giản lướt nhòe (2 dòng)"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Rectangle {
+                            height: 16
+                            width: 38
+                            radius: 4
+                            color: Theme.accentGreen
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "MỚI"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 9
+                                font.bold: true
+                                color: "#000000"
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.selectLyricsPresetRequested(3)
                 }
             }
 

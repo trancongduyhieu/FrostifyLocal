@@ -15,7 +15,7 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
-    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync
+    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur
     property int customX: -1
     property int customY: -1
 
@@ -48,6 +48,13 @@ PanelWindow {
     }
 
     readonly property string magicFontFamily: (instrumentSerifFont.status === FontLoader.Ready && instrumentSerifFont.name !== "") ? instrumentSerifFont.name : "Instrument Serif"
+
+    FontLoader {
+        id: montserratBlackFont
+        source: "../assets/fonts/Montserrat-Black.ttf"
+    }
+
+    readonly property string heavyFontFamily: (montserratBlackFont.status === FontLoader.Ready && montserratBlackFont.name !== "") ? montserratBlackFont.name : "Montserrat"
 
     // =========================================================================
     // Dynamic Adaptive Palette Engine (Auto-syncs with active wallpaper)
@@ -116,11 +123,17 @@ PanelWindow {
     // Universal Positioning & Dynamic Sizing Engine
     // =========================================================================
     readonly property int defaultX: Math.round(root.width * 0.14)
-    readonly property int defaultY: (root.lyricsPreset === 1) ? Math.round(root.height * 0.725) : Math.round(root.height * 0.62)
+    readonly property int defaultY: (root.lyricsPreset === 1)
+        ? Math.round(root.height * 0.725)
+        : ((root.lyricsPreset === 3)
+            ? Math.round(root.height * 0.70)
+            : Math.round(root.height * 0.62))
 
     readonly property int currentPresetMaxWidth: (root.lyricsPreset === 1)
         ? Math.min(740, Math.round(root.width * 0.45))
-        : Math.min(880, Math.round(root.width * 0.55))
+        : ((root.lyricsPreset === 3)
+            ? Math.min(760, Math.round(root.width * 0.50))
+            : Math.min(880, Math.round(root.width * 0.55)))
 
     onCustomXChanged: {
         containerBox.x = (customX >= 0) ? customX : defaultX;
@@ -147,7 +160,11 @@ PanelWindow {
         x: (root.customX >= 0) ? root.customX : root.defaultX
         y: (root.customY >= 0) ? root.customY : root.defaultY
         width: Math.min(root.currentPresetMaxWidth, Math.max(120, root.width - containerBox.x))
-        height: (root.lyricsPreset === 1) ? 120 : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)
+        height: (root.lyricsPreset === 1)
+            ? 120
+            : ((root.lyricsPreset === 3)
+                ? (minimalistView.implicitHeight > 0 ? minimalistView.implicitHeight : 140)
+                : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300))
         visible: root.enabled && root.activeLyrics && root.activeLyrics.length > 0
 
         // Universal Full-Screen Drag Area (Shared across ALL presets)
@@ -191,6 +208,8 @@ PanelWindow {
         // =====================================================================
         // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
         // =====================================================================
+        // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
+        // =====================================================================
         AppleMusicDesktopLyrics {
             id: appleMusicView
             anchors.fill: parent
@@ -205,6 +224,25 @@ PanelWindow {
             colShadowDir: root.colShadowDir
             colShadowAmb: root.colShadowAmb
             visibleLinesCount: 5
+        }
+
+        // =====================================================================
+        // Preset 3: Minimalist Slide-Up Motion Blur View Plugin
+        // =====================================================================
+        MinimalistLyricsView {
+            id: minimalistView
+            anchors.fill: parent
+            visible: root.lyricsPreset === 3
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            magicFontFamily: root.magicFontFamily
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colDeadText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
         }
     }
 }

@@ -226,7 +226,22 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Tại mỗi thời điểm, chỉ duy nhất ký tự/từ đang hát được kích hoạt hiệu ứng bloom sáng rực rỡ (`glowEffect`). Các từ đã hát xong giữ màu trắng tĩnh tinh khiết (`#ffffff`), các từ chưa hát mang màu xám mờ (`colPendingText`).
     - **Đồng Bộ Tọa Độ Tự Động & Đặt Lại Mặc Định Tức Thì (Reactive Auto-Reset Binding)**:
       - Tọa độ lưu bền vững vào `~/.config/noctalia/nutsty_settings.json` (`desktopLyricsCustomX`, `desktopLyricsCustomY`).
-      - Nút "Đặt lại mặc định" trong SettingsModal đặt lại `-1`, kích hoạt reactive handlers `onCustomXChanged` và `onCustomYChanged` trong Host Harness đưa widget về vị trí mặc định (`defaultX`/`defaultY`) ngay trong 0ms mà không làm đứt reactive binding.
+24. **Hệ Thống Lyric Tối Giản Điện Ảnh Lướt Nhòe (Minimalist Word-by-Word Motion Blur Engine - Preset 3)**:
+    - **Triết Lý Thiết Kế & Cấu Trúc Bố Cục (1 Câu Chia 2 Dòng)**:
+      - *Căn lề*: Căn lề trái (`anchors.left: parent.left`), tự động tách 1 câu lyric thành 2 hàng cân đối (Hàng 1: nửa đầu câu, Hàng 2: nửa sau câu).
+      - *Typography*: Toàn bộ chữ thường (`toLowerCase()`), font cổ điển thơ mộng *Instrument Serif* 34px (tự động fallback sang *Noto Serif* khi có dấu tiếng Việt), màu trắng tinh khiết `#ffffff`, viền bóng điện ảnh thích ứng sâu (`colShadowDir` và `colShadowAmb`).
+    - **Cơ Chế Động Lực Học Trục X (Đẩy Từ Sang Trái $X = 3 \rightarrow 2 \rightarrow 1$)**:
+      - Từ đầu tiên xuất hiện ở vị trí lệch phải (`dynamicLine1ShiftX` tính theo tổng độ rộng các từ chưa xuất hiện).
+      - Mỗi khi một từ mới xuất hiện theo nhịp hát, toàn bộ các từ trước trượt mượt mà sang trái (`Easing.OutCubic`, 250ms).
+      - Khi Hàng 1 đã xuất hiện đủ tất cả các từ (hoặc khi bắt đầu xuống Hàng 2): Khóa cố định trục X tại $X = 0$, tuyệt đối không đẩy nữa.
+    - **Cơ Chế Động Lực Học Trục Y (Đẩy Lên Hàng Trên Khi Xuống Hàng $Y = 1 \rightarrow 2$)**:
+      - Ban đầu, Hàng 1 xuất hiện ở vị trí cơ sở trung tâm ($Y = 50$).
+      - Khi Hàng 2 bắt đầu xuất hiện (`isLine2Active === true`): Hàng 1 được đẩy trượt mượt mà lên trên ($Y = 6$, `Easing.OutCubic`, 320ms), nhường vị trí hàng dưới ($Y = 54$) cho Hàng 2 xuất hiện từng từ.
+    - **Hiệu Ứng Nhòe Chuyển Động Từng Từ (Word-by-Word Motion Blur & Ghost Streaks)**:
+      - *Vệt tốc độ kép (Dual Ghost Streaks)*: Mỗi từ khi xuất hiện mang vệt lướt ngang (`x: ±streakOffset`) và trượt nhẹ 18px (`wordGlideX: 18 -> 0`).
+      - *GPU Shader tối ưu 0% overhead qua `layer.effect: MultiEffect`*: Hiệu ứng nhòe chuyển động chỉ kích hoạt trong đúng 220ms của animation xuất hiện (`layer.enabled: wordBlur > 0.02`), tự động tắt hoàn toàn khi từ đã rõ nét.
+    - **Chuyển Câu Dạng Trượt Cuộn Lên (400ms Slide-Up Fade Out & Reset)**:
+      - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
 
 ---
 
