@@ -56,6 +56,10 @@ Scope {
     property string authAccountName: ""
     property string authAccountThumb: ""
     property bool syncHistoryToGoogle: true
+    property bool desktopLyricsEnabled: true
+    property int desktopLyricsPreset: 2 // 1: Gacha, 2: Apple Music 3-Line
+    property int desktopLyricsCustomX: -1
+    property int desktopLyricsCustomY: -1
     property bool showSidebar: true
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
@@ -1168,10 +1172,27 @@ Scope {
             accountName: win.authAccountName
             accountThumb: win.authAccountThumb
             syncHistoryToGoogle: win.syncHistoryToGoogle
+            desktopLyricsEnabled: win.desktopLyricsEnabled
+            lyricsPreset: win.desktopLyricsPreset
+            customX: win.desktopLyricsCustomX
+            customY: win.desktopLyricsCustomY
 
             onCloseRequested: settingsModal.visible = false
             onToggleSyncHistoryRequested: enabled => {
                 win.syncHistoryToGoogle = enabled;
+                win.saveSettings();
+            }
+            onToggleDesktopLyricsRequested: enabled => {
+                win.desktopLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onSelectLyricsPresetRequested: preset => {
+                win.desktopLyricsPreset = preset;
+                win.saveSettings();
+            }
+            onResetLyricsPositionRequested: {
+                win.desktopLyricsCustomX = -1;
+                win.desktopLyricsCustomY = -1;
                 win.saveSettings();
             }
             onConnectRequested: rawAuth => {
@@ -1281,7 +1302,11 @@ Scope {
             }
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
+            if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
+            if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);
+            if (obj.desktopLyricsCustomX !== undefined) win.desktopLyricsCustomX = Number(obj.desktopLyricsCustomX);
+            if (obj.desktopLyricsCustomY !== undefined) win.desktopLyricsCustomY = Number(obj.desktopLyricsCustomY);
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
         } catch(e) {}
     }
 
@@ -1292,7 +1317,11 @@ Scope {
             syncHistoryToGoogle: win.syncHistoryToGoogle,
             followedArtists: win.followedArtists,
             widgetX: win.widgetX,
-            widgetY: win.widgetY
+            widgetY: win.widgetY,
+            desktopLyricsEnabled: win.desktopLyricsEnabled,
+            desktopLyricsPreset: win.desktopLyricsPreset,
+            desktopLyricsCustomX: win.desktopLyricsCustomX,
+            desktopLyricsCustomY: win.desktopLyricsCustomY
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
@@ -1969,7 +1998,15 @@ Scope {
         currentTime: win.currentTime
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
-        enabled: true
+        enabled: win.desktopLyricsEnabled
+        lyricsPreset: win.desktopLyricsPreset
+        customX: win.desktopLyricsCustomX
+        customY: win.desktopLyricsCustomY
+        onPositionChanged: (newX, newY) => {
+            win.desktopLyricsCustomX = newX;
+            win.desktopLyricsCustomY = newY;
+            win.saveSettings();
+        }
     }
 
     // =========================================================================

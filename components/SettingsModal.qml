@@ -16,12 +16,20 @@ Rectangle {
     property string statusMessage: ""
     property bool isProcessing: false
     property bool syncHistoryToGoogle: true
+    property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
+    property bool desktopLyricsEnabled: true
+    property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 3-Line
+    property int customX: -1
+    property int customY: -1
 
     signal closeRequested()
     signal connectRequested(string rawAuth)
     signal logoutRequested()
     signal launchBrowserLoginRequested()
     signal toggleSyncHistoryRequested(bool enabled)
+    signal toggleDesktopLyricsRequested(bool enabled)
+    signal selectLyricsPresetRequested(int preset)
+    signal resetLyricsPositionRequested()
 
     MouseArea {
         anchors.fill: parent
@@ -55,7 +63,7 @@ Rectangle {
                 Layout.fillWidth: true
 
                 Text {
-                    text: "Google & Cloud Account"
+                    text: root.currentTab === 0 ? "Google & Cloud Account" : "Cài đặt Lời bài hát Desktop"
                     font.family: Theme.fontFamily
                     font.pixelSize: 18
                     font.bold: true
@@ -87,6 +95,92 @@ Rectangle {
                     }
                 }
             }
+
+            // Tab Switcher
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                // Tab 0: Account
+                Rectangle {
+                    Layout.preferredWidth: 140
+                    height: 34
+                    radius: 8
+                    color: root.currentTab === 0 ? "#2c2c2c" : (tab0Hover.hovered ? "#222222" : "transparent")
+                    border.color: root.currentTab === 0 ? "#444444" : "transparent"
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    HoverHandler { id: tab0Hover }
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        AppIcon {
+                            source: "../assets/icons/preferences-system-symbolic.svg"
+                            iconSize: 14
+                            color: root.currentTab === 0 ? Theme.textPrimary : Theme.textSecondary
+                        }
+                        Text {
+                            text: "Tài khoản"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: root.currentTab === 0
+                            color: root.currentTab === 0 ? Theme.textPrimary : Theme.textSecondary
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentTab = 0
+                    }
+                }
+
+                // Tab 1: Desktop Lyrics
+                Rectangle {
+                    Layout.preferredWidth: 175
+                    height: 34
+                    radius: 8
+                    color: root.currentTab === 1 ? "#2c2c2c" : (tab1Hover.hovered ? "#222222" : "transparent")
+                    border.color: root.currentTab === 1 ? "#444444" : "transparent"
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    HoverHandler { id: tab1Hover }
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        AppIcon {
+                            source: "../assets/icons/view-lyrics-symbolic.svg"
+                            iconSize: 14
+                            color: root.currentTab === 1 ? Theme.textPrimary : Theme.textSecondary
+                        }
+                        Text {
+                            text: "Lời bài hát Desktop"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: root.currentTab === 1
+                            color: root.currentTab === 1 ? Theme.textPrimary : Theme.textSecondary
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentTab = 1
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            // =========================================================
+            // TAB 0: Google & Cloud Account
+            // =========================================================
+            ColumnLayout {
+                id: tab0Content
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 16
+                visible: root.currentTab === 0
 
             // Connection Status Banner
             Rectangle {
@@ -419,6 +513,319 @@ Rectangle {
                     }
                 }
             }
+        } // Close tab0Content
+
+        // =========================================================
+        // TAB 1: Desktop Lyrics Widget Settings
+        // =========================================================
+        ColumnLayout {
+            id: tab1Content
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 14
+            visible: root.currentTab === 1
+
+            // Card 1: Toggle On/Off
+            Rectangle {
+                Layout.fillWidth: true
+                height: 64
+                radius: 8
+                color: "#242424"
+                border.color: root.desktopLyricsEnabled ? Theme.accentGreen : "#3a3a3a"
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 12
+
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: 18
+                        color: root.desktopLyricsEnabled ? Qt.rgba(0.11, 0.73, 0.33, 0.2) : "#333333"
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/view-lyrics-symbolic.svg"
+                            iconSize: 18
+                            color: root.desktopLyricsEnabled ? Theme.accentGreen : Theme.textSecondary
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Hiển thị lời bài hát trên Desktop"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: "Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Toggle Switch Pill
+                    Rectangle {
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.desktopLyricsEnabled ? Theme.accentGreen : "#444444"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            x: root.desktopLyricsEnabled ? 23 : 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: "#ffffff"
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled)
+                        }
+                    }
+                }
+            }
+
+            // Header for Presets
+            Text {
+                text: "CHỌN MẪU GIAO DIỆN (PRESETS)"
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                font.bold: true
+                color: Theme.textMuted
+                Layout.topMargin: 4
+            }
+
+            // Card Mẫu 1: Gacha / Anime Pop
+            Rectangle {
+                Layout.fillWidth: true
+                height: 72
+                radius: 8
+                color: root.lyricsPreset === 1 ? "#1e2a22" : (p1Hover.hovered ? "#282828" : "#242424")
+                border.color: root.lyricsPreset === 1 ? Theme.accentGreen : "#3a3a3a"
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 120 } }
+                HoverHandler { id: p1Hover }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 12
+
+                    Rectangle {
+                        width: 20
+                        height: 20
+                        radius: 10
+                        color: "transparent"
+                        border.color: root.lyricsPreset === 1 ? Theme.accentGreen : "#666666"
+                        border.width: 2
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: Theme.accentGreen
+                            visible: root.lyricsPreset === 1
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Mẫu 1: Gacha / Anime Pop"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: "1 dòng lyric chữ cổ điển Instrument Serif nghệ thuật, câu cũ rơi chìm xuống nền."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Theme.textSecondary
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.selectLyricsPresetRequested(1)
+                }
+            }
+
+            // Card Mẫu 2: Apple Music 3-Line Fluid Sync
+            Rectangle {
+                Layout.fillWidth: true
+                height: 74
+                radius: 8
+                color: root.lyricsPreset === 2 ? "#1e2a22" : (p2Hover.hovered ? "#282828" : "#242424")
+                border.color: root.lyricsPreset === 2 ? Theme.accentGreen : "#3a3a3a"
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 120 } }
+                HoverHandler { id: p2Hover }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 12
+
+                    Rectangle {
+                        width: 20
+                        height: 20
+                        radius: 10
+                        color: "transparent"
+                        border.color: root.lyricsPreset === 2 ? Theme.accentGreen : "#666666"
+                        border.width: 2
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: Theme.accentGreen
+                            visible: root.lyricsPreset === 2
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        RowLayout {
+                            spacing: 6
+                            Text {
+                                text: "Mẫu 2: Apple Music 3-Line Fluid Sync"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Theme.textPrimary
+                            }
+
+                            Rectangle {
+                                height: 16
+                                width: 38
+                                radius: 4
+                                color: Theme.accentGreen
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "MỚI"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: "#000000"
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "3 dòng đồng thời: dòng trước/sau mờ sâu (Depth-of-Field), dòng giữa quét karaoke sáng neon theo thời gian thực."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Theme.textSecondary
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.selectLyricsPresetRequested(2)
+                }
+            }
+
+            // Card 3: Positioning & Reset
+            Rectangle {
+                Layout.fillWidth: true
+                height: 64
+                radius: 8
+                color: "#1e1e1e"
+                border.color: "#333333"
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Vị trí hiển thị trên màn hình"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: "Có thể rê chuột kéo thả trực tiếp lời bài hát trên Desktop."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    Rectangle {
+                        height: 32
+                        width: 140
+                        radius: 6
+                        color: resetHover.hovered ? "#3a3a3a" : "#2c2c2c"
+                        border.color: "#444444"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        HoverHandler { id: resetHover }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            AppIcon {
+                                source: "../assets/icons/media-playlist-repeat-symbolic.svg"
+                                iconSize: 12
+                                color: Theme.textPrimary
+                            }
+                            Text {
+                                text: "Đặt lại mặc định"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: Theme.textPrimary
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.resetLyricsPositionRequested()
+                        }
+                    }
+                }
+            }
+
+            Item { Layout.fillHeight: true }
         }
     }
 }
+}
+

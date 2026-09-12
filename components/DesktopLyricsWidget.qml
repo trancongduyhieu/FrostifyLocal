@@ -12,6 +12,11 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
+    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 3-Line
+    property int customX: -1
+    property int customY: -1
+
+    signal positionChanged(int newX, int newY)
 
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
@@ -165,19 +170,19 @@ PanelWindow {
         fadeDownExitAnim.restart();
     }
 
-    // Master Desktop Canvas
+    // =========================================================================
+    // PRESET 1: Gacha / Pop Anime Instrument Serif (1 Active Line + Falling Fade)
+    // =========================================================================
     Item {
+        id: preset1Container
         anchors.fill: parent
-        visible: root.enabled && root.activeLyrics.length > 0 && (activeLineText !== "" || fadingLineText !== "")
+        visible: root.enabled && root.lyricsPreset === 1 && root.activeLyrics.length > 0 && (activeLineText !== "" || fadingLineText !== "")
 
-        // =========================================================================
         // EXITING LINE: Sinks deep (+52px), lingers gracefully, then fades smoothly to 0
-        // (Không biến mất liền, xuống sâu hơn, fade mượt mà 1.6s)
-        // =========================================================================
         Item {
             id: fadingContainer
-            x: root.activeX
-            y: root.activeY
+            x: (root.customX >= 0) ? root.customX : root.activeX
+            y: (root.customY >= 0) ? root.customY : root.activeY
             width: Math.min(740, Math.round(parent.width * 0.45))
             height: 68
             transformOrigin: Item.Left
@@ -205,16 +210,14 @@ PanelWindow {
                 id: fadeDownExitAnim
 
                 ParallelAnimation {
-                    // Sinks significantly deeper (+52px down onto the lower fold)
                     NumberAnimation {
                         target: fadingContainer
                         property: "y"
-                        from: root.activeY
-                        to: root.activeY + 52
+                        from: (root.customY >= 0) ? root.customY : root.activeY
+                        to: ((root.customY >= 0) ? root.customY : root.activeY) + 52
                         duration: 1600
                         easing.type: Easing.OutCubic
                     }
-                    // Very subtle organic tilt (1.8 deg)
                     NumberAnimation {
                         target: fadingContainer
                         property: "rotation"
@@ -223,7 +226,6 @@ PanelWindow {
                         duration: 1600
                         easing.type: Easing.OutCubic
                     }
-                    // Lingers gracefully before dissolving into the air
                     SequentialAnimation {
                         NumberAnimation {
                             target: fadingContainer
@@ -252,14 +254,11 @@ PanelWindow {
             }
         }
 
-        // =========================================================================
-        // ACTIVE LYRIC LINE: 1-Line only, raised to lap/skirt area (y ≈ 72.5%)
-        // Words pop in Base Color -> shift to Adaptive Highlight Color
-        // =========================================================================
+        // ACTIVE LYRIC LINE: 1-Line only
         Item {
             id: activeContainer
-            x: root.activeX
-            y: root.activeY
+            x: (root.customX >= 0) ? root.customX : root.activeX
+            y: (root.customY >= 0) ? root.customY : root.activeY
             width: Math.min(740, Math.round(parent.width * 0.45))
             height: 68
 
@@ -279,6 +278,29 @@ PanelWindow {
                 colShadowAmbient: root.colShadowAmb
                 isLightArea: root.isLightArea
             }
+        }
+    }
+
+    // =========================================================================
+    // PRESET 2: Apple Music 3-Line Fluid Sync (Depth-of-Field + Neon Karaoke Wipe)
+    // =========================================================================
+    AppleMusicDesktopLyrics {
+        anchors.fill: parent
+        visible: root.enabled && root.lyricsPreset === 2
+        activeLyrics: root.activeLyrics
+        currentTime: root.currentTime
+        isPlaying: root.isPlaying
+        currentTrack: root.currentTrack
+        colHighlight: root.colHighlight
+        colActiveText: root.colActiveText
+        colShadowDir: root.colShadowDir
+        colShadowAmb: root.colShadowAmb
+        customX: root.customX
+        customY: root.customY
+        onPositionChanged: (newX, newY) => {
+            root.customX = newX;
+            root.customY = newY;
+            root.positionChanged(newX, newY);
         }
     }
 }
