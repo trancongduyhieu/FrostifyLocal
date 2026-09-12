@@ -178,6 +178,24 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - Tuyệt đối không gán `win.currentTracks = win.allTracks` lúc khởi động trong `LibraryLoader`. Hàng đợi phát nhạc phải giữ nguyên trạng thái trống `[]` cho đến khi người dùng chủ động click chọn bài hát hoặc playlist.
     - Hàm `togglePlay()`, `playNext()`, `playPrev()` phải luôn kiểm tra `if (!win.currentTrack) return;`. Tuyệt đối không tự ý fallback về `currentTracks[0]` (bài propose trong Downloads) khi chưa có bài hát được chọn.
     - Vòng lặp Auto-advance trong `statusProcess` bắt buộc phải kèm điều kiện `win.isPlaying &&` để chỉ chuyển bài khi nhạc đang thực sự phát.
+22. **Hệ Thống Đồ Họa Kính Lỏng Liquid Glass & Phong Cách Apple Music (Kế Thừa Tinh Hoa SimpMusic - Item 24)**:
+    - **Kho mã nguồn tham khảo**: `/home/apple/Applications/SimpMusic/` (Jetpack Compose / Compose Multiplatform).
+    - **Cơ Chế Liquid Glass (Thấu Kính Quang Học Chống Đục Trắng)**:
+      - *Tệp cốt lõi*: `LiquidGlass.kt`, `LiquidGlassContainer.kt`, `LiquidGlassTabBar.android.kt`.
+      - *Quy tắc Sibling*: Layer nền mang `.layerBackdrop()` và bề mặt kính mang `.drawBackdrop()` bắt buộc phải là anh em (siblings), tuyệt đối không lồng nhau để tránh render-feedback loop.
+      - *Khúc xạ thấu kính lồi (Convex Lens)*: Bán kính khúc xạ khống chế dưới `size.minDimension / 2` để loại bỏ vết rãnh đen ở trục giữa viên thuốc capsule.
+      - *Adaptive Scrim ("Đục Đen", Không Bị Đục Trắng)*: Giữ vibrancy (`saturation = 1.5f`, `contrast = 1f`, `brightness = 0.05f`), lấy mẫu độ sáng CIE 1931 ($0.2126R + 0.7152G + 0.0722B$) để tăng scrim tối khi nền sáng, bảo đảm chữ và icon luôn tương phản tối đa.
+      - *Tương tác chạm co giãn (Spring Touch & Specular Rim)*: Khi chạm/kéo, viên thuốc co giãn đàn hồi (Spring), phát vệt sáng tâm chạm ngón tay (`radialGradient` + `BlendMode.Plus`), và bắt sáng viền mép 45° (`Highlight.Default`).
+    - **Phong Cách Apple Music Now Playing Suite**:
+      - *Tệp cốt lõi*: `NowPlayingContentAppleMusic.kt`, `AppleMusicShared.kt`, `AppleMusicLyricsLines.kt`.
+      - *Nền Blurred Artwork + 3-Stop Gradient*: Artwork làm mờ sâu 80dp (`alpha: 0.6f`), phủ gradient 3 điểm dừng tính động từ `seedColor`: đỉnh `0.0` (tối 5%), giữa `0.48` (tối 32%), đáy `1.0` (tối 78% gần như đen ấm) giúp các nút điều khiển màu trắng luôn sắc nét.
+      - *Apple Music Dock Switcher*: Đáy cố định thanh Dock 3 nút (`LYRICS` • `CAST` • `QUEUE`), hoán đổi mượt qua `Crossfade` 300ms thay vì cuộn dài.
+      - *Apple Music Lyrics (Depth of Field Blur)*: Chữ lớn 28sp / 34sp leading; câu đang hát sắc nét tuyệt đối (`blur: 0, alpha: 1.0`); các câu trước và sau mờ dần bằng `blur` và `alpha` tỉ lệ thuận với khoảng cách dòng, tạo cảm giác chiều sâu trường ảnh điện ảnh.
+    - **Quy Chuẩn Trình Bày Bài Hát & MV / Video**:
+      - *Tệp cốt lõi*: `FullWidthItems.kt` (`SongFullWidthItems`), `AdapterItems.kt` (`HomeItemVideo`), `PlaybackIndicators.kt` (`AudioPlayingIndicator`).
+      - *Quy Tắc Bo Góc Đồng Tâm (Concentric Rounded Corners)*: Bắt buộc tuân thủ công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$ cho mọi card bài hát, thumbnail và icon. Nếu khung ngoài bo góc 30px và khoảng cách lề (padding/border margin) là 6px thì phần tử bên trong (ảnh bìa/icon) phải bo góc chính xác $30 - 6 = 24\text{px}$, tuyệt đối không dùng bán kính bo góc tùy tiện làm vỡ đường cong đồng tâm.
+      - *Card Video / MV 16:9*: Chiều cao 160dp, tỉ lệ cố định `16f / 9f`, bo góc 10dp, tiêu đề tối đa 2 dòng, metadata phân cách bằng dấu chấm `•` (`Nghệ sĩ • Lượt xem`).
+      - *Sóng Equalizer 6 Cột Cyan*: `AudioPlayingIndicator` vẽ thuần trên Canvas (thay thế Lottie), 6 thanh viên thuốc dao động đối xứng từ tâm giữa (y=75), màu xanh Cyan cố định khi bài hát đang phát.
 
 ---
 
