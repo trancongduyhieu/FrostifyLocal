@@ -66,6 +66,39 @@ Item {
 
     onDisplayIndexChanged: {
         updateActiveChar();
+        updateParsedWords();
+    }
+
+    // Word-level Parsing & Preparation Engine
+    property var parsedWords: []
+
+    function updateParsedWords() {
+        var txt = getLyricText(displayIndex);
+        if (!txt || txt.length === 0) {
+            parsedWords = [];
+            return;
+        }
+
+        var words = [];
+        var regex = /\S+/g;
+        var match;
+
+        while ((match = regex.exec(txt)) !== null) {
+            var wordStr = match[0];
+            var sIdx = match.index;
+            var eIdx = match.index + wordStr.length;
+            var sX = slot1FontMetrics.advanceWidth(txt.substring(0, sIdx));
+            var eX = slot1FontMetrics.advanceWidth(txt.substring(0, eIdx));
+            words.push({
+                text: wordStr,
+                startIndex: sIdx,
+                endIndex: eIdx,
+                startX: sX,
+                endX: eX,
+                width: Math.max(1, eX - sX)
+            });
+        }
+        parsedWords = words;
     }
 
     function updateActiveChar() {
@@ -99,6 +132,7 @@ Item {
     onActiveLyricsChanged: {
         updateProgress();
         displayIndex = currentLyricIndex;
+        updateParsedWords();
     }
 
     function updateProgress() {
@@ -309,13 +343,17 @@ Item {
                         styleColor: root.colShadowAmb
                     }
 
-                    // 2. Sung Text (Clean White #ffffff) up to active character
+                    // 2. Sung Text (Clean White #ffffff) - strictly clipped up to the start of active character
                     Item {
                         id: slot1WipeClip
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: rollAnimation.running ? parent.width : (root.activeChar === " " ? (root.activeCharX + root.activeCharW) : root.activeCharX)
+                        width: {
+                            if (rollAnimation.running || root.lineProgress >= 0.99) return parent.width;
+                            if (root.activeCharIndex < 0) return 0;
+                            return (root.activeChar === " ") ? (root.activeCharX + root.activeCharW) : root.activeCharX;
+                        }
                         clip: true
                         visible: width > 0
 
@@ -329,29 +367,45 @@ Item {
                         }
                     }
 
-                    // 3. White Phosphorescent Luminescent Active Character (Chữ cái đang hát phát quang màu trắng)
+                    // 3. SINGLE ACTIVE CHARACTER: Gradually illuminating from gray into white phosphorescent glow
                     Item {
-                        id: activeCharGlowContainer
+                        id: singleActiveCharContainer
                         x: root.activeCharX
                         y: 0
                         width: Math.max(1, root.activeCharW)
                         height: slot1Item.height
-                        visible: !rollAnimation.running && root.activeChar !== "" && root.activeChar !== " " && root.lineProgress > 0 && root.lineProgress < 0.99
+                        visible: !rollAnimation.running && root.activeChar !== "" && root.activeChar !== " " && root.lineProgress > 0.001 && root.lineProgress < 0.99
                         z: 10
 
-                        // Source glyph for bloom
+                        // Character progress (0.0 when playhead enters char, 1.0 when playhead leaves char)
+                        readonly property real charProgress: {
+                            if (root.activeCharW <= 0) return 0.0;
+                            var playheadX = slot1BaseText.contentWidth * root.lineProgress;
+                            return Math.min(1.0, Math.max(0.0, (playheadX - root.activeCharX) / root.activeCharW));
+                        }
+
+                        // Glow intensity: smoothly rises from 0.0 as character lights up
+                        readonly property real glowIntensity: Math.min(1.0, charProgress * 1.8)
+
+                        // Base character color: smoothly transitions from gray #8e8e8e to white #ffffff
+                        readonly property color charColor: {
+                            var r = 0.56 + (1.0 - 0.56) * charProgress;
+                            return Qt.rgba(r, r, r, 1.0);
+                        }
+
+                        // Glyph for MultiEffect bloom
                         Text {
-                            id: glyphGlowSource
+                            id: singleGlyphSource
                             text: root.activeChar
                             font: slot1BaseText.font
                             color: "#ffffff"
                             opacity: 0.01
                         }
 
-                        // Wide soft white phosphorescent bloom (halo radiating from glyph strokes)
+                        // Wide soft white phosphorescent aura on THIS SINGLE GLYPH ONLY
                         MultiEffect {
-                            source: glyphGlowSource
-                            anchors.fill: glyphGlowSource
+                            source: singleGlyphSource
+                            anchors.fill: singleGlyphSource
                             shadowEnabled: true
                             shadowColor: "#ffffff"
                             shadowBlur: 0.85
@@ -359,13 +413,13 @@ Item {
                             blurEnabled: true
                             blur: 0.50
                             blurMax: 16
-                            opacity: 0.95
+                            opacity: singleActiveCharContainer.glowIntensity * 0.95
                         }
 
-                        // Tight intense white core glow
+                        // Tight intense white core glow on THIS SINGLE GLYPH ONLY
                         MultiEffect {
-                            source: glyphGlowSource
-                            anchors.fill: glyphGlowSource
+                            source: singleGlyphSource
+                            anchors.fill: singleGlyphSource
                             shadowEnabled: true
                             shadowColor: "#ffffff"
                             shadowBlur: 0.40
@@ -373,16 +427,16 @@ Item {
                             blurEnabled: true
                             blur: 0.20
                             blurMax: 8
-                            opacity: 1.0
+                            opacity: singleActiveCharContainer.glowIntensity * 1.0
                         }
 
-                        // Sharp white foreground glyph with subtle white radiance
+                        // The sharp character glyph transitioning gradually from gray to white
                         Text {
                             text: root.activeChar
                             font: slot1BaseText.font
-                            color: "#ffffff"
+                            color: singleActiveCharContainer.charColor
                             style: Text.Outline
-                            styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.95)
+                            styleColor: Qt.rgba(1.0, 1.0, 1.0, singleActiveCharContainer.glowIntensity * 0.9)
                         }
                     }
 
