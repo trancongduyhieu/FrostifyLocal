@@ -1901,6 +1901,7 @@ Scope {
         function scrollArtworkDown() { frostifyIpc.scrollArtworkDown(); }
         function dislikeCurrentTrack() { frostifyIpc.dislikeCurrentTrack(); }
         function openSettings() { frostifyIpc.openSettings(); }
+        function openLyricsSettings() { frostifyIpc.openLyricsSettings(); }
         function closeSettings() { frostifyIpc.closeSettings(); }
         function showLibrary() { frostifyIpc.showLibrary(); }
         function showHome() { frostifyIpc.showHome(); }
@@ -1909,6 +1910,7 @@ Scope {
         function closeContextMenu() { frostifyIpc.closeContextMenu(); }
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
+        function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
     }
 
     IpcHandler {
@@ -1952,6 +1954,10 @@ Scope {
         function openSettings() {
             settingsModal.visible = true;
         }
+        function openLyricsSettings() {
+            settingsModal.visible = true;
+            settingsModal.currentTab = 1;
+        }
         function closeSettings() {
             settingsModal.visible = false;
         }
@@ -1986,6 +1992,12 @@ Scope {
         }
         function goBackFromArtist() {
             win.goBackFromArtist();
+        }
+        function playTrackByIndex(idx: int) {
+            if (win.allTracks && idx >= 0 && idx < win.allTracks.length) {
+                win.currentTracks = win.allTracks;
+                win.playTrack(win.allTracks[idx]);
+            }
         }
     }
 

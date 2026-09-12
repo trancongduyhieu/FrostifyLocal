@@ -217,51 +217,9 @@ Item {
         id: container
         x: (root.customX >= 0) ? root.customX : root.defaultX
         y: (root.customY >= 0) ? root.customY : root.defaultY
-        width: root.containerWidth
+        width: Math.min(root.containerWidth, Math.max(120, root.width - container.x))
         height: root.slotHeight * 5 // 300px for 5 visible lines
         visible: root.activeLyrics && root.activeLyrics.length > 0 && root.currentLyricIndex >= 0
-
-        // Hover indicator for Drag & Drop discovery
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: -8
-            radius: 12
-            color: "transparent"
-            border.color: dragArea.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
-            border.width: 1
-            Behavior on border.color { ColorAnimation { duration: 150 } }
-
-            // Subtle drag handle badge on top-right
-            RowLayout {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.margins: 6
-                spacing: 4
-                opacity: dragArea.containsMouse ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-
-                Rectangle {
-                    width: 16
-                    height: 16
-                    radius: 4
-                    color: Qt.rgba(0, 0, 0, 0.5)
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/selection-mode-symbolic.svg"
-                        iconSize: 10
-                        color: "#cccccc"
-                    }
-                }
-
-                Text {
-                    text: "Kéo để dời"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    color: "#cccccc"
-                }
-            }
-        }
 
         MouseArea {
             id: dragArea
@@ -271,7 +229,7 @@ Item {
             drag.target: container
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
-            drag.maximumX: Math.max(0, root.width - container.width)
+            drag.maximumX: Math.max(0, root.width - 120)
             drag.minimumY: 0
             drag.maximumY: Math.max(0, root.height - container.height)
 

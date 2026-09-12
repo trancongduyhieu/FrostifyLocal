@@ -613,7 +613,7 @@ Rectangle {
             // Card Mẫu 1: Gacha / Anime Pop
             Rectangle {
                 Layout.fillWidth: true
-                height: 72
+                height: 48
                 radius: 8
                 color: root.lyricsPreset === 1 ? "#1e2a22" : (p1Hover.hovered ? "#282828" : "#242424")
                 border.color: root.lyricsPreset === 1 ? Theme.accentGreen : "#3a3a3a"
@@ -623,7 +623,8 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 14
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
                     spacing: 12
 
                     Rectangle {
@@ -644,24 +645,13 @@ Rectangle {
                         }
                     }
 
-                    ColumnLayout {
+                    Text {
                         Layout.fillWidth: true
-                        spacing: 2
-
-                        Text {
-                            text: "Mẫu 1: Gacha / Anime Pop"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 14
-                            font.bold: true
-                            color: Theme.textPrimary
-                        }
-
-                        Text {
-                            text: "1 dòng lyric chữ cổ điển Instrument Serif nghệ thuật, câu cũ rơi chìm xuống nền."
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
-                        }
+                        text: "Mẫu 1: Gacha / Anime Pop"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: Theme.textPrimary
                     }
                 }
 
@@ -672,10 +662,10 @@ Rectangle {
                 }
             }
 
-            // Card Mẫu 2: Apple Music 3-Line Fluid Sync
+            // Card Mẫu 2: Apple Music 5-Line Fluid Sync
             Rectangle {
                 Layout.fillWidth: true
-                height: 74
+                height: 48
                 radius: 8
                 color: root.lyricsPreset === 2 ? "#1e2a22" : (p2Hover.hovered ? "#282828" : "#242424")
                 border.color: root.lyricsPreset === 2 ? Theme.accentGreen : "#3a3a3a"
@@ -685,7 +675,8 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 14
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
                     spacing: 12
 
                     Rectangle {
@@ -706,43 +697,35 @@ Rectangle {
                         }
                     }
 
-                    ColumnLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        spacing: 2
-
-                        RowLayout {
-                            spacing: 6
-                            Text {
-                                text: "Mẫu 2: Apple Music 3-Line Fluid Sync"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: Theme.textPrimary
-                            }
-
-                            Rectangle {
-                                height: 16
-                                width: 38
-                                radius: 4
-                                color: Theme.accentGreen
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "MỚI"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: "#000000"
-                                }
-                            }
-                        }
+                        spacing: 8
 
                         Text {
-                            text: "3 dòng đồng thời: dòng trước/sau mờ sâu (Depth-of-Field), dòng giữa quét karaoke sáng neon theo thời gian thực."
+                            text: "Mẫu 2: Apple Music 5-Line Fluid Sync"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
                         }
+
+                        Rectangle {
+                            height: 16
+                            width: 38
+                            radius: 4
+                            color: Theme.accentGreen
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "MỚI"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 9
+                                font.bold: true
+                                color: "#000000"
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
                     }
                 }
 

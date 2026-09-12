@@ -190,55 +190,15 @@ PanelWindow {
     // =========================================================================
     // PRESET 1: Gacha / Pop Anime Instrument Serif (1 Active Line + Falling Fade)
     // =========================================================================
+    readonly property int maxBoxWidth: Math.min(740, Math.round(root.width * 0.45))
+
     Item {
         id: preset1Box
         x: (root.customX >= 0) ? root.customX : root.activeX
         y: (root.customY >= 0) ? root.customY : root.activeY
-        width: Math.min(740, Math.round(root.width * 0.45))
+        width: Math.min(root.maxBoxWidth, Math.max(120, root.width - preset1Box.x))
         height: 120
         visible: root.enabled && root.lyricsPreset === 1 && root.activeLyrics.length > 0 && (root.activeLineText !== "" || root.fadingLineText !== "")
-
-        // Hover indicator for Drag & Drop discovery
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: -8
-            radius: 12
-            color: "transparent"
-            border.color: preset1DragArea.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
-            border.width: 1
-            Behavior on border.color { ColorAnimation { duration: 150 } }
-
-            // Subtle drag handle badge on top-right
-            RowLayout {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.margins: 6
-                spacing: 4
-                opacity: preset1DragArea.containsMouse ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-
-                Rectangle {
-                    width: 16
-                    height: 16
-                    radius: 4
-                    color: Qt.rgba(0, 0, 0, 0.5)
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/selection-mode-symbolic.svg"
-                        iconSize: 10
-                        color: "#cccccc"
-                    }
-                }
-
-                Text {
-                    text: "Kéo để dời"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    color: "#cccccc"
-                }
-            }
-        }
 
         MouseArea {
             id: preset1DragArea
@@ -248,7 +208,7 @@ PanelWindow {
             drag.target: preset1Box
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
-            drag.maximumX: Math.max(0, root.width - preset1Box.width)
+            drag.maximumX: Math.max(0, root.width - 120)
             drag.minimumY: 0
             drag.maximumY: Math.max(0, root.height - preset1Box.height)
 
