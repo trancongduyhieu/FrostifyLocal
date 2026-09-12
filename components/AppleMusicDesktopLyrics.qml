@@ -15,7 +15,7 @@ Item {
     // Adaptive Palette / Styling
     property color colHighlight: "#deb06c"
     property color colActiveText: "#ffffff"
-    property color colPendingText: "#8e8e8e"
+    property color colPendingText: "#a0a5b5"
     property color colShadowDir: "#a6020305"
     property color colShadowAmb: "#66000000"
 
@@ -201,7 +201,7 @@ Item {
         x: (root.customX >= 0) ? root.customX : root.defaultX
         y: (root.customY >= 0) ? root.customY : root.defaultY
         width: root.containerWidth
-        height: root.slotHeight * 3 // 180px for 3 slots
+        height: root.slotHeight * 5 // 300px for 5 visible lines
         visible: root.activeLyrics && root.activeLyrics.length > 0 && root.currentLyricIndex >= 0
 
         // Hover indicator for Drag & Drop discovery
@@ -275,18 +275,26 @@ Item {
                 x: 0
                 y: root.slideOffsetY
                 width: parent.width
-                height: root.slotHeight * 4
+                height: root.slotHeight * 6 // 360px for 6 rolling slots
 
                 // -------------------------------------------------------------
-                // Slot 0: Previous line (Gentle Frosted Mist - Clearly Legible)
+                // Slot 0: Previous line (Frosted Glass Optical Blur)
                 // -------------------------------------------------------------
                 Item {
+                    id: slot0Item
                     x: 0
                     y: 0
                     width: parent.width
                     height: root.lineHeight
                     visible: opacity > 0.01
-                    opacity: rollAnimation.running ? Math.max(0.0, 0.75 * (1.0 + root.slideOffsetY / root.slotHeight)) : 0.75
+                    opacity: rollAnimation.running ? Math.max(0.0, 0.58 * (1.0 - slot1Item.rollProgress)) : 0.58
+
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: 0.35
+                        blurMax: 20
+                    }
 
                     Text {
                         id: slot0Text
@@ -294,25 +302,16 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 28
                         font.weight: Font.Bold
-                        color: "#b0b5c2"
+                        color: root.colPendingText
                         elide: Text.ElideRight
                         width: parent.width
                         style: Text.Outline
                         styleColor: root.colShadowAmb
                     }
-
-                    MultiEffect {
-                        source: slot0Text
-                        anchors.fill: slot0Text
-                        blurEnabled: true
-                        blur: 0.22
-                        blurMax: 8
-                        opacity: 0.70
-                    }
                 }
 
                 // -------------------------------------------------------------
-                // Slot 1: Active line (White sung text + White Phosphorescent Glowing Active Glyph)
+                // Slot 1: Active line (White sung text + Single-Character Gradual Glow)
                 // -------------------------------------------------------------
                 Item {
                     id: slot1Item
@@ -320,6 +319,21 @@ Item {
                     y: root.slotHeight
                     width: parent.width
                     height: root.lineHeight
+
+                    // Normalized rolling animation progress (0.0 at rest, 0.0 -> 1.0 during glide)
+                    readonly property real rollProgress: rollAnimation.running ? Math.min(1.0, Math.max(0.0, -root.slideOffsetY / root.slotHeight)) : 0.0
+
+                    // When rolling up into Slot 0 position, smoothly apply frosted glass mist blur
+                    readonly property real rollBlur: rollProgress * 0.35
+
+                    layer.enabled: rollBlur > 0.01
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: slot1Item.rollBlur
+                        blurMax: 20
+                    }
+
+                    opacity: rollAnimation.running ? Math.max(0.58, 1.0 - 0.42 * rollProgress) : 1.0
 
                     // Base Hidden Text (For width measurement)
                     Text {
@@ -331,7 +345,7 @@ Item {
                         visible: false
                     }
 
-                    // 1. Pending Unsung Text (Soft dim gray)
+                    // 1. Pending Unsung Text (Uses the EXACT SAME root.colPendingText)
                     Text {
                         id: slot1PendingText
                         text: slot1BaseText.text
@@ -341,9 +355,10 @@ Item {
                         width: parent.width
                         style: Text.Outline
                         styleColor: root.colShadowAmb
+                        visible: !rollAnimation.running || (slot1WipeClip.width < parent.width)
                     }
 
-                    // 2. Sung Text (Clean White #ffffff) - strictly clipped up to the start of active character
+                    // 2. Sung Text (Clean White #ffffff) - smoothly lerps to root.colPendingText during roll animation
                     Item {
                         id: slot1WipeClip
                         anchors.left: parent.left
@@ -360,14 +375,26 @@ Item {
                         Text {
                             text: slot1BaseText.text
                             font: slot1BaseText.font
-                            color: "#ffffff"
+                            color: {
+                                if (rollAnimation.running) {
+                                    var p = slot1Item.rollProgress;
+                                    var baseR = root.colPendingText.r;
+                                    var baseG = root.colPendingText.g;
+                                    var baseB = root.colPendingText.b;
+                                    var r = 1.0 - (1.0 - baseR) * p;
+                                    var g = 1.0 - (1.0 - baseG) * p;
+                                    var b = 1.0 - (1.0 - baseB) * p;
+                                    return Qt.rgba(r, g, b, 1.0);
+                                }
+                                return "#ffffff";
+                            }
                             width: slot1BaseText.width
                             style: Text.Outline
                             styleColor: root.colShadowAmb
                         }
                     }
 
-                    // 3. SINGLE ACTIVE CHARACTER: Gradually illuminating from gray into white phosphorescent glow
+                    // 3. SINGLE ACTIVE CHARACTER: Gradually illuminating from root.colPendingText into white phosphorescent glow
                     Item {
                         id: singleActiveCharContainer
                         x: root.activeCharX
@@ -387,10 +414,15 @@ Item {
                         // Glow intensity: smoothly rises from 0.0 as character lights up
                         readonly property real glowIntensity: Math.min(1.0, charProgress * 1.8)
 
-                        // Base character color: smoothly transitions from gray #8e8e8e to white #ffffff
+                        // Base character color: smoothly transitions from root.colPendingText to white #ffffff
                         readonly property color charColor: {
-                            var r = 0.56 + (1.0 - 0.56) * charProgress;
-                            return Qt.rgba(r, r, r, 1.0);
+                            var baseR = root.colPendingText.r;
+                            var baseG = root.colPendingText.g;
+                            var baseB = root.colPendingText.b;
+                            var r = baseR + (1.0 - baseR) * charProgress;
+                            var g = baseG + (1.0 - baseG) * charProgress;
+                            var b = baseB + (1.0 - baseB) * charProgress;
+                            return Qt.rgba(r, g, b, 1.0);
                         }
 
                         // Glyph for MultiEffect bloom
@@ -430,7 +462,7 @@ Item {
                             opacity: singleActiveCharContainer.glowIntensity * 1.0
                         }
 
-                        // The sharp character glyph transitioning gradually from gray to white
+                        // The sharp character glyph transitioning gradually from root.colPendingText to white
                         Text {
                             text: root.activeChar
                             font: slot1BaseText.font
@@ -439,27 +471,29 @@ Item {
                             styleColor: Qt.rgba(1.0, 1.0, 1.0, singleActiveCharContainer.glowIntensity * 0.9)
                         }
                     }
-
-                    // MultiEffect blur that smoothly ramps up if rolling to Slot 0
-                    MultiEffect {
-                        anchors.fill: slot1PendingText
-                        source: slot1PendingText
-                        blurEnabled: true
-                        blur: rollAnimation.running ? Math.min(0.22, (-root.slideOffsetY / root.slotHeight) * 0.22) : 0.0
-                        blurMax: 8
-                        opacity: rollAnimation.running ? Math.min(0.75, (-root.slideOffsetY / root.slotHeight)) : 0.0
-                        visible: rollAnimation.running
-                    }
                 }
 
                 // -------------------------------------------------------------
-                // Slot 2: Upcoming line (Gentle Frosted Mist - Clearly Legible)
+                // Slot 2: Upcoming line (Frosted Glass Optical Blur)
                 // -------------------------------------------------------------
                 Item {
+                    id: slot2Item
                     x: 0
                     y: root.slotHeight * 2
                     width: parent.width
                     height: root.lineHeight
+
+                    // Smooth blur ramp: blur dissolves away from 0.35 -> 0.0 as it glides up into Slot 1
+                    readonly property real currentBlur: rollAnimation.running ? Math.max(0.0, 0.35 * (1.0 - slot1Item.rollProgress)) : 0.35
+
+                    layer.enabled: currentBlur > 0.01
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: slot2Item.currentBlur
+                        blurMax: 20
+                    }
+
+                    opacity: rollAnimation.running ? (0.58 + 0.42 * slot1Item.rollProgress) : 0.58
 
                     Text {
                         id: slot2Text
@@ -467,36 +501,38 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 28
                         font.weight: Font.Bold
-                        color: "#b0b5c2"
+                        color: root.colPendingText
                         elide: Text.ElideRight
                         width: parent.width
                         style: Text.Outline
                         styleColor: root.colShadowAmb
                     }
-
-                    // Blur that smoothly ramps down as it glides up into Slot 1
-                    MultiEffect {
-                        source: slot2Text
-                        anchors.fill: slot2Text
-                        blurEnabled: true
-                        blur: rollAnimation.running ? Math.max(0.0, 0.22 * (1.0 + root.slideOffsetY / root.slotHeight)) : 0.22
-                        blurMax: 8
-                        opacity: rollAnimation.running ? Math.max(0.0, 0.70 * (1.0 + root.slideOffsetY / root.slotHeight)) : 0.70
-                    }
-
-                    opacity: rollAnimation.running ? 0.75 + 0.25 * (-root.slideOffsetY / root.slotHeight) : 0.75
                 }
 
                 // -------------------------------------------------------------
-                // Slot 3: Next-next line (Gentle Frosted Mist fading in at bottom)
+                // Slot 3: Upcoming line 2 (Dòng 4: Mờ hơn dòng 3, scale 0.93 -> 1.0)
                 // -------------------------------------------------------------
                 Item {
+                    id: slot3Item
                     x: 0
                     y: root.slotHeight * 3
                     width: parent.width
                     height: root.lineHeight
-                    visible: rollAnimation.running
-                    opacity: rollAnimation.running ? Math.min(0.75, 0.75 * (-root.slideOffsetY / root.slotHeight)) : 0.0
+                    transformOrigin: Item.Left
+                    scale: rollAnimation.running ? (0.93 + 0.07 * slot1Item.rollProgress) : 0.93
+
+                    // Opacity rises smoothly from 0.38 up to 0.58 of Slot 2
+                    opacity: rollAnimation.running ? (0.38 + 0.20 * slot1Item.rollProgress) : 0.38
+
+                    // Blur clears smoothly from 0.60 down to 0.35 of Slot 2
+                    readonly property real currentBlur: rollAnimation.running ? Math.max(0.35, 0.60 - 0.25 * slot1Item.rollProgress) : 0.60
+
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: slot3Item.currentBlur
+                        blurMax: 24
+                    }
 
                     Text {
                         id: slot3Text
@@ -504,20 +540,85 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 28
                         font.weight: Font.Bold
-                        color: "#b0b5c2"
+                        color: root.colPendingText
                         elide: Text.ElideRight
                         width: parent.width
                         style: Text.Outline
                         styleColor: root.colShadowAmb
                     }
+                }
 
-                    MultiEffect {
-                        source: slot3Text
-                        anchors.fill: slot3Text
+                // -------------------------------------------------------------
+                // Slot 4: Upcoming line 3 (Dòng 5: Mờ nhất, sương kính sâu, gần như không đọc được chữ)
+                // -------------------------------------------------------------
+                Item {
+                    id: slot4Item
+                    x: 0
+                    y: root.slotHeight * 4
+                    width: parent.width
+                    height: root.lineHeight
+                    transformOrigin: Item.Left
+                    scale: rollAnimation.running ? (0.84 + 0.09 * slot1Item.rollProgress) : 0.84
+
+                    // Opacity rises smoothly from 0.18 up to 0.38 of Slot 3
+                    opacity: rollAnimation.running ? (0.18 + 0.20 * slot1Item.rollProgress) : 0.18
+
+                    // Dense optical fog blur dissolves smoothly from 0.85 down to 0.60 of Slot 3
+                    readonly property real currentBlur: rollAnimation.running ? Math.max(0.60, 0.85 - 0.25 * slot1Item.rollProgress) : 0.85
+
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
                         blurEnabled: true
-                        blur: 0.22
-                        blurMax: 8
-                        opacity: 0.70
+                        blur: slot4Item.currentBlur
+                        blurMax: 32
+                    }
+
+                    Text {
+                        id: slot4Text
+                        text: root.getLyricText(root.displayIndex + 3)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 28
+                        font.weight: Font.Bold
+                        color: root.colPendingText
+                        elide: Text.ElideRight
+                        width: parent.width
+                        style: Text.Outline
+                        styleColor: root.colShadowAmb
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // Slot 5: Upcoming line 4 (Dòng 6: Đệm đáy chỉ xuất hiện khi cuộn)
+                // -------------------------------------------------------------
+                Item {
+                    id: slot5Item
+                    x: 0
+                    y: root.slotHeight * 5
+                    width: parent.width
+                    height: root.lineHeight
+                    transformOrigin: Item.Left
+                    visible: rollAnimation.running
+                    scale: 0.75 + 0.09 * slot1Item.rollProgress
+                    opacity: rollAnimation.running ? Math.min(0.18, 0.18 * slot1Item.rollProgress) : 0.0
+
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: 0.85
+                        blurMax: 32
+                    }
+
+                    Text {
+                        id: slot5Text
+                        text: root.getLyricText(root.displayIndex + 4)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 28
+                        font.weight: Font.Bold
+                        color: root.colPendingText
+                        elide: Text.ElideRight
+                        width: parent.width
+                        style: Text.Outline
+                        styleColor: root.colShadowAmb
                     }
                 }
             }

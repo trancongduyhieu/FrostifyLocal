@@ -1,11 +1,11 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8ldk6.jpg",
-  "meanLuminance": 0.293,
-  "brightRatio": 0.0,
+  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8d276.jpg",
+  "meanLuminance": 0.256,
+  "brightRatio": 0.001,
   "isLightArea": false,
-  "theme": "crimson",
+  "theme": "emerald",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#f4afb3",
+  "highlightColor": "#c0cd78",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"
