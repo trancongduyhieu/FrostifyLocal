@@ -162,10 +162,27 @@ PanelWindow {
         }
     }
 
+    onCustomXChanged: {
+        preset1Box.x = (customX >= 0) ? customX : activeX;
+    }
+    onCustomYChanged: {
+        preset1Box.y = (customY >= 0) ? customY : activeY;
+    }
+    onWidthChanged: {
+        if (customX < 0) preset1Box.x = activeX;
+    }
+    onHeightChanged: {
+        if (customY < 0) preset1Box.y = activeY;
+    }
+    Component.onCompleted: {
+        preset1Box.x = (customX >= 0) ? customX : activeX;
+        preset1Box.y = (customY >= 0) ? customY : activeY;
+    }
+
     function triggerFadeOutLine(oldText) {
         fadingLineText = oldText;
         fadingContainer.opacity = 0.78;
-        fadingContainer.y = activeY;
+        fadingContainer.y = 0;
         fadingContainer.rotation = 0;
         fadeDownExitAnim.restart();
     }
@@ -174,16 +191,78 @@ PanelWindow {
     // PRESET 1: Gacha / Pop Anime Instrument Serif (1 Active Line + Falling Fade)
     // =========================================================================
     Item {
-        id: preset1Container
-        anchors.fill: parent
-        visible: root.enabled && root.lyricsPreset === 1 && root.activeLyrics.length > 0 && (activeLineText !== "" || fadingLineText !== "")
+        id: preset1Box
+        x: (root.customX >= 0) ? root.customX : root.activeX
+        y: (root.customY >= 0) ? root.customY : root.activeY
+        width: Math.min(740, Math.round(root.width * 0.45))
+        height: 120
+        visible: root.enabled && root.lyricsPreset === 1 && root.activeLyrics.length > 0 && (root.activeLineText !== "" || root.fadingLineText !== "")
+
+        // Hover indicator for Drag & Drop discovery
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -8
+            radius: 12
+            color: "transparent"
+            border.color: preset1DragArea.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
+            border.width: 1
+            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+            // Subtle drag handle badge on top-right
+            RowLayout {
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 6
+                spacing: 4
+                opacity: preset1DragArea.containsMouse ? 1.0 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                Rectangle {
+                    width: 16
+                    height: 16
+                    radius: 4
+                    color: Qt.rgba(0, 0, 0, 0.5)
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/selection-mode-symbolic.svg"
+                        iconSize: 10
+                        color: "#cccccc"
+                    }
+                }
+
+                Text {
+                    text: "Kéo để dời"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    color: "#cccccc"
+                }
+            }
+        }
+
+        MouseArea {
+            id: preset1DragArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: containsMouse ? Qt.SizeAllCursor : Qt.ArrowCursor
+            drag.target: preset1Box
+            drag.axis: Drag.XAndYAxis
+            drag.minimumX: 0
+            drag.maximumX: Math.max(0, root.width - preset1Box.width)
+            drag.minimumY: 0
+            drag.maximumY: Math.max(0, root.height - preset1Box.height)
+
+            onReleased: {
+                root.positionChanged(preset1Box.x, preset1Box.y);
+            }
+        }
 
         // EXITING LINE: Sinks deep (+52px), lingers gracefully, then fades smoothly to 0
         Item {
             id: fadingContainer
-            x: (root.customX >= 0) ? root.customX : root.activeX
-            y: (root.customY >= 0) ? root.customY : root.activeY
-            width: Math.min(740, Math.round(parent.width * 0.45))
+            x: 0
+            y: 0
+            width: parent.width
             height: 68
             transformOrigin: Item.Left
             opacity: 0.0
@@ -213,8 +292,8 @@ PanelWindow {
                     NumberAnimation {
                         target: fadingContainer
                         property: "y"
-                        from: (root.customY >= 0) ? root.customY : root.activeY
-                        to: ((root.customY >= 0) ? root.customY : root.activeY) + 52
+                        from: 0
+                        to: 52
                         duration: 1600
                         easing.type: Easing.OutCubic
                     }
@@ -257,9 +336,9 @@ PanelWindow {
         // ACTIVE LYRIC LINE: 1-Line only
         Item {
             id: activeContainer
-            x: (root.customX >= 0) ? root.customX : root.activeX
-            y: (root.customY >= 0) ? root.customY : root.activeY
-            width: Math.min(740, Math.round(parent.width * 0.45))
+            x: 0
+            y: 0
+            width: parent.width
             height: 68
 
             EnchantingSentence {
@@ -298,8 +377,6 @@ PanelWindow {
         customX: root.customX
         customY: root.customY
         onPositionChanged: (newX, newY) => {
-            root.customX = newX;
-            root.customY = newY;
             root.positionChanged(newX, newY);
         }
     }

@@ -780,7 +780,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Có thể rê chuột kéo thả trực tiếp lời bài hát trên Desktop."
+                            text: (root.customX >= 0 && root.customY >= 0) ? ("Tùy chỉnh (" + root.customX + ", " + root.customY + ") • Kéo thả trực tiếp trên Desktop.") : "Mặc định (theo tỷ lệ màn hình) • Kéo thả trực tiếp trên Desktop."
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary

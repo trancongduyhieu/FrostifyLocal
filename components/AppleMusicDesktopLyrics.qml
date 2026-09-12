@@ -27,6 +27,23 @@ Item {
 
     signal positionChanged(int newX, int newY)
 
+    onCustomXChanged: {
+        container.x = (customX >= 0) ? customX : defaultX;
+    }
+    onCustomYChanged: {
+        container.y = (customY >= 0) ? customY : defaultY;
+    }
+    onWidthChanged: {
+        if (customX < 0) container.x = defaultX;
+    }
+    onHeightChanged: {
+        if (customY < 0) container.y = defaultY;
+    }
+    Component.onCompleted: {
+        container.x = (customX >= 0) ? customX : defaultX;
+        container.y = (customY >= 0) ? customY : defaultY;
+    }
+
     // Sizing constants
     readonly property int lineHeight: 46
     readonly property int lineGap: 14
