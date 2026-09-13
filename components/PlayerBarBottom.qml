@@ -529,7 +529,7 @@ Item {
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 14
                     rotation: root.isNowPlayingOpen ? -90 : 90
-                    Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
                     color: root.isNowPlayingOpen ? root.accentColor : (chevronH.hovered ? "#ffffff" : "#b3b3b3")
                 }
 

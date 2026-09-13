@@ -256,42 +256,6 @@ Item {
         }
     }
 
-    // Deep Velvet Blurred Ambient Background (Artwork bloom)
-    Item {
-        id: ambientBackdrop
-        anchors.fill: parent
-        clip: true
-
-        Image {
-            id: ambientImg
-            anchors.fill: parent
-            source: root.track && root.track.image ? root.track.image : ""
-            fillMode: Image.PreserveAspectCrop
-            visible: false
-        }
-
-        MultiEffect {
-            anchors.fill: parent
-            source: ambientImg
-            visible: ambientImg.status === Image.Ready
-            blurEnabled: true
-            blur: 1.0
-            blurMax: 64
-            saturation: 1.4
-            brightness: -0.15
-            opacity: 0.38
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.04, 0.65) }
-                GradientStop { position: 0.5; color: Qt.rgba(0.01, 0.01, 0.02, 0.80) }
-                GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.95) }
-            }
-        }
-    }
-
     // =========================================================================
     // MAIN 2-COLUMN SPLIT SCREEN (50% Left Artwork/Video | 50% Right Tabs)
     // =========================================================================
@@ -318,24 +282,15 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38
 
-                LiquidGlass {
-                    id: modeSwitcherGlass
+                Rectangle {
+                    id: modeSwitcherPill
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 170
                     height: 36
                     radius: 18
-                    displacement: 5.0
-                    bevelWidth: 6.0
-                    backgroundSourceItem: root.backgroundSourceItem
-                    tintColor: Qt.rgba(0.08, 0.09, 0.12, 0.65)
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        color: "transparent"
-                        border.color: Qt.rgba(1, 1, 1, 0.12)
-                        border.width: 1
-                    }
+                    color: Qt.rgba(0.08, 0.09, 0.12, 0.85)
+                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.width: 1
 
                     RowLayout {
                         anchors.fill: parent
@@ -973,8 +928,7 @@ Item {
                             readonly property real duration: Math.max(0.6, nextTime - modelData.time)
                             readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
 
-                            readonly property real targetBlur: isCurrent ? 0.0 : (dist === 1 ? 0.10 : (dist === 2 ? 0.22 : 0.35))
-                            readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.65 : (dist === 2 ? 0.42 : Math.max(0.18, 0.32 - 0.04 * (dist - 2))))
+                            readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.65 : (dist === 2 ? 0.40 : Math.max(0.18, 0.30 - 0.04 * (dist - 2))))
                             readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 22 : 20))
 
                             opacity: lineHover.hovered ? 0.95 : targetOpacity
@@ -983,13 +937,6 @@ Item {
                             Behavior on scale { NumberAnimation { duration: 200 } }
 
                             HoverHandler { id: lineHover }
-
-                            layer.enabled: !lineHover.hovered && targetBlur > 0.01 && dist <= 4
-                            layer.effect: MultiEffect {
-                                blurEnabled: true
-                                blur: lyricRow.targetBlur
-                                blurMax: 48
-                            }
 
                             function formatKaraokeWords(rawText, progress) {
                                 if (!rawText) return "";

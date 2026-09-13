@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import QtQuick.Effects
 import "./components"
 
 Scope {
@@ -811,10 +812,50 @@ Scope {
         id: masterContainer
         anchors.fill: parent
         radius: (win.maximized || win.fullscreen) ? 0 : 16
-        color: Qt.rgba(0.04, 0.04, 0.06, 0.74)
+        color: "#0a0b0e"
         border.color: (win.maximized || win.fullscreen) ? "transparent" : Qt.rgba(1.0, 1.0, 1.0, 0.08)
         border.width: (win.maximized || win.fullscreen) ? 0 : 1
         clip: true
+
+        // Global Ambient Velvet Blurred Background for Now Playing (covers 100% of the window)
+        Item {
+            id: globalNowPlayingAmbient
+            anchors.fill: parent
+            z: 0
+            visible: opacity > 0.01
+            opacity: (win.isNowPlayingOpen && win.currentTrack) ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+
+            Image {
+                id: globalAmbientImg
+                anchors.fill: parent
+                source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: globalAmbientImg
+                visible: globalAmbientImg.status === Image.Ready
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 64
+                saturation: 1.4
+                brightness: -0.12
+                opacity: 0.48
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.04, 0.65) }
+                    GradientStop { position: 0.35; color: Qt.rgba(0.01, 0.01, 0.02, 0.78) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.94) }
+                }
+            }
+        }
 
         // Ambient Edge Vignette (Option 2 - Cinematic Spatial Depth)
         Item {
@@ -987,9 +1028,10 @@ Scope {
                 Item {
                     id: browsingContainer
                     anchors.fill: parent
-                    visible: opacity > 0
+                    visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 0.0 : 1.0
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    enabled: !win.isNowPlayingOpen
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
                     StackLayout {
                         id: centerStack
@@ -1147,11 +1189,10 @@ Scope {
                 YTMusicNowPlayingView {
                     id: ytNowPlayingView
                     anchors.fill: parent
-                    visible: opacity > 0
+                    visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 1.0 : 0.0
-                    y: win.isNowPlayingOpen ? 0 : 30
-                    Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    enabled: win.isNowPlayingOpen
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
                     track: win.currentTrack
                     currentTime: win.currentTime

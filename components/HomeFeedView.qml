@@ -95,28 +95,20 @@ Rectangle {
                                 { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
                             ]
 
-                            LiquidGlass {
-                                id: pillGlass
+                            Rectangle {
+                                id: moodPill
                                 height: 32
                                 width: pillTxt.implicitWidth + 24
-                                radius: 16
-                                displacement: 5.0
-                                bevelWidth: 6.0
-                                backgroundSourceItem: root.backgroundSourceItem
-                                tintColor: root.selectedMood === modelData.title 
-                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) 
-                                           : (pillMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.50))
+                                radius: 8
 
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: parent.radius
-                                    color: "transparent"
-                                    border.width: 1
-                                    border.color: root.selectedMood === modelData.title 
-                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.65) 
-                                                  : (pillMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.08))
-                                    Behavior on border.color { ColorAnimation { duration: 120 } }
-                                }
+                                readonly property bool isSelected: root.selectedMood === modelData.title
+                                readonly property bool isHovered: pillMouse.containsMouse
+
+                                color: isSelected ? "#ffffff" : (isHovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08))
+                                border.width: isSelected ? 0 : 1
+                                border.color: isSelected ? "transparent" : (isHovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10))
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                 Text {
                                     id: pillTxt
@@ -124,8 +116,9 @@ Rectangle {
                                     text: modelData.title
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
-                                    font.bold: true
-                                    color: root.selectedMood === modelData.title ? "#ffffff" : (pillMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                                    font.weight: moodPill.isSelected ? Font.Bold : Font.DemiBold
+                                    color: moodPill.isSelected ? "#0c0d10" : (moodPill.isHovered ? "#ffffff" : Theme.textSecondary)
+                                    Behavior on color { ColorAnimation { duration: 120 } }
                                 }
 
                                 MouseArea {
