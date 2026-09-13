@@ -117,9 +117,19 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - File hook: `~/.config/noctalia/apply_theme.sh`.
    - `palette_extractor.py` chạy ngầm song song (`&`) ngay từ đầu để xuất `nutsty_palette.json` trong ~0.3s.
    - `~/.config/quickshell/noctalia-shell/Commons/Color.qml`: `frostifyPaletteWatcher` gọi `reload()` trước và dùng `delayedNutstyTimer` (200ms) để đọc dữ liệu khi đĩa đã nạp xong, giúp Waybar và Desktop Lyrics đổi màu đồng bộ 100% ngay từ lần đổi hình nền đầu tiên.
-8. **Mã nguồn tham khảo Nutsty**:
-   - Vị trí clone: `/home/apple/Applications/Nutsty/`.
-   - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete), Playback Tracking (`videostatsPlaybackUrl`, `atrUrl`, `videostatsWatchtimeUrl`) và Return YouTube Dislike API.
+8. **Kho Mã Nguồn Tham Khảo Bên Ngoài (External Reference Repositories)**:
+   - **Nutsty**: `/home/apple/Applications/Nutsty/`
+     - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete), Playback Tracking (`videostatsPlaybackUrl`, `atrUrl`, `videostatsWatchtimeUrl`) và Return YouTube Dislike API.
+   - **SimpMusic**: `/home/apple/Applications/SimpMusic/` (Compose Multiplatform / Jetpack Compose / Skiko)
+     - Dùng để tham khảo và kế thừa các thuật toán đồ họa UI/UX cao cấp:
+       1. *Thuật toán Kính Lỏng Liquid Glass (Thấu kính quang học, Vibrancy 1.6x, chống đục trắng & tán sắc viền)*:
+          - Tệp mẫu cốt lõi: [`composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt) (chứa `Modifier.liquidGlass`, `drawInteractiveGlass`, Kyant's backdrop effect stack, `colorControls`, `blur`, `lens`, `vibrancy`, adaptive darken `lerp(minScrim, maxScrim, ...)`).
+       2. *Thanh điều hướng lơ lửng, viên thuốc trượt Damped Drag và chỉ báo blob đàn hồi*:
+          - Tệp mẫu: [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt).
+       3. *Tích hợp Mini Player và Navigation Bar trên bề mặt kính lỏng*:
+          - Tệp mẫu: [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt).
+       4. *Giao diện Apple Music Now Playing (3-stop dynamic gradient, lyric cuộn DoF quang học)*:
+          - Tệp mẫu: `composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/screens/nowplaying/NowPlayingContentAppleMusic.kt`.
 9. **Con Quay Loading Trực Tuyến (Nutsty Circular Loader)**:
     - Component: `components/CircularSpinner.qml` vẽ bằng Canvas với cung tròn 270°, hai đầu bo tròn (round cap) và `RotationAnimation` vô hạn 360° (0% CPU overhead).
     - Tích hợp vào nút Play/Pause 36px trong `components/PlayerBarBottom.qml` qua thuộc tính `isLoadingAudio`. Khi chuyển bài hát online, icon Play/Pause tạm thời ẩn và con quay xoay mượt mà cho đến khi MPV bắt đầu đếm thời lượng phát nhạc thực tế (`time_pos > 0`).
@@ -250,17 +260,81 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
 
 24. **Công Thức Kính Lỏng Thuần Khiết SimpMusic & Floating Player Bar (SimpMusic Pure Liquid Glass - Item 24)**:
-    - **Triết Lý Kiến Trúc Kính Lỏng Thuần Khiết (SimpMusic Pure Backdrop Lens Architecture)**:
-      - *Mục tiêu*: Tái hiện hoàn hảo hiệu ứng kính lỏng (Liquid Glass) sóng sánh như keo nước của SimpMusic Desktop / Android trên nền Linux Wayland (Quickshell / Qt Quick RHI / GLSL 440).
-      - *Cấu trúc các tệp tin liên quan (Component Files)*:
-        1. `components/LiquidGlass.qml`: Harness QML đóng gói `ShaderEffectSource` bắt ảnh nền động từ `backgroundSourceItem` (`smooth: true`, `mipmap: true`, `live: true`), tự động tính toán tọa độ ánh xạ `globalOffset: root.mapToItem(backgroundSourceItem, 0, 0)` và truyền toàn bộ ma trận/uniforms vào shader.
-        2. `assets/shaders/liquid_glass.frag`: Fragment shader GLSL 440 chứa thuật toán quang học đa tầng.
-        3. `assets/shaders/liquid_glass.frag.qsb`: Shader nhị phân RHI biên dịch cho Qt 6 thông qua lệnh: `/usr/lib/qt6/bin/qsb --qt6 assets/shaders/liquid_glass.frag -o assets/shaders/liquid_glass.frag.qsb`.
-        4. `components/PlayerBarBottom.qml`: Floating dock sử dụng `LiquidGlass` với bo góc mềm 16px, chứa mini cover, marquee title loop, cụm nút điều khiển SVG và thanh tiến trình tối giản.
-        5. `shell.qml`: Khởi tạo `mainContentBackdrop` (chứa toàn bộ nội dung scrollable) và gắn làm `backgroundSourceItem` cho `PlayerBarBottom`.
+    - **Kho Mã Nguồn Tham Khảo & Các File Mẫu Gốc (SimpMusic Source References)**:
+      - **Đường dẫn thư mục repo**: `/home/apple/Applications/SimpMusic/` (Compose Multiplatform / Jetpack Compose / Skiko).
+      - **Các tệp tin mẫu cốt lõi cần nghiên cứu**:
+        1. [`composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt):
+           - Tệp mẫu quan trọng nhất. Chứa hàm `Modifier.liquidGlass(...)` và `Modifier.drawInteractiveGlass(...)`.
+           - Chứa toàn bộ hiệu ứng Kyant's backdrop: `vibrancy()`, `colorControls(brightness = 0.05f, contrast = 1f, saturation = 1.5f)`, `blur(lerp(...))`, `lens(minDimension / 4f, minDimension / 2f, false)`.
+           - Công thức "Đục đen" (Adaptive Scrim): `val darken = lerp(minScrim, maxScrim, ((luminance - 0.3f) / 0.5f))` — tối dần khi nền sáng để chữ trắng không bao giờ bị chìm hoặc đục trắng ("anti-white veil").
+        2. [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt):
+           - Thanh điều hướng capsule 3 lớp: Nền kính lỏng thích ứng độ sáng $\rightarrow$ Blob trượt đàn hồi Damped Drag $\rightarrow$ Ký tự/icon sắc nét trên cùng.
+        3. [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt):
+           - Kỹ thuật tích hợp Mini Player và Tab Bar trên cùng một bề mặt kính lỏng không tạo viền nối.
+
+    - **Cấu Trúc Tệp Triển Khai Trong Nutsty / FrostifyLocal (Implementation Files)**:
+      1. [`components/LiquidGlass.qml`](file:///home/apple/Applications/FrostifyLocal/components/LiquidGlass.qml): Component QML dùng chung cho toàn bộ app. Đóng gói `ShaderEffectSource` bắt ảnh nền động từ `backgroundSourceItem` (`smooth: true`, `mipmap: true`, `live: true`), tự động tính toán tọa độ ánh xạ `globalOffset: root.mapToItem(backgroundSourceItem, 0, 0)` và truyền toàn bộ ma trận/uniforms vào shader.
+      2. [`assets/shaders/liquid_glass.frag`](file:///home/apple/Applications/FrostifyLocal/assets/shaders/liquid_glass.frag): Fragment shader GLSL 440 chứa thuật toán quang học đa tầng (SDF Rounded Box, Circle Map Displacement, 2-tier Viscous Gel Diffusion, Chromatic Saturation Isolation, Adaptive Darken).
+      3. `assets/shaders/liquid_glass.frag.qsb`: File bytecode nhị phân Qt 6 RHI được biên dịch từ `liquid_glass.frag`.
+      4. [`components/PlayerBarBottom.qml`](file:///home/apple/Applications/FrostifyLocal/components/PlayerBarBottom.qml): Tệp mẫu thực tế số 1 — Thanh phát nhạc lơ lửng bo góc mềm 16px sử dụng `LiquidGlass`.
+      5. [`components/TopHeaderBar.qml`](file:///home/apple/Applications/FrostifyLocal/components/TopHeaderBar.qml): Tệp mẫu thực tế số 2 — Cụm viên thuốc điều hướng và thanh tìm kiếm sử dụng `LiquidGlass`.
+      6. [`shell.qml`](file:///home/apple/Applications/FrostifyLocal/shell.qml): Khởi tạo `id: mainContentBackdrop` (chứa toàn bộ nội dung cuộn bên dưới) và truyền vào làm `backgroundSourceItem` cho các component nổi.
+
+    - **Cẩm Nang Thực Hành: Hướng Dẫn Từng Bước Áp Dụng Liquid Glass Cho Mọi Component Mới**:
+      - **Bước 1: Nắm vững quy tắc Sibling bất biến (The Golden Sibling Rule)**:
+        - Bề mặt kính `LiquidGlass` và layer nền `backgroundSourceItem` **BẮT BUỘC PHẢI LÀ ANH EM (SIBLINGS)** hoặc overlay ở tầng Z cao hơn (`z: 50`).
+        - **TUYỆT ĐỐI KHÔNG** đặt component chứa `LiquidGlass` vào bên trong chính item mà `backgroundSourceItem` trỏ tới. Việc này sẽ khiến `ShaderEffectSource` bắt lại chính nó, tạo thành vòng lặp vô tận (render-feedback loop) gây sập engine đồ họa hoặc xuất hiện lỗi đen kịt toàn màn hình.
+      - **Bước 2: Mẫu Code QML Chuẩn (Copy-Pasteable Template)**:
+        ```qml
+        import QtQuick
+        import QtQuick.Layouts
+        import "." // hoặc import "./components" nếu gọi từ file gốc shell.qml
+
+        Item {
+            id: root
+            property Item backgroundSourceItem: null // nhận từ shell.qml (thường là mainContentBackdrop)
+            property real radius: 16
+
+            // Khối Liquid Glass lót nền
+            LiquidGlass {
+                id: glassDock
+                anchors.fill: parent
+                radius: root.radius
+                displacement: 18.0    // Độ phóng đại thấu kính uốn cong
+                aberration: 0.03      // Độ tán sắc viền quang sai
+                bevelWidth: 24.0      // Độ rộng vát mép
+                tintColor: Qt.rgba(0.04, 0.05, 0.07, 0.65) // Nền tối chống đục trắng
+                backgroundSourceItem: root.backgroundSourceItem
+                z: 2
+
+                // Toàn bộ nội dung con (Layout, text, icon, button) đặt tự nhiên bên trong
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    // Nội dung hiển thị sắc nét 100% trên bề mặt kính lỏng
+                }
+            }
+        }
+        ```
+      - **Bước 3: Bảng Tra Cứu Thông Số Kỹ Thuật (Parameter Cheat Sheet)**:
+        | Thông Số | Player Bar / Dock Lớn | Pill Switch / Nút Bấm | Modal / Popover / Bento Card | Ý Nghĩa Kỹ Thuật |
+        |---|---|---|---|---|
+        | `radius` | `16` | `18` (Capsule $H/2$) | `12` - `16` | Bán kính bo góc ngoài của khối kính |
+        | `displacement` | `18.0` | `5.0` - `6.0` | `8.0` - `12.0` | Độ kéo dãn & phóng đại thấu kính âm (pulling & magnifying avatar) |
+        | `bevelWidth` | `24.0` | `6.0` - `8.0` | `12.0` - `16.0` | Bề rộng mép vát cong uốn lượn quang học |
+        | `aberration` | `0.03` | `0.02` | `0.03` | Độ tán sắc quang phổ viền đỏ-xanh |
+        | `tintColor` | `Qt.rgba(0.04, 0.05, 0.07, 0.65)` | `Qt.rgba(0.08, 0.08, 0.10, 0.70)` | `Qt.rgba(0.06, 0.07, 0.09, 0.55)` | Màu nền tối thích ứng ("đục đen"), giữ tương phản chữ |
+      - **Bước 4: Quy trình biên dịch Shader bắt buộc khi chỉnh sửa file GLSL**:
+        - Mọi thay đổi trong `assets/shaders/liquid_glass.frag` **BẮT BUỘC** phải được biên dịch lại sang nhị phân Qt 6 RHI:
+          ```bash
+          /usr/lib/qt6/bin/qsb --qt6 assets/shaders/liquid_glass.frag -o assets/shaders/liquid_glass.frag.qsb
+          ```
+        - *Lưu ý sống còn*: Quickshell nạp file bytecode `.frag.qsb`. Nếu sửa file `.frag` mà quên chạy lệnh `qsb`, giao diện sẽ tiếp tục chạy shader cũ và không có bất kỳ thay đổi nào hiển thị.
+
+    - **Nguyên Lý Quang Học Cốt Lõi Của Thuật Toán Kính Lỏng (SimpMusic Core Optical Principles)**:
       - *Khuếch tán keo nước hai tầng (Two-tier Viscous Liquid Gel Diffusion)*:
         - Lấy mẫu 2 tầng kết hợp: Tầng khí quyển rộng (Wide atmospheric bloom, Mipmap LOD 3.8 + 20px taps) chiếm 65% + Tầng định hình (Form preservation, Mipmap LOD 2.0 + 8px taps) chiếm 35%.
-        - Tăng cường độ bão hòa màu 1.6x (`vibrancy`), giúp màu sắc của bìa album bên dưới tan chảy và lan tỏa mềm mại, sóng sánh như keo nước ("như keo nước").
+        - Tăng cường độ bão hòa màu 1.6x (`vibrancy`), giúp màu sắc của bìa album bên dưới tan chảy và lan tỏa mềm mại, sóng sánh như keo nước.
       - *Khúc xạ thấu kính dẻo làm lan tỏa & phóng đại Avatar (Curvature Liquid Lens Displacement)*:
         - Sử dụng hàm cung tròn `circleMap(t) = 1.0 - sqrt(max(0.0, 1.0 - t * t))` kết hợp độ dịch chuyển âm (`dispAmount = -18.0px`) theo hướng pháp tuyến giải tích `gradSdRoundedRect`.
         - Kéo dãn và phóng đại các đối tượng/avatar bài hát nằm sát mép kính, tạo cảm giác hình ảnh nở bung và tan chảy vào lòng thanh player bar ("playerbar bên trong bị lan ra bởi avatar của bài hát").
@@ -274,14 +348,16 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
         - Đầu ra shader bắt buộc tuân thủ chuẩn hòa trộn RHI: `fragColor = vec4(finalColor * mask, mask) * qt_Opacity`. Điều này loại bỏ hoàn toàn viền halo màu trắng/xám tại các pixel khử răng cưa ở 4 góc.
       - *Độ tối bề mặt thích ứng (Adaptive Surface Darken)*:
         - Tối nhẹ 12% trên nền đen giúp màu sắc bài hát xuyên qua rực rỡ trong vắt; tự động nâng lên tối đa 48% trên nền trắng để đảm bảo nút bấm và chữ luôn dễ đọc.
-    - **Thiết Kế Thanh Player Bar SimpMusic 16dp**:
+
+    - **Thiết Kế Thanh Player Bar SimpMusic 16dp (`PlayerBarBottom.qml`)**:
       - *Hình dạng bo góc mềm*: Bo góc vuông nhẹ `radius: 16px` (chuẩn `RoundedCornerShape(16.dp)` của SimpMusic Desktop).
       - *Hoạt ảnh Marquee Loop (Ping-Pong Animation)*: Khi tên bài hát hoặc tên ca sĩ dài vượt khung, `SequentialAnimation` trong `Item { clip: true }` tự động dừng 1.8s ở đầu $\rightarrow$ trượt mượt sang trái $\rightarrow$ dừng 1.8s ở cuối $\rightarrow$ trượt về đầu. Tuyệt đối không cắt cụt chữ bằng dấu `...`.
-      - *Đồng bộ màu nghệ sĩ*: Tên nghệ sĩ có cùng màu trắng sáng với tên bài hát (`Theme.textPrimary`), khi rê chuột sáng xanh `Theme.accentGreen`.
+      - *Đồng bộ màu nghệ sĩ*: Tên nghệ sĩ có cùng màu trắng sáng với tên bài hát (`Theme.textPrimary`), khi rê chuột sáng theo `root.accentColor`.
       - *Thanh tiến trình trong suốt tối giản (100% Transparent Background Track)*:
         - `progressBg.color: "transparent"`: Xóa bỏ hoàn toàn vạch màu xám ở phần bài hát chưa chạy.
         - Chỉ hiển thị thanh màu trắng `#ffffff` thanh mảnh 2.0px (hover 3.5px) cho phần thời lượng đã phát (`elapsed progress`), giúp thanh player bar trong suốt và thanh thoát tuyệt đối.
         - Scrub handle dot 6px màu trắng và tooltip thời gian mượt mà khi hover/scrub.
+
     - **Bẫy Lỗi "Xương Máu" & Bài Học Tránh Lặp Lại Khi Tạo Component Liquid Glass Mới (Crucial Gotchas & Pitfalls)**:
       1. *Lỗi 4 góc và viền bị vệt sáng trắng trên nền tối (Un-premultiplied Alpha)*:
          - **Hiện tượng**: Trên nền đen, 4 góc bo của player bar xuất hiện vệt sáng mờ hoặc viền trắng trông như một miếng sticker dán đè lên.
