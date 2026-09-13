@@ -300,8 +300,38 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
          - **Khắc phục**: Đặt `progressBg.color: "transparent"`. Tuyệt đối không dùng bất kỳ dải màu xám nào làm nền unplayed track.
       5. *Lỗi quên biên dịch shader `.frag` ra `.frag.qsb`*:
          - **Cảnh báo**: Mọi sửa đổi trong file mã nguồn `assets/shaders/liquid_glass.frag` sẽ KHÔNG có hiệu lực trong Quickshell nếu chưa chạy lệnh biên dịch: `/usr/lib/qt6/bin/qsb --qt6 assets/shaders/liquid_glass.frag -o assets/shaders/liquid_glass.frag.qsb` và restart lại tiến trình Quickshell.
+25. **Hệ Thống Nền Kính Trầm Tĩnh & Tích Hợp Niri GPU Hardware Blur (Calm Deep Acrylic Window Background Suite - Item 25)**:
+    - **Triết Lý Phân Cấp Thị Giác 3 Tầng (`ui-layout-design-rules`)**:
+      - *Tier 1: Primary Focal Point (10% diện tích)*: Thanh `PlayerBarBottom` lơ lửng mang hiệu ứng **Liquid Glass** cường độ cao (độ cong mép kính lồi, viền tán sắc quang phổ chromatic phát sáng theo bìa album, bão hòa 1.6x).
+      - *Tier 2: Secondary / Supporting (30% diện tích)*: Các card bài hát, bìa album, danh sách hàng đợi và tab navigation.
+      - *Tier 3: Tertiary / Background Canvas (60% diện tích)*: Toàn bộ nền cửa sổ `masterContainer`. **Bắt buộc phải tĩnh lặng, êm dịu và ít chi tiết hơn Player Bar rất nhiều** (`Nền < PlayerBar`) nhằm triệt tiêu hoàn toàn hiện tượng nhiễu thị giác, chống mỏi mắt và bảo đảm độ tương phản chữ (readability) đạt chuẩn WCAG AAA.
+    - **Tích Hợp Niri Compositor GPU Hardware Blur**:
+      - Cấu hình Wayland Niri tại `~/.config/niri/cfg/rules.kdl`:
+        ```kdl
+        window-rule {
+            match title=r#"^Nutsty.*$"#
+            open-floating true
+            background-effect {
+                blur true
+            }
+        }
+        ```
+      - Sử dụng trực tiếp GPU compositor của hệ điều hành Linux để khuếch tán hình nền Desktop (wallpaper) và các ứng dụng bên dưới cửa sổ với tần số quét 144Hz/120Hz mượt mà tuyệt đối, **0% CPU/GPU overhead** cho tiến trình Nutsty.
+    - **Thông Số Cấu Trúc Mặt Kính Calm Deep Acrylic**:
+      - `masterContainer` (`shell.qml`): `color: Qt.rgba(0.04, 0.04, 0.06, 0.74)` với đường viền siêu mảnh `border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)`, `border.width: 1`, bo góc `radius: 16px`.
+      - *Ambient Edge Vignette (Spatial Depth)*: 4 dải gradient mềm mại ở 4 cạnh mép cửa sổ (đỉnh 80px `0.45`, đáy 120px `0.55` tạo nền đen sâu cho player bar lơ lửng, hai bên hông 60px `0.35`) giúp dồn tiêu điểm thị giác người dùng vào khu vực trung tâm bài hát.
+      - *Quy tắc Bo góc đồng tâm (Concentric Radii)*:
+        - Cửa sổ mẹ `masterContainer`: `radius: 16px`.
+        - Sidebar `NavSidebar`: `radius: 12px` ($R_{\text{con}} = R_{\text{mẹ}} - \text{Padding} = 16 - 4$).
+        - Card bài hát `TrackCard`: `radius: 8px`.
+        - Player Bar `PlayerBarBottom`: `radius: 20px` (dạng capsule lơ lửng độc lập).
+      - *Đồng bộ trong suốt các view con*:
+        - `NavSidebar`: `color: Qt.rgba(0.06, 0.07, 0.09, 0.42)` + viền phân tách `1px Qt.rgba(1, 1, 1, 0.05)`.
+        - `HomeFeedView` & `MainTrackGrid`: `color: "transparent"` cho phép ánh sáng mờ từ hình nền xuyên qua liền mạch giữa các card bài hát.
+        - `AmberolDetailView`: `color: Qt.rgba(0.06, 0.06, 0.08, 0.55)` + viền `1px Qt.rgba(1, 1, 1, 0.05)`.
 
 ---
+
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 

@@ -5,7 +5,7 @@ import "."
 
 Rectangle {
     id: root
-    color: "#121212"
+    color: "transparent"
     radius: Theme.radiusCard
 
     property var tracks: []

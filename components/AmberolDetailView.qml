@@ -319,7 +319,10 @@ Rectangle {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0.06, 0.06, 0.08, 0.90)
+        color: Qt.rgba(0.06, 0.06, 0.08, 0.55)
+        border.color: Qt.rgba(1, 1, 1, 0.05)
+        border.width: 1
+        radius: Theme.radiusCard
     }
 
     property bool allowClose: false

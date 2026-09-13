@@ -6,8 +6,10 @@ import "."
 Rectangle {
     id: root
     width: 240
-    color: Theme.bgApp
-    radius: Theme.radiusCard
+    color: Qt.rgba(0.06, 0.07, 0.09, 0.42)
+    radius: 12
+    border.color: Qt.rgba(1, 1, 1, 0.05)
+    border.width: 1
 
     property var playlists: []
     property var onlinePlaylists: []

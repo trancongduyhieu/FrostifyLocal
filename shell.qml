@@ -804,13 +804,73 @@ Scope {
         win.refreshLocalAlbums();
     }
 
-    // Master Container with Nutsty Dark Aesthetic
+    // Master Container with Nutsty Calm Deep Acrylic Aesthetic
     Rectangle {
         id: masterContainer
         anchors.fill: parent
-        radius: win.fullscreen ? 0 : Theme.radiusApp
-        color: "#0b0c0e"
+        radius: win.fullscreen ? 0 : 16
+        color: Qt.rgba(0.04, 0.04, 0.06, 0.74)
+        border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
+        border.width: 1
         clip: true
+
+        // Ambient Edge Vignette (Option 2 - Cinematic Spatial Depth)
+        Item {
+            id: ambientVignette
+            anchors.fill: parent
+            z: 0
+            opacity: 0.75
+
+            // Top subtle shade
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 80
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.45) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Bottom subtle shade (richer depth behind floating player bar)
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 120
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.55) }
+                }
+            }
+
+            // Left edge subtle shade
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 60
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.35) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Right edge subtle shade
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 60
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.35) }
+                }
+            }
+        }
 
         // 1. Main Application Backdrop & Scrolling Content
         Item {
