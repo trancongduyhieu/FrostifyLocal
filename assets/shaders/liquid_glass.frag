@@ -84,14 +84,10 @@ void main() {
     // 2. Water-Clear Refraction (Độ trong vắt như keo 502 với tán sắc nhẹ)
     // =========================================================================
     float split = u_aberration * 6.0 * circleMap(t);
-    vec4 sampleR = textureLod(source, uv + grad * split * pixelStep, 0.5);
-    vec4 sampleG = textureLod(source, uv, 0.5);
-    vec4 sampleB = textureLod(source, uv - grad * split * pixelStep, 0.5);
-    
-    vec3 clearRefraction = vec3(sampleR.r, sampleG.g, sampleB.b);
-    float bgAlpha = clamp(sampleG.a, 0.0, 1.0);
-    // Khi nền là cửa sổ trong suốt (bgAlpha ~ 0), hòa sắc với màu tint để không bị đen ngòm
-    clearRefraction = mix(u_tint.rgb, clearRefraction, bgAlpha);
+    vec3 clearRefraction;
+    clearRefraction.r = textureLod(source, uv + grad * split * pixelStep, 0.5).r;
+    clearRefraction.g = textureLod(source, uv, 0.5).g;
+    clearRefraction.b = textureLod(source, uv - grad * split * pixelStep, 0.5).b;
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
@@ -130,7 +126,7 @@ void main() {
     
     // Lan màu nhẹ nhàng (subtle ambient tint ~22%), giữ trọn vẹn độ trong veo của keo
     float tintStrength = 0.22 * clamp(u_flowActive, 0.0, 1.0);
-    vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength * bgAlpha);
+    vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
     
     // =========================================================================
     // 6. Final Composite & Water-Clear Transparency
@@ -140,14 +136,10 @@ void main() {
     vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // Độ trong suốt keo 502 (Water-Clear Transparency)
-    // 1. Khi nền rỗng / tạm dừng (bgAlpha ~ 0): Alpha siêu mỏng (0.14 - 0.24) nhìn thấu 100% hình nền desktop thật
-    //    chỉ giữ lại viền vát meniscus và vệt bóng keo502Gloss tạo hình khối 3D dẻo trong suốt
-    // 2. Khi có card bên dưới hoặc đang phát nhạc (bgAlpha ~ 1): Alpha nâng lên 0.36 - 0.46 để khúc xạ card rõ nét
-    float transparentAlpha = clamp(u_tint.a, 0.12, 0.22) + rimProfile * 0.18 + keo502Gloss * 0.45;
-    float activeAlpha = mix(clamp(max(u_tint.a, 0.36), 0.36, 0.46), 0.52, u_flowActive * 0.25);
-    float baseAlpha = mix(transparentAlpha, activeAlpha, bgAlpha);
-    float glassAlpha = mask * baseAlpha;
+    // Độ trong suốt keo 502 (Water-Clear Transparency ~ 0.40 - 0.52)
+    // Không bao giờ bị đục xám hay đen ngầu, nhìn thấu các card bên dưới
+    float baseAlpha = clamp(max(u_tint.a, 0.40), 0.40, 0.52);
+    float glassAlpha = mask * mix(baseAlpha, 0.56, u_flowActive * 0.25);
     fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity;
 }
 
