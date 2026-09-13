@@ -1075,9 +1075,6 @@ Scope {
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;
                 }
-                onDownloadPopoverRequested: {
-                    downloadPopover.open();
-                }
 
                 onBackRequested: {
                     if (win.isNowPlayingOpen) {
