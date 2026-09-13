@@ -934,37 +934,44 @@ Scope {
             z: -999
             opacity: 0.001
 
-            // 1. Fallback Background Layer (Wallpaper vs Now Playing Artwork)
+            // 1. Fallback Background Layer (Smooth Cross-dissolving Wallpaper vs Artwork)
             Item {
                 id: fallbackBackdropContainer
                 anchors.fill: parent
 
-                Image {
-                    id: fallbackWallpaperImg
+                Item {
+                    id: fallbackImagesComposite
                     anchors.fill: parent
-                    source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    visible: opacity > 0.01
-                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                }
 
-                Image {
-                    id: fallbackPlayingImg
-                    anchors.fill: parent
-                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    visible: opacity > 0.01
-                    opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+                    // Bottom Layer: Desktop Wallpaper (always present)
+                    Image {
+                        id: fallbackWallpaperImg
+                        anchors.fill: parent
+                        source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                    }
+
+                    // Top Layer: Active Song Artwork (Crossfades gently over 900ms)
+                    Image {
+                        id: fallbackPlayingImg
+                        anchors.fill: parent
+                        source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 900
+                                easing.type: Easing.InOutQuad
+                            }
+                        }
+                    }
                 }
 
                 MultiEffect {
                     anchors.fill: parent
-                    source: (win.currentTrack && win.isPlaying) ? fallbackPlayingImg : fallbackWallpaperImg
-                    visible: (fallbackPlayingImg.visible || fallbackWallpaperImg.visible)
+                    source: fallbackImagesComposite
                     blurEnabled: true
                     blur: 0.70
                     blurMax: 48

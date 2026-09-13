@@ -254,67 +254,49 @@ Rectangle {
             }
         }
 
-        // Active Download Queue Pill (Minimalist Borderless Style matching wallpaper accent)
-        Item {
-            id: downloadQueuePill
-            Layout.preferredHeight: 34
-            Layout.preferredWidth: dlRow.implicitWidth + 12
-            readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
-            visible: true
+        // Top Navigation Cluster: Downloads, Home, Library, Settings (Pure Borderless Icons matching wallpaper accent)
+        RowLayout {
+            spacing: 12
 
-            RowLayout {
-                id: dlRow
-                anchors.centerIn: parent
-                spacing: 6
+            // 0. Downloads Button (Icon only, pure borderless)
+            Item {
+                id: downloadQueueBtn
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+                readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
+                visible: true
 
                 CircularSpinner {
-                    Layout.preferredWidth: 14
-                    Layout.preferredHeight: 14
-                    visible: downloadQueuePill.hasActive
-                    running: downloadQueuePill.hasActive
+                    anchors.centerIn: parent
+                    visible: downloadQueueBtn.hasActive
+                    running: downloadQueueBtn.hasActive
                     color: headerRoot.accentColor
-                    size: 14
+                    size: 16
                     strokeWidth: 2
                 }
 
                 AppIcon {
-                    visible: !downloadQueuePill.hasActive
+                    anchors.centerIn: parent
+                    visible: !downloadQueueBtn.hasActive
                     source: "../assets/icons/download-symbolic.svg"
-                    iconSize: 15
+                    iconSize: 17
                     color: headerRoot.accentColor
-                    opacity: dlMouse.containsMouse ? 1.0 : 0.85
-                    scale: dlMouse.containsMouse ? 1.08 : 1.0
+                    opacity: dlMouse.containsMouse ? 1.0 : 0.70
+                    scale: dlMouse.containsMouse ? 1.12 : 1.0
                     Behavior on scale { NumberAnimation { duration: 120 } }
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
-                Text {
-                    text: downloadQueuePill.hasActive
-                          ? ("Downloading (" + (downloadManager ? downloadManager.activeTasksCount : 0) + ")")
-                          : "Downloads"
-                    color: headerRoot.accentColor
-                    opacity: dlMouse.containsMouse ? 1.0 : 0.85
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                MouseArea {
+                    id: dlMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        headerRoot.downloadPopoverRequested();
+                    }
                 }
             }
-
-            MouseArea {
-                id: dlMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    headerRoot.downloadPopoverRequested();
-                }
-            }
-        }
-
-        // Top Navigation Cluster: Home, Library, Settings (Pure Borderless Icons matching wallpaper accent)
-        RowLayout {
-            spacing: 12
 
             // 1. Home Button
             Item {

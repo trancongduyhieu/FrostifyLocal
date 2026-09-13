@@ -23,7 +23,7 @@ Item {
 
     property bool isFlowActive: false
     property real flowProgress: isFlowActive ? 1.0 : 0.0
-    Behavior on flowProgress { NumberAnimation { duration: 600; easing.type: Easing.InOutQuad } }
+    Behavior on flowProgress { NumberAnimation { duration: 950; easing.type: Easing.InOutQuad } }
 
     property real time: 0.0
     NumberAnimation on time {
