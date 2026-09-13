@@ -405,9 +405,28 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - `liquid_glass.frag`: Sửa công thức alpha và hòa trộn nền `baseGlass = mix(u_tint.rgb, tintedArtwork, artworkPresence)`. Khi thanh phát nhạc trôi trên vùng trống/trong suốt (`lum = 0`), shader xuất alpha mờ đục `u_tint.a` thay vì xuất đen kịt `vec4(..., 1.0)`.
       - Nút Phóng To / Khôi Phục `[ ◻ ]` (`window-maximize-symbolic.svg`): Tích hợp vào `TopHeaderBar.qml` và phím tắt `F11` gọi `win.maximized = !win.maximized`. Tránh kích hoạt chế độ `fullscreen-window` của Niri (vốn tạo phông nền đen đặc sau cửa sổ), giữ trọn vẹn khả năng nhìn xuyên thấu hình nền desktop qua hiệu ứng kính Acrylic.
 
+28. **Hệ Thống Lời Bài Hát Tràn Viền Phong Cách SimpMusic, Karaoke Từng Từ Độc Lập & Bokeh Quang Học Đa Tầng (SimpMusic-Style Frameless Lyrics, Word-by-Word Karaoke & Deep Optical Bokeh - Item 28)**:
+    - **Xóa Bỏ Khung Viền Thô Cứng & Dải Chắn Đen Trên/Dưới**:
+      - `components/AmberolDetailView.qml`: Chuyển đổi container lyrics từ `Rectangle` viền thô sang layout tràn viền trong suốt hoàn toàn (`Item`).
+      - Xóa bỏ dòng tiêu đề "LYRICS ... lines synced" và hai dải gradient tối đè trên/dưới, giúp các dòng lyric trôi tự do tràn viền.
+      - Xóa bỏ thanh chỉ báo xanh lá cây (`Theme.accentGreen`) cạnh câu hát hiện tại, nhường trọn sự tập trung vào hiệu ứng phát sáng của con chữ.
+    - **Engine Karaoke Từng Từ Độc Lập (Word-by-Word RichText Formatting)**:
+      - Khắc phục triệt để lỗi va chạm bounding box: Khi một câu hát dài tự động rớt dòng (wrapped lines), kỹ thuật clip 2D cũ (`clip: true; width: parent.width * progress`) khiến cả dòng 1 và dòng 2 cùng sáng lên tại một tọa độ X.
+      - Chuyển sang kiến trúc định dạng HTML RichText (`formatKaraokeWords(rawText, progress)`): Phân tách từng từ trong câu theo trật tự đọc, từ đã hát sáng trắng `#ffffff`, từ đang hát chuyển tiếp mượt mà từ xám `#757a88` sang trắng tinh, từ chưa hát giữ màu xám thanh lịch. Tự nhiên thích ứng với mọi độ dài câu hát và số dòng rớt xuống.
+    - **Hiệu Ứng Bokeh Quang Học Chiều Sâu (Deep Optical Bokeh Fallback)**:
+      - Tích hợp `MultiEffect` trên từng dòng lời bài hát với độ mờ quang học theo khoảng cách (`blurMax: 48`):
+        - Dòng hiện tại (\(dist = 0\)): Cỡ chữ 28px bold, nét căng, độ mờ 0.
+        - Dòng kề cận (\(dist = 1\)): Cỡ chữ 24px, độ mờ nhẹ `0.35`, độ đục `0.45`.
+        - Dòng cách xa (\(dist = 2\)): Cỡ chữ 21px, độ mờ trung bình `0.70`, độ đục `0.18`.
+        - Dòng rất xa (\(dist \ge 3\)): Cỡ chữ 18px, độ mờ sâu cực đại `1.0`, độ đục `0.08` tan biến vào nền bokeh.
+        - Tương tác Hover: Khi di chuột lên bất kỳ dòng nào, blur lập tức về `0.0` và độ đục lên `0.95` phục vụ click-to-seek trực quan.
+    - **Nền Ambient Album Artwork Bokeh Mềm Mại (Deep Velvet Bokeh Background)**:
+      - Ảnh bìa album nền chuyển sang `MultiEffect` với `blur: 1.0`, `blurMax: 64`, `saturation: 1.5`, `opacity: 0.52`, hòa cùng dải vignette tối sâu, xóa bỏ hoàn toàn các cạnh biên sắc nét của ảnh gốc.
+    - **Khắc Phục Màn Hình Đen Khi Bấm `Shift+F11` (Niri Maximize-Window-To-Edges)**:
+      - Hành động `fullscreen-window` của Niri compositor luôn vẽ một phông nền đen đặc sau cửa sổ để phục vụ trình phát video, làm mất hoàn toàn hiệu ứng kính xuyên thấu.
+      - Chuyển phím tắt `Shift+F11` sang `maximize-window-to-edges;` trong `~/.config/niri/cfg/keybinds.kdl` và khai báo `Shortcut { sequences: ["F11", "Shift+F11"] }` trong `shell.qml`, cho phép mở rộng cửa sổ tối đa sát mép màn hình mà vẫn giữ trọn vẹn lớp kính Acrylic nhìn thấu hình nền.
+
 ---
-
-
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 

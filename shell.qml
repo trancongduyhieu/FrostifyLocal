@@ -793,7 +793,7 @@ Scope {
     }
 
     Shortcut {
-        sequence: "F11"
+        sequences: ["F11", "Shift+F11"]
         onActivated: win.maximized = !win.maximized
     }
 

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import "."
@@ -307,19 +308,47 @@ Rectangle {
         onTriggered: fetchAudioSpecs()
     }
 
-    // Dynamic subtle album art background tint
-    Image {
-        id: bgBlur
+    // Deep Velvet Bokeh Ambient Artwork Background (SimpMusic Style)
+    Item {
+        id: bgArtworkContainer
         anchors.fill: parent
-        source: root.track && root.track.image ? root.track.image : ""
-        fillMode: Image.PreserveAspectCrop
-        opacity: 0.14
-        visible: status === Image.Ready
+        clip: true
+
+        Image {
+            id: bgArtworkImg
+            anchors.fill: parent
+            source: root.track && root.track.image ? root.track.image : ""
+            fillMode: Image.PreserveAspectCrop
+            visible: false
+        }
+
+        MultiEffect {
+            id: bgArtworkBlur
+            anchors.fill: parent
+            source: bgArtworkImg
+            visible: bgArtworkImg.status === Image.Ready
+            blurEnabled: true
+            blur: 1.0
+            blurMax: 64
+            saturation: 1.5
+            brightness: 0.0
+            opacity: 0.52
+        }
+
+        // Deep warm tint overlay to enhance text readability while letting warm album tones shine through
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.04, 0.45) }
+                GradientStop { position: 0.45; color: Qt.rgba(0.01, 0.01, 0.02, 0.60) }
+                GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.78) }
+            }
+        }
     }
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0.05, 0.05, 0.08, 0.35)
+        color: "transparent"
         border.color: Qt.rgba(1, 1, 1, 0.06)
         border.width: 1
         radius: Theme.radiusCard
@@ -1467,126 +1496,164 @@ Rectangle {
                 }
             }
 
-            // Right: Amberol Synced Lyrics Flow
-            Rectangle {
+            // Right: Amberol Synced Lyrics Flow (Seamless Full-Height SimpMusic Style)
+            Item {
                 id: lyricsCard
                 visible: !root.isCompact || root.compactTab === "lyrics"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumWidth: root.isCompact ? 200 : 300
-                radius: 14
-                color: Qt.rgba(1.0, 1.0, 1.0, 0.035)
-                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
-                border.width: 1
                 clip: true
 
-                Component.onCompleted: console.log("LYRICS CARD COMPLETED: width=", width, "height=", height, "x=", x, "y=", y)
-                onWidthChanged: console.log("LYRICS CARD WIDTH:", width, "x:", x)
-                onHeightChanged: console.log("LYRICS CARD HEIGHT:", height, "y:", y)
-
-                ColumnLayout {
+                ListView {
+                    id: lyricsView
                     anchors.fill: parent
-                    anchors.margins: 20
-                    spacing: 12
+                    anchors.leftMargin: root.isCompact ? 8 : 16
+                    anchors.rightMargin: root.isCompact ? 8 : 16
+                    clip: false
+                    spacing: 20
+                    topMargin: height * 0.40
+                    bottomMargin: height * 0.50
+                    currentIndex: root.currentLyricIndex
+                    preferredHighlightBegin: height * 0.42
+                    preferredHighlightEnd: height * 0.50
+                    highlightRangeMode: ListView.ApplyRange
+                    highlightMoveDuration: 350
+                    model: root.activeLyrics
 
-                    // Lyrics Header
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Text {
-                            text: "LYRICS"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: Theme.textSecondary
-                            font.letterSpacing: 1.5
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: root.activeLyrics.length > 0 ? (root.activeLyrics.length + " lines synced") : "Searching..."
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            color: Theme.textMuted
-                        }
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
                     }
 
-                    // Synced Lyrics ListView
-                    ListView {
-                        id: lyricsView
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: 16
-                        bottomMargin: 100
-                        model: root.activeLyrics
+                    delegate: Item {
+                        id: lyricRow
+                        width: Math.max(100, lyricsView.width - 24)
+                        height: Math.max(48, lyricContentItem.implicitHeight + 16)
 
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
+                        readonly property int dist: Math.abs(index - root.currentLyricIndex)
+                        readonly property bool isCurrent: dist === 0
+                        readonly property real nextTime: (index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (modelData.time + 6.0)
+                        readonly property real duration: Math.max(0.6, nextTime - modelData.time)
+                        readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
+
+                        // SimpMusic & Apple Music Parametric Formulas
+                        // Farther lines dissolve into deep bokeh blur
+                        readonly property real targetBlur: isCurrent ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
+                        readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))
+                        readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
+
+                        opacity: lineHover.hovered ? 0.95 : targetOpacity
+                        scale: (isCurrent || lineHover.hovered) ? 1.0 : 0.97
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        Behavior on scale { NumberAnimation { duration: 200 } }
+
+                        HoverHandler { id: lineHover }
+
+                        layer.enabled: !lineHover.hovered && targetBlur > 0.01 && dist <= 4
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blur: lyricRow.targetBlur
+                            blurMax: 48
                         }
 
-                        delegate: Item {
-                            id: lyricRow
-                            width: Math.max(100, lyricsView.width - 24)
-                            height: Math.max(38, lyricTxt.paintedHeight + 16)
-
-                            property bool isCurrentLine: index === root.currentLyricIndex
-
-                            HoverHandler { id: lineHover }
-
-                            // Left accent green bar for active line
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.topMargin: 4
-                                anchors.bottomMargin: 4
-                                width: 3
-                                radius: 1.5
-                                color: Theme.accentGreen
-                                visible: lyricRow.isCurrentLine
+                        // Function to format sequential word-by-word karaoke text
+                        function formatKaraokeWords(rawText, progress) {
+                            if (!rawText) return "";
+                            var words = rawText.trim().split(/\s+/);
+                            if (words.length === 0) return "";
+                            if (words.length === 1) {
+                                return progress >= 0.5
+                                    ? "<span style='color:#ffffff; font-weight:bold;'>" + words[0] + "</span>"
+                                    : "<span style='color:#757a88; font-weight:bold;'>" + words[0] + "</span>";
                             }
 
+                            var total = words.length;
+                            var currentFloat = progress * total;
+                            var activeIdx = Math.min(total - 1, Math.floor(currentFloat));
+                            var fraction = Math.max(0.0, Math.min(1.0, currentFloat - activeIdx));
+
+                            var parts = [];
+                            for (var i = 0; i < total; i++) {
+                                var w = words[i];
+                                if (i < activeIdx) {
+                                    // Already sung: pure bright white
+                                    parts.push("<span style='color:#ffffff; font-weight:bold;'>" + w + "</span>");
+                                } else if (i === activeIdx) {
+                                    // Currently singing word: smooth transition from dimmed gray to pure white
+                                    var r = Math.round(117 + (255 - 117) * fraction);
+                                    var g = Math.round(122 + (255 - 122) * fraction);
+                                    var b = Math.round(136 + (255 - 136) * fraction);
+                                    var hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                                    parts.push("<span style='color:" + hex + "; font-weight:bold;'>" + w + "</span>");
+                                } else {
+                                    // Unsung: dimmed elegant gray
+                                    parts.push("<span style='color:#757a88; font-weight:bold;'>" + w + "</span>");
+                                }
+                            }
+                            return parts.join(" ");
+                        }
+
+                        Item {
+                            id: lyricContentItem
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            implicitHeight: lyricRow.isCurrent ? activeTxt.paintedHeight : nonActiveTxt.paintedHeight
+
+                            // 1. Active word-by-word karaoke line
                             Text {
-                                id: lyricTxt
+                                id: activeTxt
+                                visible: lyricRow.isCurrent
                                 anchors.left: parent.left
-                                anchors.leftMargin: lyricRow.isCurrentLine ? 16 : 8
                                 anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
+                                textFormat: Text.RichText
+                                text: lyricRow.formatKaraokeWords(modelData.text || "", lyricRow.lineProgress)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 28
+                                font.weight: Font.Bold
+                                wrapMode: Text.Wrap
+                                lineHeight: 1.28
+                            }
+
+                            // 2. Non-active blurred/dimmed lines
+                            Text {
+                                id: nonActiveTxt
+                                visible: !lyricRow.isCurrent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
                                 text: modelData.text || ""
                                 font.family: Theme.fontFamily
-                                font.pixelSize: lyricRow.isCurrentLine ? 24 : 16
-                                font.bold: lyricRow.isCurrentLine
-                                color: lyricRow.isCurrentLine ? "#ffffff" : (lineHover.hovered ? "#ffffff" : "#888888")
+                                font.pixelSize: lyricRow.targetFontSize
+                                font.weight: Font.Bold
+                                color: lineHover.hovered ? "#ffffff" : "#d8dce8"
                                 wrapMode: Text.Wrap
-                                Behavior on font.pixelSize { NumberAnimation { duration: 120 } }
-                                Behavior on color { ColorAnimation { duration: 100 } }
+                                lineHeight: 1.28
+                                Behavior on font.pixelSize { NumberAnimation { duration: 180 } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
                             }
+                        }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (modelData && modelData.time !== undefined) {
-                                        root.seekRequested(modelData.time);
-                                        root.currentLyricIndex = index;
-                                        lyricsView.positionViewAtIndex(index, ListView.Center);
-                                    }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (modelData && modelData.time !== undefined) {
+                                    root.seekRequested(modelData.time);
+                                    root.currentLyricIndex = index;
+                                    lyricsView.positionViewAtIndex(index, ListView.Center);
                                 }
                             }
                         }
+                    }
 
-                        // Empty Lyrics Fallback
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Đang tải hoặc không có lời bài hát (Synced Lyrics) cho bài này."
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 14
-                            color: Theme.textSecondary
-                            visible: root.activeLyrics.length === 0
-                        }
+                    // Empty Lyrics Fallback
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Đang tải hoặc không có lời bài hát (Synced Lyrics) cho bài này."
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        color: Theme.textSecondary
+                        visible: root.activeLyrics.length === 0
                     }
                 }
             }
