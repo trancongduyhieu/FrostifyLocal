@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
+import QtQuick.Effects
 import "."
 
 Rectangle {
@@ -256,32 +257,72 @@ Rectangle {
                                     Layout.fillWidth: true
                                     height: 56
                                     radius: 6
-                                    color: rowMouse.containsMouse ? "#282828" : "#1a1a1a"
+                                    color: rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                                    border.color: rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : Qt.rgba(1.0, 1.0, 1.0, 0.05)
+                                    border.width: 1
                                     Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
 
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 6
                                         spacing: 12
 
-                                        Rectangle {
+                                        Item {
                                             width: 44
                                             height: 44
-                                            radius: 4
-                                            color: "#282828"
-                                            clip: true
 
-                                            Image {
+                                            Rectangle {
+                                                id: rowMask
                                                 anchors.fill: parent
-                                                source: modelData.image || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
+                                                radius: 6
+                                                color: "#ffffff"
+                                                visible: false
+                                                layer.enabled: true
+                                            }
+
+                                            Item {
+                                                anchors.fill: parent
+                                                layer.enabled: true
+                                                layer.effect: MultiEffect {
+                                                    maskEnabled: true
+                                                    maskSource: rowMask
+                                                    autoPaddingEnabled: false
+                                                }
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    color: "#202024"
+                                                }
+
+                                                Image {
+                                                    id: rowImg
+                                                    anchors.fill: parent
+                                                    source: modelData.image || ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                                    transformOrigin: Item.Center
+                                                    asynchronous: true
+                                                    visible: status === Image.Ready
+                                                }
+                                            }
+
+                                            // 1px Hairline Border Overlay on top of image
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 6
+                                                color: "transparent"
+                                                border.color: rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                                                border.width: 1
+                                                z: 1
                                             }
 
                                             Rectangle {
                                                 anchors.fill: parent
+                                                radius: 6
                                                 color: Qt.rgba(0, 0, 0, 0.4)
                                                 visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
+                                                z: 2
 
                                                 AppIcon {
                                                     anchors.centerIn: parent
@@ -377,31 +418,70 @@ Rectangle {
                                 Repeater {
                                     model: modelData.type === "card_carousel" ? modelData.items : []
 
-                                    Rectangle {
+                                     Rectangle {
                                         id: cCard
                                         width: 160
                                         height: 230
                                         radius: Theme.radiusCard
-                                        color: cardMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
+                                        color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+                                        border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
+                                        border.width: 1
                                         Behavior on color { ColorAnimation { duration: 120 } }
+                                        Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                         ColumnLayout {
                                             anchors.fill: parent
                                             anchors.margins: 10
                                             spacing: 8
 
-                                            Rectangle {
+                                            Item {
                                                 Layout.fillWidth: true
                                                 Layout.preferredHeight: width
-                                                radius: 6
-                                                color: "#282828"
-                                                clip: true
 
-                                                Image {
+                                                Rectangle {
+                                                    id: cCoverMask
                                                     anchors.fill: parent
-                                                    source: modelData.image || ""
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    asynchronous: true
+                                                    radius: 8
+                                                    color: "#ffffff"
+                                                    visible: false
+                                                    layer.enabled: true
+                                                }
+
+                                                Item {
+                                                    anchors.fill: parent
+                                                    layer.enabled: true
+                                                    layer.effect: MultiEffect {
+                                                        maskEnabled: true
+                                                        maskSource: cCoverMask
+                                                        autoPaddingEnabled: false
+                                                    }
+
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        color: "#202024"
+                                                    }
+
+                                                    Image {
+                                                        id: cCoverImg
+                                                        anchors.fill: parent
+                                                        source: modelData.image || ""
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                                        transformOrigin: Item.Center
+                                                        asynchronous: true
+                                                        visible: status === Image.Ready
+                                                    }
+                                                }
+
+                                                // 1px Hairline Border Overlay on top of image
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: 8
+                                                    color: "transparent"
+                                                    border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                                                    border.width: 1
+                                                    z: 1
+                                                    Behavior on border.color { ColorAnimation { duration: 120 } }
                                                 }
 
                                                 Rectangle {
@@ -413,6 +493,7 @@ Rectangle {
                                                     anchors.bottom: parent.bottom
                                                     anchors.margins: 6
                                                     visible: cardMouse.containsMouse
+                                                    z: 2
 
                                                     AppIcon {
                                                         anchors.centerIn: parent

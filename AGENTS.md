@@ -328,7 +328,70 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *Đồng bộ trong suốt các view con*:
         - `NavSidebar`: `color: Qt.rgba(0.06, 0.07, 0.09, 0.42)` + viền phân tách `1px Qt.rgba(1, 1, 1, 0.05)`.
         - `HomeFeedView` & `MainTrackGrid`: `color: "transparent"` cho phép ánh sáng mờ từ hình nền xuyên qua liền mạch giữa các card bài hát.
-        - `AmberolDetailView`: `color: Qt.rgba(0.06, 0.06, 0.08, 0.55)` + viền `1px Qt.rgba(1, 1, 1, 0.05)`.
+26. **Hệ Thống Hairline Border Đồng Tâm & Thuật Toán Khử Black Bar Video (Hairline Borders & Letterbox Auto-Zoom Suite - Item 26)**:
+    - **Vấn Đề Kỹ Thuật & Hiện Tượng Lỗi Cũ (Root Cause Analysis)**:
+      - *Lỗi 4 góc đen ở bài hát (ảnh 1)*: Thumbnail video ca nhạc từ YouTube (`hq720.jpg`) có tỷ lệ 16:9 (800x450 px) và thường bị đúc cứng hai dải đen letterbox (cinematic black bars) ở đỉnh và đáy (chiếm ~13% mỗi đầu). Khi đưa vào container hình vuông với `fillMode: Image.PreserveAspectCrop`, Qt Quick chỉ scale theo chiều cao (giữ nguyên dải đen ở đỉnh và đáy) và cắt hai bên hông. Do đó, khi bo góc tròn 8px, 4 góc của card bị dải đen letterbox đè lên, tạo cảm giác như lỗi render loang lổ.
+      - *Lỗi Queue và Playlist thiếu border (ảnh 2, 3)*: Ở phiên bản trước, các delegate `plItem` và `qItem` trong `NavSidebar.qml` chưa được gán border (`border.width: 0`), thumbnail chỉ dùng `Rectangle { clip: true }` (vốn không bo góc được ảnh con trong Qt Quick), và ảnh con `Image { anchors.fill: parent }` đè lên hoàn toàn viền của Rectangle cha.
+      - *Vệt tròn ở góc playlist Gentle Piano (ảnh 3)*: Đây thực chất là logo tròn chính thức của Spotify được nhúng sẵn ở góc trên bên trái của ảnh bìa playlist gốc từ Spotify, không phải lỗi render mã nguồn.
+    - **Giải Pháp Kiến Trúc & Triển Khai Kỹ Thuật (Architecture & Implementation)**:
+      - *Thuật Toán Tự Động Phóng Zoom Khử Letterbox (Letterbox Auto-Zoom)*:
+        - Áp dụng trên toàn bộ ảnh thumbnail (`HomeFeedView.qml`, `TrackCard.qml`, `NavSidebar.qml`):
+          ```qml
+          scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+          transformOrigin: Item.Center
+          ```
+        - Đối với ảnh vuông chuẩn (album audio, tỷ lệ ~1.0): `scale` giữ nguyên 1.0 (sắc nét 100%, không suy hao chất lượng).
+        - Đối với thumbnail video YouTube 16:9 (tỷ lệ > 1.3): tự động scale 1.34x từ tâm, đẩy toàn bộ dải đen letterbox và logo vevo ra khỏi khung hình vuông, biến thumbnail video thành ảnh chân dung album nghệ thuật hoàn hảo không tì vết.
+      - *Quy Chuẩn Masking Đa Tầng MultiEffect & Overlay Hairline Border*:
+        - Để bo góc ảnh chính xác và viền 1px không bao giờ bị ảnh đè:
+          ```qml
+          Item {
+              Layout.fillWidth: true
+              Layout.preferredHeight: width
+
+              // 1. Mặt nạ trắng (BẮT BUỘC màu #ffffff để kênh luminance/alpha đạt 1.0)
+              Rectangle {
+                  id: coverMask
+                  anchors.fill: parent
+                  radius: 8
+                  color: "#ffffff"
+                  visible: false
+                  layer.enabled: true
+              }
+
+              // 2. Container ảnh được mask qua MultiEffect
+              Item {
+                  anchors.fill: parent
+                  layer.enabled: true
+                  layer.effect: MultiEffect {
+                      maskEnabled: true
+                      maskSource: coverMask
+                      autoPaddingEnabled: false
+                  }
+                  Rectangle { anchors.fill: parent; color: "#202024" }
+                  Image {
+                      anchors.fill: parent
+                      fillMode: Image.PreserveAspectCrop
+                      scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                      transformOrigin: Item.Center
+                  }
+              }
+
+              // 3. Viền Hairline 1px phủ lên trên cùng (z: 1)
+              Rectangle {
+                  anchors.fill: parent
+                  radius: 8
+                  color: "transparent"
+                  border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                  border.width: 1
+                  z: 1
+              }
+          }
+          ```
+      - *Thống Nhất Phân Cấp Viền (Border Tokens)*:
+        - **Song Card (`TrackCard` & `cCard`)**: Container có viền hover `Qt.rgba(1, 1, 1, 0.12)`, ảnh bìa có viền tĩnh `Qt.rgba(1, 1, 1, 0.16)` và viền hover `Qt.rgba(1, 1, 1, 0.40)`.
+        - **Playlist Item (`plItem`)**: Container radius 8px, viền thường `0.04`, hover `0.12`, selected `0.20`. Thumbnail 38x38 radius 6px có viền hairline `0.16` (hover `0.35`).
+        - **Queue Item (`qItem`)**: Container radius 8px, viền thường `0.04`, hover `0.12`, active playing `Theme.accentGreen`. Thumbnail 32x32 radius 6px có viền hairline `0.16` (hover `0.35`).
 
 ---
 

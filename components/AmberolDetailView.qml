@@ -7,7 +7,7 @@ import "."
 
 Rectangle {
     id: root
-    color: "#121212"
+    color: "transparent"
     radius: Theme.radiusCard
     Layout.fillHeight: true
     implicitWidth: 360
@@ -319,8 +319,8 @@ Rectangle {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0.06, 0.06, 0.08, 0.55)
-        border.color: Qt.rgba(1, 1, 1, 0.05)
+        color: Qt.rgba(0.05, 0.05, 0.08, 0.35)
+        border.color: Qt.rgba(1, 1, 1, 0.06)
         border.width: 1
         radius: Theme.radiusCard
     }
@@ -456,7 +456,9 @@ Rectangle {
                 width: 52
                 height: 52
                 radius: 8
-                color: "#181818"
+                color: Qt.rgba(1, 1, 1, 0.05)
+                border.color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 1
                 clip: true
 
                 Image {
@@ -1473,8 +1475,8 @@ Rectangle {
                 Layout.fillHeight: true
                 Layout.minimumWidth: root.isCompact ? 200 : 300
                 radius: 14
-                color: "#161618"
-                border.color: "#28282c"
+                color: Qt.rgba(1.0, 1.0, 1.0, 0.035)
+                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
                 border.width: 1
                 clip: true
 

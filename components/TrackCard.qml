@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import "."
 
 Rectangle {
@@ -7,9 +8,12 @@ Rectangle {
     width: 176
     height: 250
     radius: Theme.radiusCard
-    color: cardMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
+    color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+    border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
+    border.width: 1
 
     Behavior on color { ColorAnimation { duration: 120 } }
+    Behavior on border.color { ColorAnimation { duration: 120 } }
 
     property var track: null
     property bool isPlaying: false
@@ -40,47 +44,81 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 12
+        anchors.margins: 10
+        spacing: 10
 
         // Album Art Image Container
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             Layout.preferredHeight: width
-            radius: 6
-            color: "#282828"
-            clip: true
 
-            Image {
-                id: coverImg
+            Rectangle {
+                id: trackCoverMask
                 anchors.fill: parent
-                source: {
-                    if (!root.track || !root.track.image) return "";
-                    var s = root.track.image;
-                    return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                }
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                visible: status === Image.Ready
+                radius: 8
+                color: "#ffffff"
+                visible: false
+                layer.enabled: true
             }
 
-            // Fallback gradient cover if image fails or missing
-            Rectangle {
+            Item {
                 anchors.fill: parent
-                visible: !coverImg.visible
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#333333" }
-                    GradientStop { position: 1.0; color: "#181818" }
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: trackCoverMask
+                    autoPaddingEnabled: false
                 }
 
-                Text {
-                    anchors.centerIn: parent
-                    text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 42
-                    font.bold: true
-                    color: "#555555"
+                Rectangle {
+                    anchors.fill: parent
+                    color: "#202024"
                 }
+
+                Image {
+                    id: coverImg
+                    anchors.fill: parent
+                    source: {
+                        if (!root.track || !root.track.image) return "";
+                        var s = root.track.image;
+                        return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                    }
+                    fillMode: Image.PreserveAspectCrop
+                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                    transformOrigin: Item.Center
+                    asynchronous: true
+                    visible: status === Image.Ready
+                }
+
+                // Fallback gradient cover if image fails or missing
+                Rectangle {
+                    anchors.fill: parent
+                    visible: !coverImg.visible
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#333333" }
+                        GradientStop { position: 1.0; color: "#181818" }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 42
+                        font.bold: true
+                        color: "#555555"
+                    }
+                }
+            }
+
+            // 1px Hairline Border Overlay on top of image
+            Rectangle {
+                anchors.fill: parent
+                radius: 8
+                color: "transparent"
+                border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                border.width: 1
+                z: 1
+                Behavior on border.color { ColorAnimation { duration: 120 } }
             }
 
             // Nutsty Floating Green Play Button on Hover

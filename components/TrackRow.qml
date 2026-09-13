@@ -5,9 +5,12 @@ Rectangle {
     id: row
     height: 48
     radius: 8
-    color: isCurrentTrack ? Qt.rgba(168/255, 85/255, 247/255, 0.20) : (mouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
-    border.color: isCurrentTrack ? "#a855f7" : "transparent"
+    color: isCurrentTrack ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
+    border.color: isCurrentTrack ? Theme.accentGreen : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent")
     border.width: 1
+
+    Behavior on color { ColorAnimation { duration: 100 } }
+    Behavior on border.color { ColorAnimation { duration: 100 } }
 
     property int indexNumber: 1
     property string trackTitle: ""

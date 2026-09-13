@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
+import QtQuick.Effects
 import "."
 
 Rectangle {
@@ -213,7 +214,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Theme.border
+            color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
         }
 
         // 2. Interactive Segmented Tab Switcher [ Playlists | Queue ]
@@ -221,7 +222,9 @@ Rectangle {
             Layout.fillWidth: true
             height: 36
             radius: 8
-            color: "#181818"
+            color: Qt.rgba(1.0, 1.0, 1.0, 0.04)
+            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
+            border.width: 1
 
             RowLayout {
                 anchors.fill: parent
@@ -233,8 +236,11 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     radius: 6
-                    color: root.sidebarTab === "playlists" ? "#282828" : (plTabH.hovered ? "#222222" : "transparent")
+                    color: root.sidebarTab === "playlists" ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : (plTabH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : "transparent")
+                    border.color: root.sidebarTab === "playlists" ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : "transparent"
+                    border.width: 1
                     Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on border.color { ColorAnimation { duration: 100 } }
 
                     HoverHandler { id: plTabH }
 
@@ -271,8 +277,11 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     radius: 6
-                    color: root.sidebarTab === "queue" ? "#282828" : (qTabH.hovered ? "#222222" : "transparent")
+                    color: root.sidebarTab === "queue" ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : (qTabH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : "transparent")
+                    border.color: root.sidebarTab === "queue" ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : "transparent"
+                    border.width: 1
                     Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on border.color { ColorAnimation { duration: 100 } }
 
                     HoverHandler { id: qTabH }
 
@@ -370,15 +379,19 @@ Rectangle {
                             id: plItem
                             width: plList.width
                             height: 52
-                            radius: 6
+                            radius: 8
 
                             readonly property bool isCustom: !!modelData.isCustom || String(modelData.id || "").startsWith("custom_pl_")
                             readonly property bool isLocal: isCustom || !!modelData.isLocal || !modelData.playlistId
                             readonly property bool isSelected: (modelData.id && modelData.id === root.activePlaylistId) || (modelData.playlistId && modelData.playlistId === root.activePlaylistId)
                             readonly property bool isCurrentlyPlaying: (modelData.id && modelData.id === root.playingPlaylistId) || (modelData.playlistId && modelData.playlistId === root.playingPlaylistId)
 
-                            color: isSelected ? Theme.bgHighlight : (plH.hovered ? Theme.bgCardHover : "transparent")
+                            color: isSelected ? Qt.rgba(1.0, 1.0, 1.0, 0.09) : (plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
+                            border.color: isSelected ? Qt.rgba(1.0, 1.0, 1.0, 0.20) : (plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
+                            border.width: 1
+
                             Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
 
                             HoverHandler { id: plH }
 
@@ -388,31 +401,63 @@ Rectangle {
                                 anchors.rightMargin: 8
                                 spacing: 10
 
-                                // 38x38 Thumbnail with rounded corners
-                                Rectangle {
+                                // 38x38 Thumbnail with rounded corners and hairline border
+                                Item {
                                     Layout.preferredWidth: 38
                                     Layout.preferredHeight: 38
-                                    radius: 4
-                                    color: "#242424"
-                                    clip: true
 
-                                    Image {
+                                    Rectangle {
+                                        id: plThumbMask
                                         anchors.fill: parent
-                                        source: modelData.image || modelData.thumbnail || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        visible: !!source
+                                        radius: 6
+                                        color: "#ffffff"
+                                        visible: false
+                                        layer.enabled: true
                                     }
 
-                                    // Local Collection Letter Avatar Fallback
-                                    Text {
-                                        anchors.centerIn: parent
-                                        visible: !modelData.image && !modelData.thumbnail
-                                        text: (modelData.name || modelData.title || "P").charAt(0).toUpperCase()
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 15
-                                        font.bold: true
-                                        color: "#ffffff"
+                                    Item {
+                                        anchors.fill: parent
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            maskEnabled: true
+                                            maskSource: plThumbMask
+                                            autoPaddingEnabled: false
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#202024"
+                                        }
+
+                                        Image {
+                                            anchors.fill: parent
+                                            source: modelData.image || modelData.thumbnail || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            visible: !!source
+                                        }
+
+                                        // Local Collection Letter Avatar Fallback
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: !modelData.image && !modelData.thumbnail
+                                            text: (modelData.name || modelData.title || "P").charAt(0).toUpperCase()
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 15
+                                            font.bold: true
+                                            color: "#ffffff"
+                                        }
+                                    }
+
+                                    // 1px Hairline Border Overlay on top of thumbnail
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        color: "transparent"
+                                        border.color: plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                                        border.width: 1
+                                        z: 1
+                                        Behavior on border.color { ColorAnimation { duration: 100 } }
                                     }
                                 }
 
@@ -624,7 +669,7 @@ Rectangle {
                             id: qItem
                             width: qList.width
                             height: 48
-                            radius: 6
+                            radius: 8
 
                             readonly property bool isCurrent: Boolean(root.currentTrack && modelData && (
                                 (modelData.videoId && root.currentTrack.videoId && modelData.videoId === root.currentTrack.videoId) ||
@@ -632,8 +677,12 @@ Rectangle {
                                 (modelData.id && root.currentTrack.id && modelData.id === root.currentTrack.id)
                             ))
 
-                            color: isCurrent ? Theme.bgHighlight : (qRowH.hovered ? Theme.bgCardHover : "transparent")
+                            color: isCurrent ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
+                            border.color: isCurrent ? Theme.accentGreen : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
+                            border.width: 1
+
                             Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
 
                             HoverHandler { id: qRowH }
 
@@ -644,60 +693,95 @@ Rectangle {
                                 spacing: 8
 
                                 // Track Number or Miniature Cover
-                                Rectangle {
+                                Item {
                                     Layout.preferredWidth: 32
                                     Layout.preferredHeight: 32
-                                    radius: 4
-                                    color: "#242424"
-                                    clip: true
 
-                                    Image {
-                                        anchors.fill: parent
-                                        source: modelData.image || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        visible: !!source
-                                    }
-
-                                    // Fallback index number
-                                    Text {
-                                        anchors.centerIn: parent
-                                        visible: !modelData.image
-                                        text: (index + 1) + ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: qItem.isCurrent ? Theme.accentGreen : Theme.textMuted
-                                    }
-
-                                    // Overlay equalizer if current and playing
                                     Rectangle {
+                                        id: qThumbMask
                                         anchors.fill: parent
-                                        color: Qt.rgba(0, 0, 0, 0.6)
-                                        visible: qItem.isCurrent && root.isPlaying
+                                        radius: 6
+                                        color: "#ffffff"
+                                        visible: false
+                                        layer.enabled: true
+                                    }
 
-                                        Row {
+                                    Item {
+                                        anchors.fill: parent
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            maskEnabled: true
+                                            maskSource: qThumbMask
+                                            autoPaddingEnabled: false
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#202024"
+                                        }
+
+                                        Image {
+                                            id: qCoverImg
+                                            anchors.fill: parent
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                            transformOrigin: Item.Center
+                                            asynchronous: true
+                                            visible: !!source
+                                        }
+
+                                        // Fallback index number
+                                        Text {
                                             anchors.centerIn: parent
-                                            spacing: 2
+                                            visible: !modelData.image
+                                            text: (index + 1) + ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: qItem.isCurrent ? Theme.accentGreen : Theme.textMuted
+                                        }
 
-                                            Repeater {
-                                                model: 3
-                                                Rectangle {
-                                                    width: 2.5
-                                                    height: index === 0 ? 8 : (index === 1 ? 12 : 6)
-                                                    radius: 1
-                                                    color: Theme.accentGreen
-                                                    anchors.bottom: parent.bottom
+                                        // Overlay equalizer if current and playing
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: Qt.rgba(0, 0, 0, 0.6)
+                                            visible: qItem.isCurrent && root.isPlaying
 
-                                                    SequentialAnimation on height {
-                                                        running: qItem.isCurrent && root.isPlaying
-                                                        loops: Animation.Infinite
-                                                        NumberAnimation { to: index === 0 ? 12 : (index === 1 ? 6 : 11); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
-                                                        NumberAnimation { to: index === 0 ? 5 : (index === 1 ? 12 : 4); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
+                                            Row {
+                                                anchors.centerIn: parent
+                                                spacing: 2
+
+                                                Repeater {
+                                                    model: 3
+                                                    Rectangle {
+                                                        width: 2.5
+                                                        height: index === 0 ? 8 : (index === 1 ? 12 : 6)
+                                                        radius: 1
+                                                        color: Theme.accentGreen
+                                                        anchors.bottom: parent.bottom
+
+                                                        SequentialAnimation on height {
+                                                            running: qItem.isCurrent && root.isPlaying
+                                                            loops: Animation.Infinite
+                                                            NumberAnimation { to: index === 0 ? 12 : (index === 1 ? 6 : 11); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
+                                                            NumberAnimation { to: index === 0 ? 5 : (index === 1 ? 12 : 4); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+
+                                    // 1px Hairline Border Overlay on top of thumbnail
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        color: "transparent"
+                                        border.color: qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                                        border.width: 1
+                                        z: 1
+                                        Behavior on border.color { ColorAnimation { duration: 100 } }
                                     }
                                 }
 
