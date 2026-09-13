@@ -812,7 +812,7 @@ Scope {
         id: masterContainer
         anchors.fill: parent
         radius: (win.maximized || win.fullscreen) ? 0 : 16
-        color: "#0a0b0e"
+        color: Qt.rgba(0.04, 0.04, 0.06, 0.74)
         border.color: (win.maximized || win.fullscreen) ? "transparent" : Qt.rgba(1.0, 1.0, 1.0, 0.08)
         border.width: (win.maximized || win.fullscreen) ? 0 : 1
         clip: true
@@ -825,6 +825,12 @@ Scope {
             visible: opacity > 0.01
             opacity: (win.isNowPlayingOpen && win.currentTrack) ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+
+            // Solid dark backdrop covering wallpaper ONLY when Now Playing is open!
+            Rectangle {
+                anchors.fill: parent
+                color: "#0a0b0e"
+            }
 
             Image {
                 id: globalAmbientImg

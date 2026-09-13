@@ -39,8 +39,10 @@ Rectangle {
         contentWidth: parent.width
         contentHeight: contentCol.implicitHeight + 110
         boundsBehavior: Flickable.StopAtBounds
-        onContentYChanged: console.log("[Flickable] contentY changed to:", contentY)
-        Component.onCompleted: contentY = 320
+        flickableDirection: Flickable.VerticalFlick
+        pixelAligned: true
+        maximumFlickVelocity: 6000
+        flickDeceleration: 1500
 
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
@@ -278,44 +280,22 @@ Rectangle {
                                         anchors.margins: 6
                                         spacing: 12
 
-                                        Item {
+                                        Rectangle {
                                             width: 44
                                             height: 44
+                                            radius: 6
+                                            color: "#202024"
+                                            clip: true
 
-                                            Rectangle {
-                                                id: rowMask
+                                            Image {
+                                                id: rowImg
                                                 anchors.fill: parent
-                                                radius: 5.5
-                                                color: "#ffffff"
-                                                visible: false
-                                                layer.enabled: true
-                                            }
-
-                                            Item {
-                                                anchors.fill: parent
-                                                layer.enabled: true
-                                                layer.effect: MultiEffect {
-                                                    maskEnabled: true
-                                                    maskSource: rowMask
-                                                    autoPaddingEnabled: false
-                                                }
-
-                                                Rectangle {
-                                                    anchors.fill: parent
-                                                    color: "#202024"
-                                                    visible: !rowImg.visible || rowImg.status !== Image.Ready
-                                                }
-
-                                                Image {
-                                                    id: rowImg
-                                                    anchors.fill: parent
-                                                    source: modelData.image || ""
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                    transformOrigin: Item.Center
-                                                    asynchronous: true
-                                                    visible: status === Image.Ready
-                                                }
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                                transformOrigin: Item.Center
+                                                asynchronous: true
+                                                visible: status === Image.Ready
                                             }
 
                                             // 1px Hairline Border Overlay on top of image
@@ -413,6 +393,7 @@ Rectangle {
                             contentWidth: cardRow.implicitWidth
                             boundsBehavior: Flickable.StopAtBounds
                             flickableDirection: Flickable.HorizontalFlick
+                            pixelAligned: true
                             clip: true
 
                             NumberAnimation on contentX {
@@ -445,50 +426,28 @@ Rectangle {
                                             anchors.margins: 10
                                             spacing: 8
 
-                                            Item {
+                                            Rectangle {
                                                 Layout.fillWidth: true
                                                 Layout.preferredHeight: width
+                                                radius: 7
+                                                color: "#202024"
+                                                clip: true
 
-                                                Rectangle {
-                                                    id: cCoverMask
+                                                Image {
+                                                    id: cCoverImg
                                                     anchors.fill: parent
-                                                    radius: 7
-                                                    color: "#ffffff"
-                                                    visible: false
-                                                    layer.enabled: true
-                                                }
-
-                                                Item {
-                                                    anchors.fill: parent
-                                                    layer.enabled: true
-                                                    layer.effect: MultiEffect {
-                                                        maskEnabled: true
-                                                        maskSource: cCoverMask
-                                                        autoPaddingEnabled: false
-                                                    }
-
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        color: "#202024"
-                                                        visible: !cCoverImg.visible || cCoverImg.status !== Image.Ready
-                                                    }
-
-                                                    Image {
-                                                        id: cCoverImg
-                                                        anchors.fill: parent
-                                                        source: modelData.image || ""
-                                                        fillMode: Image.PreserveAspectCrop
-                                                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                        transformOrigin: Item.Center
-                                                        asynchronous: true
-                                                        visible: status === Image.Ready
-                                                    }
+                                                    source: modelData.image || ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                                    transformOrigin: Item.Center
+                                                    asynchronous: true
+                                                    visible: status === Image.Ready
                                                 }
 
                                                 // 1px Hairline Border Overlay on top of image
                                                 Rectangle {
                                                     anchors.fill: parent
-                                                    radius: 8
+                                                    radius: 7
                                                     color: "transparent"
                                                     border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
                                                     border.width: 1

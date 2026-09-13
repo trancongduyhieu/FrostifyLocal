@@ -178,6 +178,9 @@ def scan_library():
                 except Exception:
                     mtime = 0
 
+                file_meta = get_file_metadata(full_path)
+                dur = file_meta.get("duration", "--:--")
+
                 tracks.append({
                     "id": len(tracks) + 1,
                     "title": title.strip(),
@@ -186,7 +189,7 @@ def scan_library():
                     "source": "Nutsty",
                     "path": full_path,
                     "filename": f,
-                    "duration": "--:--",
+                    "duration": dur,
                     "image": thumb,
                     "mtime": mtime
                 })

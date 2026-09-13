@@ -53,6 +53,29 @@ Item {
         updateActiveLyric(false);
     }
 
+    Timer {
+        id: userScrollTimer
+        interval: 3500
+        repeat: false
+    }
+
+    function getHighResImage(url) {
+        if (!url || typeof url !== "string") return "";
+        if (url.indexOf("googleusercontent.com") !== -1 || url.indexOf("ggpht.com") !== -1) {
+            if (/=w\d+-h\d+/.test(url)) {
+                return url.replace(/=w\d+-h\d+[^=]*$/, "=w1080-h1080-l90-rj");
+            } else if (url.indexOf("=") !== -1) {
+                return url.split("=")[0] + "=w1080-h1080-l90-rj";
+            } else {
+                return url + "=w1080-h1080-l90-rj";
+            }
+        }
+        if (url.indexOf("i.ytimg.com") !== -1) {
+            return url.replace(/(hqdefault|mqdefault|sddefault|default)\.jpg/, "maxresdefault.jpg");
+        }
+        return url;
+    }
+
     function fetchLyrics() {
         activeLyrics = [];
         currentLyricIndex = -1;
@@ -142,7 +165,7 @@ Item {
         if (found !== -1) {
             currentLyricIndex = found;
             lyricsView.currentIndex = found;
-            if (forceScroll || lyricsView.moving === false) {
+            if (forceScroll || (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running)) {
                 lyricsView.positionViewAtIndex(found, ListView.Center);
             }
         }
@@ -416,11 +439,16 @@ Item {
                         Image {
                             id: bigCoverImg
                             anchors.fill: parent
-                            source: root.track && root.track.image ? root.track.image : ""
+                            source: root.track && root.track.image ? root.getHighResImage(root.track.image) : ""
                             fillMode: Image.PreserveAspectCrop
                             scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                             transformOrigin: Item.Center
                             asynchronous: true
+                            onStatusChanged: {
+                                if (status === Image.Error && root.track && root.track.image && source !== root.track.image) {
+                                    source = root.track.image;
+                                }
+                            }
                         }
 
                         Rectangle {
@@ -763,13 +791,6 @@ Item {
                                     elide: Text.ElideRight
                                 }
                             }
-
-                            Text {
-                                text: "(" + (root.queueTracks ? root.queueTracks.length : 0) + " bài)"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                color: Theme.textSecondary
-                            }
                         }
 
                         ListView {
@@ -865,7 +886,15 @@ Item {
                                     }
 
                                     Text {
-                                        text: modelData.duration || ""
+                                        text: {
+                                            if (modelData && modelData.duration && modelData.duration !== "--:--") return modelData.duration;
+                                            if (qRow.isCurrent && root.totalDuration > 0) {
+                                                var m = Math.floor(root.totalDuration / 60);
+                                                var s = Math.floor(root.totalDuration % 60);
+                                                return m + ":" + (s < 10 ? "0" : "") + s;
+                                            }
+                                            return "";
+                                        }
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textMuted
@@ -912,10 +941,15 @@ Item {
                         currentIndex: root.currentLyricIndex
                         preferredHighlightBegin: height * 0.38
                         preferredHighlightEnd: height * 0.38
-                        highlightRangeMode: ListView.StrictlyEnforceRange
+                        highlightRangeMode: ListView.NoHighlightRange
                         highlightMoveDuration: 600
                         highlightMoveVelocity: -1
                         model: root.activeLyrics
+
+                        onMovementStarted: userScrollTimer.restart()
+                        onMovementEnded: userScrollTimer.restart()
+                        onFlickStarted: userScrollTimer.restart()
+                        onFlickEnded: userScrollTimer.restart()
 
                         delegate: Item {
                             id: lyricRow
@@ -928,8 +962,11 @@ Item {
                             readonly property real duration: Math.max(0.6, nextTime - modelData.time)
                             readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
 
-                            readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.65 : (dist === 2 ? 0.40 : Math.max(0.18, 0.30 - 0.04 * (dist - 2))))
-                            readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 22 : 20))
+                            // SimpMusic & Apple Music Parametric Formulas
+                            // Farther lines dissolve into deep bokeh blur
+                            readonly property real targetBlur: isCurrent ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
+                            readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))
+                            readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
 
                             opacity: lineHover.hovered ? 0.95 : targetOpacity
                             scale: (isCurrent || lineHover.hovered) ? 1.0 : 0.97
@@ -937,6 +974,13 @@ Item {
                             Behavior on scale { NumberAnimation { duration: 200 } }
 
                             HoverHandler { id: lineHover }
+
+                            layer.enabled: !lineHover.hovered && targetBlur > 0.01 && dist <= 4
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blur: lyricRow.targetBlur
+                                blurMax: 48
+                            }
 
                             function formatKaraokeWords(rawText, progress) {
                                 if (!rawText) return "";
@@ -1009,9 +1053,8 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (modelData && modelData.time !== undefined) {
+                                        userScrollTimer.restart();
                                         root.seekRequested(modelData.time);
-                                        root.currentLyricIndex = index;
-                                        lyricsView.positionViewAtIndex(index, ListView.Center);
                                     }
                                 }
                             }
