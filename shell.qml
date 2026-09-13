@@ -818,23 +818,40 @@ Scope {
         border.width: 0
         clip: true
 
-        // Global Ambient Velvet Blurred Background for Now Playing (covers 100% of the window)
+        // =====================================================================
+        // Dynamic Playing Backdrop Cover:
+        // 1. PAUSED / STOPPED / IDLE:
+        //    Opacity is 0.0. The window is 100% translucent acrylic (masterContainer 0.58),
+        //    allowing the desktop wallpaper to be seen directly beneath wherever you move the app.
+        // 2. PLAYING MUSIC:
+        //    Smoothly transitions in to opacity 1.0 over 900ms (Easing.InOutQuad).
+        //    Completely covers the desktop wallpaper underneath with a solid dark foundation,
+        //    so the wallpaper and artwork NEVER clash or overlay each other.
+        //    Applies ultra-diffuse blur (blurMax: 96) to turn the song's artwork into
+        //    a pure, rich, velvet aurora glow.
+        // =====================================================================
         Item {
-            id: globalNowPlayingAmbient
+            id: playingBackdropCover
             anchors.fill: parent
             z: 0
-            visible: opacity > 0.01
-            opacity: (win.isNowPlayingOpen && win.currentTrack) ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+            visible: opacity > 0.001
+            opacity: (win.currentTrack && (win.isPlaying || win.isNowPlayingOpen)) ? 1.0 : 0.0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 900
+                    easing.type: Easing.InOutQuad
+                }
+            }
 
-            // Solid dark backdrop covering wallpaper ONLY when Now Playing is open!
+            // Solid dark base to completely block the desktop wallpaper underneath while playing!
             Rectangle {
                 anchors.fill: parent
                 color: "#0a0b0e"
             }
 
+            // Song Artwork Image
             Image {
-                id: globalAmbientImg
+                id: songAtmosphereImg
                 anchors.fill: parent
                 source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
                 fillMode: Image.PreserveAspectCrop
@@ -842,24 +859,39 @@ Scope {
                 visible: false
             }
 
+            // Ultra-diffuse Velvet MultiEffect Blur (blurMax: 96)
             MultiEffect {
+                id: songAtmosphereEffect
                 anchors.fill: parent
-                source: globalAmbientImg
-                visible: globalAmbientImg.status === Image.Ready
+                source: songAtmosphereImg
+                visible: songAtmosphereImg.status === Image.Ready
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
-                saturation: 1.4
-                brightness: -0.12
-                opacity: 0.48
+                blurMax: 96
+                saturation: 1.40
+                brightness: -0.06
+                opacity: 0.62
             }
 
+            // Adaptive Dark Scrim (Comfortable brightness on Home/Downloads, deeper for Now Playing)
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.04, 0.65) }
-                    GradientStop { position: 0.35; color: Qt.rgba(0.01, 0.01, 0.02, 0.78) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.94) }
+                    GradientStop {
+                        position: 0.0
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.68) : Qt.rgba(0.02, 0.02, 0.04, 0.48)
+                        Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
+                    }
+                    GradientStop {
+                        position: 0.40
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.80) : Qt.rgba(0.01, 0.01, 0.02, 0.58)
+                        Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.94) : Qt.rgba(0.01, 0.01, 0.02, 0.72)
+                        Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
+                    }
                 }
             }
         }
@@ -883,7 +915,7 @@ Scope {
                 }
             }
 
-            // Bottom subtle shade (richer depth behind floating player bar)
+            // Bottom subtle shade (soft ambient gradient behind floating player bar)
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
@@ -891,7 +923,7 @@ Scope {
                 height: 120
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 1.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.55) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.12) }
                 }
             }
 
@@ -973,10 +1005,10 @@ Scope {
                     anchors.fill: parent
                     source: fallbackImagesComposite
                     blurEnabled: true
-                    blur: 0.70
-                    blurMax: 48
-                    saturation: 1.0
-                    brightness: -0.06
+                    blur: 0.50
+                    blurMax: 32
+                    saturation: 1.15
+                    brightness: 0.02
                 }
             }
 
@@ -1042,6 +1074,9 @@ Scope {
                 }
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;
+                }
+                onDownloadPopoverRequested: {
+                    downloadPopover.open();
                 }
 
                 onBackRequested: {

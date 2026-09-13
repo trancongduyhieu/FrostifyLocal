@@ -91,7 +91,7 @@ Item {
             displacement: 16.0
             aberration: 0.03
             bevelWidth: 20.0
-            tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+            tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
             backgroundSourceItem: root.backgroundSourceItem
             z: 2
 

@@ -136,10 +136,10 @@ void main() {
     vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // Độ trong suốt keo 502 (Water-Clear Transparency ~ 0.48 - 0.58)
+    // Độ trong suốt keo 502 (Water-Clear Transparency ~ 0.40 - 0.52)
     // Không bao giờ bị đục xám hay đen ngầu, nhìn thấu các card bên dưới
-    float baseAlpha = clamp(max(u_tint.a, 0.48), 0.48, 0.58);
-    float glassAlpha = mask * mix(baseAlpha, 0.62, u_flowActive * 0.25);
+    float baseAlpha = clamp(max(u_tint.a, 0.40), 0.40, 0.52);
+    float glassAlpha = mask * mix(baseAlpha, 0.56, u_flowActive * 0.25);
     fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity;
 }
 
