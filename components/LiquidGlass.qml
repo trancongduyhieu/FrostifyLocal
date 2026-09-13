@@ -13,13 +13,26 @@ Item {
     property real displacement: 6.0
     property real aberration: 0.04
     property real bevelWidth: 12.0
-    property color tintColor: Qt.rgba(0.06, 0.07, 0.09, 0.55)
+    property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
     property bool interactive: false
 
     default property alias contentData: contentContainer.data
 
     implicitWidth: 160
     implicitHeight: 48
+
+    property bool isFlowActive: false
+    property real flowProgress: isFlowActive ? 1.0 : 0.0
+    Behavior on flowProgress { NumberAnimation { duration: 600; easing.type: Easing.InOutQuad } }
+
+    property real time: 0.0
+    NumberAnimation on time {
+        from: 0.0
+        to: 100000.0
+        duration: 100000000
+        loops: Animation.Infinite
+        running: true
+    }
 
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem
     readonly property point globalOffset: {
@@ -62,6 +75,8 @@ Item {
             root.backgroundSourceItem ? Math.max(1, root.backgroundSourceItem.height) : 1
         )
         property vector2d u_sourceOffset: Qt.vector2d(root.globalOffset.x, root.globalOffset.y)
+        property real u_time: root.time
+        property real u_flowActive: root.flowProgress
 
         fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass.frag.qsb")
         visible: root.backgroundSourceItem !== null

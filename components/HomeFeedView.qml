@@ -19,7 +19,7 @@ Rectangle {
     property var currentTrack: null
     property bool isPlaying: false
     property Item backgroundSourceItem: null
-    property color accentColor: Theme.accentGreen
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
@@ -37,6 +37,12 @@ Rectangle {
     readonly property var activeFeedSections: {
         if (root.sections && root.sections.length > 0) {
             return root.sections;
+        }
+        if (root.isLoading) {
+            return [
+                { type: "skeleton_section", title: "Recommended for you", subtitle: "LOADING", items: [1, 2, 3, 4, 5, 6] },
+                { type: "skeleton_section", title: "Listen again", subtitle: "DISCOVER", items: [1, 2, 3, 4, 5, 6] }
+            ];
         }
         var fallbacks = [];
         if (root.quickPicks && root.quickPicks.length > 0) {
@@ -314,8 +320,12 @@ Rectangle {
                             height: 56
                             radius: 6
                             clip: true
-                            color: rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
-                            border.color: rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : Qt.rgba(1.0, 1.0, 1.0, 0.05)
+                            color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                                   : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+                            border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                          : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
                             border.width: 1
                             Behavior on color { ColorAnimation { duration: 100 } }
                             Behavior on border.color { ColorAnimation { duration: 100 } }
@@ -325,27 +335,55 @@ Rectangle {
                                 anchors.margins: 6
                                 spacing: 12
 
-                                Rectangle {
+                                Item {
                                     width: 44
                                     height: 44
-                                    radius: 6
-                                    color: "#202024"
-                                    clip: true
 
-                                    Image {
-                                        id: rowImg
+                                    Rectangle {
+                                        id: rowImgMask
                                         anchors.fill: parent
-                                        source: modelData.image || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        sourceSize: Qt.size(64, 64)
-                                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                        transformOrigin: Item.Center
-                                        asynchronous: true
-                                        visible: status === Image.Ready
+                                        radius: 6
+                                        color: "#ffffff"
+                                        visible: false
+                                        layer.enabled: true
+                                    }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            maskEnabled: true
+                                            maskSource: rowImgMask
+                                            autoPaddingEnabled: false
+                                        }
+
+                                        Image {
+                                            id: rowImg
+                                            anchors.fill: parent
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(64, 64)
+                                            asynchronous: true
+                                            visible: status === Image.Ready
+                                        }
+
+                                        // Skeleton Pulsing Shimmer Placeholder
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#2c2c34"
+                                            visible: rowImg.status !== Image.Ready
+                                            SequentialAnimation on opacity {
+                                                running: parent.visible
+                                                loops: Animation.Infinite
+                                                NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                                NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                            }
+                                        }
                                     }
 
                                     Rectangle {
                                         anchors.fill: parent
+                                        radius: 6
                                         color: Qt.rgba(0, 0, 0, 0.45)
                                         visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
 
@@ -355,8 +393,16 @@ Rectangle {
                                                     ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                     : "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 18
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                         }
+                                    }
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        color: "transparent"
+                                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                                        border.width: 1
                                     }
                                 }
 
@@ -370,7 +416,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.accentGreen : Theme.textPrimary
+                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }
@@ -440,8 +486,8 @@ Rectangle {
                                 width: 160
                                 height: 230
                                 radius: Theme.radiusCard
-                                color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
-                                border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
+                                color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                                border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -451,29 +497,56 @@ Rectangle {
                                     anchors.margins: 10
                                     spacing: 8
 
-                                    Rectangle {
+                                    Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width
-                                        radius: 7
-                                        color: "#202024"
-                                        clip: true
 
-                                        Image {
-                                            id: cCoverImg
+                                        Rectangle {
+                                            id: cCoverMask
                                             anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            sourceSize: Qt.size(200, 200)
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            asynchronous: true
-                                            visible: status === Image.Ready
+                                            radius: 8
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: cCoverMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Image {
+                                                id: cCoverImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                sourceSize: Qt.size(220, 220)
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
+
+                                            // Skeleton Pulsing Shimmer Placeholder
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#2c2c34"
+                                                visible: cCoverImg.status !== Image.Ready
+                                                SequentialAnimation on opacity {
+                                                    running: parent.visible
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                                }
+                                            }
                                         }
 
                                         // 1px Hairline Border Overlay on top of image
                                         Rectangle {
                                             anchors.fill: parent
-                                            radius: 7
+                                            radius: 8
                                             color: "transparent"
                                             border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
                                             border.width: 1
@@ -485,7 +558,7 @@ Rectangle {
                                             width: 38
                                             height: 38
                                             radius: 19
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
@@ -573,8 +646,15 @@ Rectangle {
                             height: 56
                             radius: 6
                             clip: true
-                            color: qpMouse.containsMouse ? "#282828" : "#1a1a1a"
+                            color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                                   : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+                            border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                          : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
+                            border.width: 1
                             Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -589,11 +669,26 @@ Rectangle {
                                     clip: true
 
                                     Image {
+                                        id: qpImg
                                         anchors.fill: parent
                                         source: modelData.image || ""
                                         fillMode: Image.PreserveAspectCrop
                                         sourceSize: Qt.size(64, 64)
                                         asynchronous: true
+                                        visible: status === Image.Ready
+                                    }
+
+                                    // Skeleton Pulsing Shimmer Placeholder
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: "#2c2c34"
+                                        visible: qpImg.status !== Image.Ready
+                                        SequentialAnimation on opacity {
+                                            running: parent.visible
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                        }
                                     }
 
                                     Rectangle {
@@ -607,7 +702,7 @@ Rectangle {
                                                     ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                     : "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 18
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                         }
                                     }
                                 }
@@ -622,7 +717,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? Theme.accentGreen : Theme.textPrimary
+                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }
@@ -674,8 +769,11 @@ Rectangle {
                             width: 172
                             height: 240
                             radius: Theme.radiusCard
-                            color: plMouse.containsMouse ? Theme.bgCardHover : Theme.bgCard
+                            color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                            border.color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                            border.width: 1
                             Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
                             ColumnLayout {
                                 anchors.fill: parent
@@ -690,18 +788,33 @@ Rectangle {
                                     clip: true
 
                                     Image {
+                                        id: plImg
                                         anchors.fill: parent
                                         source: modelData.image || ""
                                         fillMode: Image.PreserveAspectCrop
                                         sourceSize: Qt.size(200, 200)
                                         asynchronous: true
+                                        visible: status === Image.Ready
+                                    }
+
+                                    // Skeleton Pulsing Shimmer Placeholder
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: "#2c2c34"
+                                        visible: plImg.status !== Image.Ready
+                                        SequentialAnimation on opacity {
+                                            running: parent.visible
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                        }
                                     }
 
                                     Rectangle {
                                         width: 40
                                         height: 40
                                         radius: 20
-                                        color: Theme.accentGreen
+                                        color: root.accentColor
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 8
@@ -749,6 +862,43 @@ Rectangle {
                                 preventStealing: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.playlistSelected(modelData)
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Case E: Skeleton Placeholder Row (Initial Loading State)
+                // =============================================================
+                Flickable {
+                    Layout.fillWidth: true
+                    height: 250
+                    visible: modelData.type === "skeleton_section"
+                    contentWidth: skelRow.implicitWidth
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    clip: true
+                    interactive: false
+
+                    RowLayout {
+                        id: skelRow
+                        spacing: 16
+
+                        Repeater {
+                            model: [
+                                { tw: 120, sw: 80 },
+                                { tw: 140, sw: 95 },
+                                { tw: 110, sw: 75 },
+                                { tw: 130, sw: 85 },
+                                { tw: 125, sw: 90 },
+                                { tw: 135, sw: 80 }
+                            ]
+
+                            SkeletonTrackCard {
+                                width: 160
+                                height: 230
+                                titleWidth: modelData.tw
+                                subtitleWidth: modelData.sw
                             }
                         }
                     }

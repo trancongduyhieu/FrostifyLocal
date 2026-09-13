@@ -16,6 +16,7 @@ Item {
     property var currentTrack: null
     property bool isPlaying: false
     property var followedArtists: []
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     readonly property bool isFollowed: {
         if (!artistData || !artistData.metadata) return false;
@@ -304,8 +305,8 @@ Item {
                                 Layout.preferredHeight: 38
                                 Layout.preferredWidth: followRow.implicitWidth + 28
                                 radius: 19
-                                color: root.isFollowed ? Theme.accentGreen : (followBtnMouse.containsMouse ? "#2e2e34" : "#222226")
-                                border.color: root.isFollowed ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.18)
+                                color: root.isFollowed ? root.accentColor : (followBtnMouse.containsMouse ? "#2e2e34" : "#222226")
+                                border.color: root.isFollowed ? root.accentColor : Qt.rgba(1, 1, 1, 0.18)
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -400,7 +401,7 @@ Item {
                             Layout.preferredHeight: 56
                             radius: 8
                             color: rowMouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                            border.color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : "transparent"
+                            border.color: trackRowItem.isCurrentPlaying ? root.accentColor : "transparent"
                             border.width: trackRowItem.isCurrentPlaying ? 1 : 0
                             Behavior on color { ColorAnimation { duration: 100 } }
                             Behavior on border.color { ColorAnimation { duration: 100 } }
@@ -429,7 +430,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : Theme.textMuted
+                                        color: trackRowItem.isCurrentPlaying ? root.accentColor : Theme.textMuted
                                         visible: !rowMouseArea.containsMouse && !trackRowItem.isCurrentPlaying
                                     }
 
@@ -438,7 +439,7 @@ Item {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/media-optical-audio-symbolic.svg"
                                         iconSize: 16
-                                        color: Theme.accentGreen
+                                        color: root.accentColor
                                         visible: trackRowItem.isCurrentPlaying && !rowMouseArea.containsMouse
                                     }
 
@@ -505,7 +506,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : (rowMouseArea.containsMouse ? "#ffffff" : "#e0e0e4")
+                                        color: trackRowItem.isCurrentPlaying ? root.accentColor : (rowMouseArea.containsMouse ? "#ffffff" : "#e0e0e4")
                                         elide: Text.ElideRight
                                     }
 
@@ -636,7 +637,7 @@ Item {
                                             width: 36
                                             height: 36
                                             radius: 18
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
@@ -775,7 +776,7 @@ Item {
                                             width: 36
                                             height: 36
                                             radius: 18
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
@@ -912,7 +913,7 @@ Item {
                                             width: 34
                                             height: 34
                                             radius: 17
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             anchors.centerIn: parent
                                             visible: vidCardMouse.containsMouse
                                             z: 2
@@ -1055,7 +1056,7 @@ Item {
                                             anchors.fill: parent
                                             radius: 54
                                             color: "transparent"
-                                            border.color: relCardMouse.containsMouse ? Theme.accentGreen : "transparent"
+                                            border.color: relCardMouse.containsMouse ? root.accentColor : "transparent"
                                             border.width: 1.5
                                         }
                                     }
@@ -1066,7 +1067,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: relCardMouse.containsMouse ? Theme.accentGreen : "#ffffff"
+                                        color: relCardMouse.containsMouse ? root.accentColor : "#ffffff"
                                         horizontalAlignment: Text.AlignHCenter
                                         elide: Text.ElideRight
                                     }
@@ -1146,7 +1147,7 @@ Item {
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true
-                            color: Theme.accentGreen
+                            color: root.accentColor
                             visible: ((root.artistData && root.artistData.metadata && root.artistData.metadata.description) ? root.artistData.metadata.description.length : 0) > 220
 
                             MouseArea {

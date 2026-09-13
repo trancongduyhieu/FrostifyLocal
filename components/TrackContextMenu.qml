@@ -23,6 +23,7 @@ Item {
     property var dlMgr: null
     property var customPlaylists: []
     property bool isPlaylistSubmenuOpen: false
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     Timer {
         id: closeTimer
@@ -224,8 +225,8 @@ Item {
                 MenuItemButton {
                     text: "+ New Playlist"
                     iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
-                    textColor: "#00c853"
-                    iconColor: "#00c853"
+                    textColor: root.accentColor
+                    iconColor: root.accentColor
                     onClicked: {
                         var t = root.track;
                         root.closeMenu();
@@ -281,8 +282,8 @@ Item {
 
                 text: isLocal ? "Open containing folder" : (isDownloading ? ("Downloading (" + Math.max(0, Math.round(progress)) + "%)...") : "Download track")
                 iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : (isDownloading ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/download-symbolic.svg")
-                textColor: isDownloading ? "#00c853" : Theme.textPrimary
-                iconColor: isDownloading ? "#00c853" : Theme.textSecondary
+                textColor: isDownloading ? root.accentColor : Theme.textPrimary
+                iconColor: isDownloading ? root.accentColor : Theme.textSecondary
                 onClicked: {
                     if (isDownloading) return;
                     var t = root.track;

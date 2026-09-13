@@ -21,6 +21,7 @@ Rectangle {
     property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur
     property int customX: -1
     property int customY: -1
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     signal closeRequested()
     signal connectRequested(string rawAuth)
@@ -188,7 +189,7 @@ Rectangle {
                 height: 52
                 radius: 8
                 color: root.isLoggedIn ? "#16281e" : "#242424"
-                border.color: root.isLoggedIn ? Theme.accentGreen : "#3a3a3a"
+                border.color: root.isLoggedIn ? root.accentColor : "#3a3a3a"
                 border.width: 1
 
                 RowLayout {
@@ -200,7 +201,7 @@ Rectangle {
                         width: 10
                         height: 10
                         radius: 5
-                        color: root.isLoggedIn ? Theme.accentGreen : "#777777"
+                        color: root.isLoggedIn ? root.accentColor : "#777777"
                     }
 
                     Text {
@@ -211,7 +212,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
-                        color: root.isLoggedIn ? Theme.accentGreen : Theme.textPrimary
+                        color: root.isLoggedIn ? root.accentColor : Theme.textPrimary
                         elide: Text.ElideRight
                     }
 
@@ -260,7 +261,7 @@ Rectangle {
                     AppIcon {
                         source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                         iconSize: 18
-                        color: root.syncHistoryToGoogle ? Theme.accentGreen : Theme.textMuted
+                        color: root.syncHistoryToGoogle ? root.accentColor : Theme.textMuted
                     }
 
                     ColumnLayout {
@@ -288,7 +289,7 @@ Rectangle {
                         width: 44
                         height: 24
                         radius: 12
-                        color: root.syncHistoryToGoogle ? Theme.accentGreen : "#3a3a3a"
+                        color: root.syncHistoryToGoogle ? root.accentColor : "#3a3a3a"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -319,7 +320,7 @@ Rectangle {
                 height: 42
                 radius: 21
                 visible: !root.isLoggedIn
-                color: root.isProcessing ? "#1db95466" : (browserLoginMouse.containsMouse ? "#1ed760" : Theme.accentGreen)
+                color: root.isProcessing ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : (browserLoginMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor)
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {
@@ -378,7 +379,7 @@ Rectangle {
                     Layout.preferredHeight: 88
                     radius: 8
                     color: "#121212"
-                    border.color: authInput.activeFocus ? Theme.accentGreen : "#2c2c2c"
+                    border.color: authInput.activeFocus ? root.accentColor : "#2c2c2c"
                     border.width: 1
 
                     ScrollView {
@@ -415,7 +416,7 @@ Rectangle {
                 text: root.statusMessage
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
-                color: root.statusMessage.indexOf("Success") !== -1 ? Theme.accentGreen : "#ff5555"
+                color: root.statusMessage.indexOf("Success") !== -1 ? root.accentColor : "#ff5555"
                 visible: root.statusMessage.length > 0
                 wrapMode: Text.Wrap
             }
@@ -491,7 +492,7 @@ Rectangle {
                     height: 38
                     width: 140
                     radius: 19
-                    color: root.isProcessing ? "#1db95488" : (saveMouse.containsMouse ? "#1ed760" : Theme.accentGreen)
+                    color: root.isProcessing ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : (saveMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor)
 
                     Text {
                         anchors.centerIn: parent
@@ -531,7 +532,7 @@ Rectangle {
                 height: 64
                 radius: 8
                 color: "#242424"
-                border.color: root.desktopLyricsEnabled ? Theme.accentGreen : "#3a3a3a"
+                border.color: root.desktopLyricsEnabled ? root.accentColor : "#3a3a3a"
                 border.width: 1
 
                 RowLayout {
@@ -549,7 +550,7 @@ Rectangle {
                             anchors.centerIn: parent
                             source: "../assets/icons/view-lyrics-symbolic.svg"
                             iconSize: 18
-                            color: root.desktopLyricsEnabled ? Theme.accentGreen : Theme.textSecondary
+                            color: root.desktopLyricsEnabled ? root.accentColor : Theme.textSecondary
                         }
                     }
 
@@ -578,7 +579,7 @@ Rectangle {
                         width: 44
                         height: 24
                         radius: 12
-                        color: root.desktopLyricsEnabled ? Theme.accentGreen : "#444444"
+                        color: root.desktopLyricsEnabled ? root.accentColor : "#444444"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -616,7 +617,7 @@ Rectangle {
                 height: 48
                 radius: 8
                 color: root.lyricsPreset === 1 ? "#1e2a22" : (p1Hover.hovered ? "#282828" : "#242424")
-                border.color: root.lyricsPreset === 1 ? Theme.accentGreen : "#3a3a3a"
+                border.color: root.lyricsPreset === 1 ? root.accentColor : "#3a3a3a"
                 border.width: 1
                 Behavior on color { ColorAnimation { duration: 120 } }
                 HoverHandler { id: p1Hover }
@@ -632,7 +633,7 @@ Rectangle {
                         height: 20
                         radius: 10
                         color: "transparent"
-                        border.color: root.lyricsPreset === 1 ? Theme.accentGreen : "#666666"
+                        border.color: root.lyricsPreset === 1 ? root.accentColor : "#666666"
                         border.width: 2
 
                         Rectangle {
@@ -640,7 +641,7 @@ Rectangle {
                             width: 10
                             height: 10
                             radius: 5
-                            color: Theme.accentGreen
+                            color: root.accentColor
                             visible: root.lyricsPreset === 1
                         }
                     }
@@ -668,7 +669,7 @@ Rectangle {
                 height: 48
                 radius: 8
                 color: root.lyricsPreset === 2 ? "#1e2a22" : (p2Hover.hovered ? "#282828" : "#242424")
-                border.color: root.lyricsPreset === 2 ? Theme.accentGreen : "#3a3a3a"
+                border.color: root.lyricsPreset === 2 ? root.accentColor : "#3a3a3a"
                 border.width: 1
                 Behavior on color { ColorAnimation { duration: 120 } }
                 HoverHandler { id: p2Hover }
@@ -684,7 +685,7 @@ Rectangle {
                         height: 20
                         radius: 10
                         color: "transparent"
-                        border.color: root.lyricsPreset === 2 ? Theme.accentGreen : "#666666"
+                        border.color: root.lyricsPreset === 2 ? root.accentColor : "#666666"
                         border.width: 2
 
                         Rectangle {
@@ -692,7 +693,7 @@ Rectangle {
                             width: 10
                             height: 10
                             radius: 5
-                            color: Theme.accentGreen
+                            color: root.accentColor
                             visible: root.lyricsPreset === 2
                         }
                     }
@@ -713,7 +714,7 @@ Rectangle {
                             height: 16
                             width: 38
                             radius: 4
-                            color: Theme.accentGreen
+                            color: root.accentColor
 
                             Text {
                                 anchors.centerIn: parent
@@ -742,7 +743,7 @@ Rectangle {
                 height: 48
                 radius: 8
                 color: root.lyricsPreset === 3 ? "#1e2a22" : (p3Hover.hovered ? "#282828" : "#242424")
-                border.color: root.lyricsPreset === 3 ? Theme.accentGreen : "#3a3a3a"
+                border.color: root.lyricsPreset === 3 ? root.accentColor : "#3a3a3a"
                 border.width: 1
                 Behavior on color { ColorAnimation { duration: 120 } }
                 HoverHandler { id: p3Hover }
@@ -758,7 +759,7 @@ Rectangle {
                         height: 20
                         radius: 10
                         color: "transparent"
-                        border.color: root.lyricsPreset === 3 ? Theme.accentGreen : "#666666"
+                        border.color: root.lyricsPreset === 3 ? root.accentColor : "#666666"
                         border.width: 2
 
                         Rectangle {
@@ -766,7 +767,7 @@ Rectangle {
                             width: 10
                             height: 10
                             radius: 5
-                            color: Theme.accentGreen
+                            color: root.accentColor
                             visible: root.lyricsPreset === 3
                         }
                     }
@@ -787,7 +788,7 @@ Rectangle {
                             height: 16
                             width: 38
                             radius: 4
-                            color: Theme.accentGreen
+                            color: root.accentColor
 
                             Text {
                                 anchors.centerIn: parent

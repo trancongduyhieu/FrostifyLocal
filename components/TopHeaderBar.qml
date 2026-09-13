@@ -16,7 +16,7 @@ Rectangle {
     property bool canGoBack: currentView !== "home"
     property bool isSidebarVisible: false
     property bool isMaximized: false
-    property color accentColor: Theme.accentGreen
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
 
     signal tabSelected(string tab)
@@ -254,34 +254,18 @@ Rectangle {
             }
         }
 
-        // Active Download Queue Pill (Liquid Glass Style)
-        LiquidGlass {
+        // Active Download Queue Pill (Minimalist Borderless Style matching wallpaper accent)
+        Item {
             id: downloadQueuePill
             Layout.preferredHeight: 34
-            Layout.preferredWidth: dlRow.implicitWidth + 24
-            radius: 17
-            displacement: 6.0
-            bevelWidth: 10.0
+            Layout.preferredWidth: dlRow.implicitWidth + 12
             readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
-            tintColor: dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.55)
-            backgroundSourceItem: headerRoot.backgroundSourceItem
             visible: true
-
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.width: 1
-                border.color: downloadQueuePill.hasActive 
-                              ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.5) 
-                              : (dlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.08))
-                Behavior on border.color { ColorAnimation { duration: 120 } }
-            }
 
             RowLayout {
                 id: dlRow
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: 6
 
                 CircularSpinner {
                     Layout.preferredWidth: 14
@@ -296,18 +280,24 @@ Rectangle {
                 AppIcon {
                     visible: !downloadQueuePill.hasActive
                     source: "../assets/icons/download-symbolic.svg"
-                    iconSize: 14
-                    color: dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary
+                    iconSize: 15
+                    color: headerRoot.accentColor
+                    opacity: dlMouse.containsMouse ? 1.0 : 0.85
+                    scale: dlMouse.containsMouse ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 Text {
                     text: downloadQueuePill.hasActive
                           ? ("Downloading (" + (downloadManager ? downloadManager.activeTasksCount : 0) + ")")
                           : "Downloads"
-                    color: downloadQueuePill.hasActive ? headerRoot.accentColor : (dlMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                    color: headerRoot.accentColor
+                    opacity: dlMouse.containsMouse ? 1.0 : 0.85
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
             }
 
@@ -322,39 +312,25 @@ Rectangle {
             }
         }
 
-        // Top Navigation Cluster: Home, Downloads, Settings & Account (Liquid Glass)
+        // Top Navigation Cluster: Home, Library, Settings (Pure Borderless Icons matching wallpaper accent)
         RowLayout {
-            spacing: 8
+            spacing: 12
 
             // 1. Home Button
-            LiquidGlass {
-                id: homeBtnGlass
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 17
-                displacement: 6.0
-                bevelWidth: 8.0
-                tintColor: headerRoot.currentView === "home" 
-                           ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22)
-                           : (homeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.55))
-                backgroundSourceItem: headerRoot.backgroundSourceItem
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: headerRoot.currentView === "home"
-                                  ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.6)
-                                  : (homeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.08))
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-                }
+            Item {
+                id: homeBtn
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
 
                 AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-home-symbolic.svg"
-                    iconSize: 16
-                    color: headerRoot.currentView === "home" ? headerRoot.accentColor : (homeMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                    iconSize: 17
+                    color: headerRoot.accentColor
+                    opacity: headerRoot.currentView === "home" ? 1.0 : (homeMouse.containsMouse ? 1.0 : 0.70)
+                    scale: homeMouse.containsMouse ? 1.12 : (headerRoot.currentView === "home" ? 1.05 : 1.0)
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 MouseArea {
@@ -367,34 +343,20 @@ Rectangle {
             }
 
             // 2. Downloads / Local Library Button
-            LiquidGlass {
-                id: libBtnGlass
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 17
-                displacement: 6.0
-                bevelWidth: 8.0
-                tintColor: headerRoot.currentView === "library" 
-                           ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22)
-                           : (libMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.55))
-                backgroundSourceItem: headerRoot.backgroundSourceItem
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: headerRoot.currentView === "library"
-                                  ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.6)
-                                  : (libMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.08))
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-                }
+            Item {
+                id: libBtn
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
 
                 AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/folder-music-symbolic.svg"
-                    iconSize: 16
-                    color: headerRoot.currentView === "library" ? headerRoot.accentColor : (libMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
+                    iconSize: 17
+                    color: headerRoot.accentColor
+                    opacity: headerRoot.currentView === "library" ? 1.0 : (libMouse.containsMouse ? 1.0 : 0.70)
+                    scale: libMouse.containsMouse ? 1.12 : (headerRoot.currentView === "library" ? 1.05 : 1.0)
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 MouseArea {
@@ -407,30 +369,20 @@ Rectangle {
             }
 
             // 3. Settings & Account Button
-            LiquidGlass {
-                id: setBtnGlass
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 17
-                displacement: 6.0
-                bevelWidth: 8.0
-                tintColor: setMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.55)
-                backgroundSourceItem: headerRoot.backgroundSourceItem
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: setMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.08)
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-                }
+            Item {
+                id: setBtn
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
 
                 AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/preferences-system-symbolic.svg"
-                    iconSize: 16
-                    color: setMouse.containsMouse ? "#ffffff" : Theme.textSecondary
+                    iconSize: 17
+                    color: headerRoot.accentColor
+                    opacity: setMouse.containsMouse ? 1.0 : 0.70
+                    scale: setMouse.containsMouse ? 1.12 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 MouseArea {

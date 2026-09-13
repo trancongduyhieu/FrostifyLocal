@@ -16,11 +16,10 @@ Item {
     property bool isPlaying: false
     property var queueTracks: []
     property string playingPlaylistTitle: "Queue"
-    property color accentColor: Theme.accentGreen
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
 
     property string activeTab: "lyrics" // "up_next" | "lyrics" | "related"
-    property string mediaMode: "song" // "song" | "video"
 
     property var activeLyrics: []
     property int currentLyricIndex: -1
@@ -30,8 +29,6 @@ Item {
     property var relatedData: null
     property bool isLoadingRelated: false
     property string lastRelatedTrackId: ""
-    property string videoStreamUrl: ""
-    property bool isLoadingVideo: false
 
     property string currentLikeStatus: "INDIFFERENT"
     property var dislikedSongsMap: ({})
@@ -104,9 +101,6 @@ Item {
         currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
         fetchLyrics();
         fetchRelatedContent();
-        if (root.mediaMode === "video") {
-            resolveVideoUrl();
-        }
     }
 
     onCurrentTimeChanged: {
@@ -270,74 +264,6 @@ Item {
         }
     }
 
-    function resolveVideoUrl() {
-        if (!track || !track.videoId) {
-            videoStreamUrl = "";
-            return;
-        }
-        isLoadingVideo = true;
-        videoUrlProc.running = false;
-        videoUrlProc.command = [
-            "python3", "-u",
-            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
-            "get_url", track.videoId
-        ];
-        videoUrlProc.running = true;
-    }
-
-    Process {
-        id: videoUrlProc
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                if (!data || data.trim() === "") return;
-                try {
-                    var parsed = JSON.parse(data);
-                    if (parsed && parsed.stream_url) {
-                        root.videoStreamUrl = parsed.stream_url;
-                        videoPlayer.source = parsed.stream_url;
-                        videoPlayer.play();
-                    }
-                    root.isLoadingVideo = false;
-                } catch (e) {
-                    root.isLoadingVideo = false;
-                }
-            }
-        }
-        onExited: (code, status) => {
-            root.isLoadingVideo = false;
-        }
-    }
-
-    // Media Player for In-App Video Playback
-    MediaPlayer {
-        id: videoPlayer
-        audioOutput: AudioOutput { muted: true }
-        videoOutput: inAppVideoOut
-
-        onPlaybackStateChanged: {
-            if (root.isPlaying && playbackState === MediaPlayer.PausedState) {
-                videoPlayer.play();
-            } else if (!root.isPlaying && playbackState === MediaPlayer.PlayingState) {
-                videoPlayer.pause();
-            }
-        }
-    }
-
-    // Keep video playback synchronized with audio
-    Timer {
-        interval: 1000
-        running: root.mediaMode === "video" && root.isPlaying
-        repeat: true
-        onTriggered: {
-            if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
-                var diff = (videoPlayer.position / 1000.0) - root.currentTime;
-                if (Math.abs(diff) > 1.2) {
-                    videoPlayer.position = root.currentTime * 1000.0;
-                }
-            }
-        }
-    }
 
     // =========================================================================
     // MAIN 2-COLUMN SPLIT SCREEN (50% Left Artwork/Video | 50% Right Tabs)
@@ -360,103 +286,14 @@ Item {
             spacing: 16
             Layout.alignment: Qt.AlignHCenter
 
-            // 1. Mode Switcher Pill [ Bài hát | Video ] (Song vs Video)
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 38
-
-                Rectangle {
-                    id: modeSwitcherPill
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 170
-                    height: 36
-                    radius: 18
-                    color: Qt.rgba(0.08, 0.09, 0.12, 0.85)
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 3
-                        spacing: 2
-
-                        // Song Pill
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 15
-                            color: root.mediaMode === "song" ? Qt.rgba(1, 1, 1, 0.18) : (songH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
-                            border.color: root.mediaMode === "song" ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.5) : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            HoverHandler { id: songH }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "Bài hát"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                font.bold: root.mediaMode === "song"
-                                color: root.mediaMode === "song" ? "#ffffff" : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.mediaMode = "song";
-                                    videoPlayer.pause();
-                                }
-                            }
-                        }
-
-                        // Video Pill
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 15
-                            color: root.mediaMode === "video" ? Qt.rgba(1, 1, 1, 0.18) : (vidH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
-                            border.color: root.mediaMode === "video" ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.5) : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            HoverHandler { id: vidH }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "Video"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                font.bold: root.mediaMode === "video"
-                                color: root.mediaMode === "video" ? "#ffffff" : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.mediaMode = "video";
-                                    if (!root.videoStreamUrl) {
-                                        root.resolveVideoUrl();
-                                    } else {
-                                        videoPlayer.play();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Central Media Display: Big Square Artwork OR 16:9 Video
+            // Central Media Display: Big Square Artwork (Clean HD Retina)
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignCenter
 
-                // --- 2A. Song Artwork Mode ---
                 Item {
-                    id: songArtworkWrapper
-                    visible: root.mediaMode === "song"
+                    id: coverArtworkWrapper
                     anchors.centerIn: parent
                     width: Math.min(parent.width - 24, Math.min(parent.height - 24, 460))
                     height: width
@@ -533,62 +370,6 @@ Item {
                         z: 2
                     }
                 }
-
-                // --- 2B. Embedded Video Mode ---
-                Item {
-                    id: videoWrapper
-                    visible: root.mediaMode === "video"
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width - 16, 560)
-                    height: width * 9.0 / 16.0
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 14
-                        color: "#000000"
-                        clip: true
-
-                        VideoOutput {
-                            id: inAppVideoOut
-                            anchors.fill: parent
-                            fillMode: VideoOutput.PreserveAspectCrop
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            visible: root.isLoadingVideo || (!root.videoStreamUrl)
-                            color: "#121214"
-
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-
-                                CircularSpinner {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    size: 32
-                                    strokeWidth: 3
-                                    color: root.accentColor
-                                    running: visible
-                                }
-
-                                Text {
-                                    text: "Đang tải video trực tuyến..."
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    color: Theme.textSecondary
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 14
-                            color: "transparent"
-                            border.color: Qt.rgba(1, 1, 1, 0.18)
-                            border.width: 1
-                        }
-                    }
-                }
             }
 
             // 3. Track Details Row (Title, Artist, Like / Action Buttons)
@@ -633,78 +414,130 @@ Item {
                     }
 
                     RowLayout {
-                        spacing: 8
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 12
 
-                        // 1. Like Button
+                        // 1. Like & Dislike Segmented Pill (Dark Glass Container)
                         Rectangle {
-                            id: likeBtn
-                            width: 32; height: 32
-                            radius: 8
-                            color: root.currentLikeStatus === "LIKE" 
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                                   : (likeH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                            height: 38
+                            width: likeDislikeRow.implicitWidth + 8
+                            radius: 19
+                            color: Qt.rgba(1.0, 1.0, 1.0, 0.07)
+                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
                             border.width: 1
-                            border.color: root.currentLikeStatus === "LIKE" ? root.accentColor : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                            HoverHandler { id: likeH }
-
-                            AppIcon {
+                            RowLayout {
+                                id: likeDislikeRow
                                 anchors.centerIn: parent
-                                source: "../assets/icons/thumb-up-symbolic.svg"
-                                iconSize: 16
-                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
-                            }
+                                spacing: 0
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.toggleLike()
+                                // Like Button
+                                Rectangle {
+                                    width: 46; height: 32
+                                    radius: 16
+                                    color: root.currentLikeStatus === "LIKE" 
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                                           : (likeH.hovered ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
+                                    border.width: 1
+                                    border.color: root.currentLikeStatus === "LIKE" ? root.accentColor : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    HoverHandler { id: likeH }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/thumb-up-symbolic.svg"
+                                        iconSize: 16
+                                        color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.toggleLike()
+                                    }
+                                }
+
+                                // 1px Vertical Separator
+                                Rectangle {
+                                    width: 1; height: 18
+                                    color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                }
+
+                                // Dislike Button (Permanent Blacklist)
+                                Rectangle {
+                                    id: dislikeBtn
+                                    width: 46; height: 32
+                                    radius: 16
+                                    color: root.currentLikeStatus === "DISLIKE"
+                                           ? Qt.rgba(0.9, 0.25, 0.25, 0.25)
+                                           : (dislikeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.10) : "transparent")
+                                    border.width: 1
+                                    border.color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    HoverHandler { id: dislikeH }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/thumb-down-symbolic.svg"
+                                        iconSize: 16
+                                        color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : (dislikeH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.dislikeCurrentTrack()
+                                    }
+                                }
                             }
                         }
 
-                        // 2. Dislike Button (Permanent Blacklist)
-                        Rectangle {
-                            id: dislikeBtn
-                            width: 32; height: 32
-                            radius: 8
-                            color: root.currentLikeStatus === "DISLIKE"
-                                   ? Qt.rgba(1.0, 0.25, 0.25, 0.22)
-                                   : (dislikeH.hovered ? Qt.rgba(1.0, 0.25, 0.25, 0.10) : "transparent")
-                            border.width: 1
-                            border.color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            HoverHandler { id: dislikeH }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/thumb-down-symbolic.svg"
-                                iconSize: 16
-                                color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : (dislikeH.hovered ? "#ff6666" : Theme.textSecondary)
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.dislikeCurrentTrack()
-                            }
-                        }
-
-                        // 3. Download Button
+                        // 2. Download Circular Glass Chip
                         Rectangle {
                             id: dlBtn
-                            width: 32; height: 32
-                            radius: 8
-                            color: dlH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                            width: 38; height: 38
+                            radius: 19
+                            color: dlH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.07)
+                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                            border.width: 1
                             Behavior on color { ColorAnimation { duration: 120 } }
+
+                            property string vid: {
+                                if (!root.track) return "";
+                                if (root.track.videoId) return root.track.videoId;
+                                if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
+                                return "";
+                            }
+                            property bool isDl: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.isDownloading(vid) : false
+                            property real dlProg: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.getProgress(vid) : -1
+                            property bool isDone: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.isDownloaded(vid) : false
 
                             HoverHandler { id: dlH }
 
+                            DownloadingSpinner {
+                                anchors.centerIn: parent
+                                visible: parent.isDl
+                                running: parent.isDl
+                                iconSize: 18
+                                progress: parent.dlProg
+                                color: root.accentColor
+                            }
+
                             AppIcon {
                                 anchors.centerIn: parent
+                                visible: !parent.isDl && parent.isDone
+                                source: "../assets/icons/emblem-ok-symbolic.svg"
+                                iconSize: 16
+                                color: root.accentColor
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                visible: !parent.isDl && !parent.isDone
                                 source: "../assets/icons/download-symbolic.svg"
                                 iconSize: 16
                                 color: dlH.hovered ? "#ffffff" : Theme.textSecondary
@@ -717,12 +550,14 @@ Item {
                             }
                         }
 
-                        // 4. Plus (+) Add to Playlist / Queue Button
+                        // 3. Plus (+) Add to Playlist / Queue Circular Glass Chip
                         Rectangle {
                             id: plusBtn
-                            width: 32; height: 32
-                            radius: 8
-                            color: plusH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                            width: 38; height: 38
+                            radius: 19
+                            color: plusH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.07)
+                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                            border.width: 1
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             HoverHandler { id: plusH }
@@ -1445,18 +1280,43 @@ Item {
                                             spacing: 6
                                             Layout.alignment: Qt.AlignHCenter
 
-                                            Rectangle {
+                                            Item {
                                                 Layout.preferredWidth: 76
                                                 Layout.preferredHeight: 76
                                                 Layout.alignment: Qt.AlignHCenter
-                                                radius: 38
-                                                color: "#222"
-                                                clip: true
 
-                                                Image {
+                                                Rectangle {
+                                                    id: simArtMask
                                                     anchors.fill: parent
-                                                    source: modelData.image || ""
-                                                    fillMode: Image.PreserveAspectCrop
+                                                    radius: 38
+                                                    color: "#ffffff"
+                                                    visible: false
+                                                    layer.enabled: true
+                                                }
+
+                                                Item {
+                                                    anchors.fill: parent
+                                                    layer.enabled: true
+                                                    layer.effect: MultiEffect {
+                                                        maskEnabled: true
+                                                        maskSource: simArtMask
+                                                        autoPaddingEnabled: false
+                                                    }
+
+                                                    Image {
+                                                        id: simArtImg
+                                                        anchors.fill: parent
+                                                        source: modelData.image || ""
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        asynchronous: true
+                                                        visible: status === Image.Ready
+                                                    }
+
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        color: "#222226"
+                                                        visible: simArtImg.status !== Image.Ready
+                                                    }
                                                 }
 
                                                 Rectangle {
@@ -1464,7 +1324,7 @@ Item {
                                                     radius: 38
                                                     color: "transparent"
                                                     border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
-                                                    border.width: 1
+                                                    border.width: 1.5
                                                 }
                                             }
 

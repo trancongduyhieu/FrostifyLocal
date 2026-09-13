@@ -213,12 +213,21 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Kho mã nguồn tham khảo**:
       - `/home/apple/Applications/SimpMusic/` (Jetpack Compose / Compose Multiplatform / Skiko).
       - `https://github.com/rdev/liquid-glass-react` (Apple's Liquid Glass React / GLSL / SVG Filters).
-    - **Cơ Chế Liquid Glass (Thấu Kính Quang Học Chống Đục Trắng)**:
-      - *Tệp cốt lõi*: `LiquidGlass.kt`, `LiquidGlassContainer.kt`, `LiquidGlassTabBar.android.kt`.
+    - **Cơ Chế Liquid Glass (Thấu Kính Quang Học Chống Đục Trắng & Chống Đen Ngòm)**:
+      - *Tệp cốt lõi*: `LiquidGlass.kt`, `LiquidGlassContainer.kt`, `LiquidGlassTabBar.android.kt`, `assets/shaders/liquid_glass.frag`.
       - *Quy tắc Sibling*: Layer nền mang `.layerBackdrop()` và bề mặt kính mang `.drawBackdrop()` bắt buộc phải là anh em (siblings), tuyệt đối không lồng nhau để tránh render-feedback loop.
       - *Khúc xạ thấu kính lồi (Convex Lens)*: Bán kính khúc xạ khống chế dưới `size.minDimension / 2` để loại bỏ vết rãnh đen ở trục giữa viên thuốc capsule.
-      - *Adaptive Scrim ("Đục Đen", Không Bị Đục Trắng)*: Giữ vibrancy (`saturation = 1.5f`, `contrast = 1f`, `brightness = 0.05f`), lấy mẫu độ sáng CIE 1931 ($0.2126R + 0.7152G + 0.0722B$) để tăng scrim tối khi nền sáng, bảo đảm chữ và icon luôn tương phản tối đa.
-      - *Tương tác chạm co giãn (Spring Touch & Specular Rim)*: Khi chạm/kéo, viên thuốc co giãn đàn hồi (Spring), phát vệt sáng tâm chạm ngón tay (`radialGradient` + `BlendMode.Plus`), và bắt sáng viền mép 45° (`Highlight.Default`).
+      - *Phương Án Chromatic Salience Ambient Glass (Kính Thích Ứng Sắc Độ Hình Nền)*:
+        - **Tuyệt đối không dùng viền trắng Hairline 1px nhân tạo**: Viền trắng 1px làm khối kính trông như miếng dán sticker dán đè lên giao diện. Mép kính thực thụ phải là sự khúc xạ ánh sáng và màu sắc quang sai hữu cơ (Organic Lens Refraction) phản chiếu trực tiếp từ tranh bên dưới (`directEdgeCol` + `glowingRim`).
+        - **Hấp thụ sắc độ Wallpaper (`accentColor`)**: `tintColor` gắn trực tiếp theo màu sắc trích xuất từ hình nền (`root.accentColor` từ `nutsty_palette.json`). Nền gel hữu cơ (`salienceBase`) hòa sắc giữa màu wallpaper và màu khuếch tán, nâng ngưỡng sáng tối thiểu để kính không bao giờ bị rơi về màu đen thui.
+        - **Quy chuẩn xuất Alpha (Qt RHI Premultiplied Alpha Safe)**: Không để alpha quá thấp (< 0.40) vì sẽ làm màu sắc bị dìm tối khi Qt Quick render đè lên nền đen. Giữ `baseAlpha` từ `0.65` đến `0.88` để kính giữ được độ dày quang học, trong trẻo và nổi bật.
+      - *Quy chuẩn Biên Dịch Shader Đa Nền Tảng (Multi-GLSL ES Baking)*:
+        - Khi biên dịch shader Qt 6 cho Quickshell trên Linux Wayland (Intel/AMD/Mesa), hệ thống tìm các phiên bản GLSL ES (`300 es`, `310 es`, `320 es`, `100 es`).
+        - Lệnh biên dịch chuẩn bắt buộc:
+          ```bash
+          /usr/lib/qt6/bin/qsb --glsl "300 es,310 es,320 es,100 es,120,150,330,440" -o assets/shaders/liquid_glass.frag.qsb assets/shaders/liquid_glass.frag
+          ```
+        - Không được chỉ truyền `--glsl "440,120"` vì sẽ gây lỗi crash pipeline `No GLSL shader code found` và làm kính biến thành khối đen đặc.
     - **Phong Cách Apple Music Now Playing Suite**:
       - *Tệp cốt lõi*: `NowPlayingContentAppleMusic.kt`, `AppleMusicShared.kt`, `AppleMusicLyricsLines.kt`.
       - *Nền Blurred Artwork + 3-Stop Gradient*: Artwork làm mờ sâu 80dp (`alpha: 0.6f`), phủ gradient 3 điểm dừng tính động từ `seedColor`: đỉnh `0.0` (tối 5%), giữa `0.48` (tối 32%), đáy `1.0` (tối 78% gần như đen ấm) giúp các nút điều khiển màu trắng luôn sắc nét.
@@ -568,6 +577,19 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Bẫy Lỗi Cần Tránh (Crucial Gotchas)**:
       - Trong Quickshell, `Process` không sử dụng `StdioCollector { onDataChanged }` mà **bắt buộc** phải dùng `SplitParser { splitMarker: "\n"; onRead: data => { ... } }` kết hợp `onExited` để nạp dữ liệu từ Python daemon.
       - Khi lồng các phần tử con bên trong `LiquidGlass.qml`, cần khai báo `property alias radius: root.radius` trên `contentContainer` để tránh lỗi cảnh báo `Unable to assign [undefined] to double` khi con gọi `parent.radius`.
+30. **Kiến Trúc Keo 502 Thấu Kính Trong Suốt & Sóng Lỏng Dẻo Lan Màu (Water-Clear Keo 502 Resin & Viscous Flow Wave)**:
+    - **Chất Liệu Kính Keo 502 Ngoài Đời (Water-Clear Optical Resin)**:
+      - Loại bỏ hoàn toàn nền xám chì/đen đục ngầu (`salienceBase`).
+      - Lấy mẫu trực tiếp texture nền phía sau (`clearRefraction` ở LOD 0.5) với tán sắc quang sai nhẹ, bảo đảm nhìn thấu 100% chữ và hình ảnh của card bài hát bên dưới với độ sắc nét quang học chân thực.
+      - Sức căng bề mặt & độ dẻo (Meniscus Specular): Khúc xạ dạng thấu kính lồi giọt keo lỏng lướt qua các vật thể kết hợp vệt phản quang óng ả `keo502Gloss` (rimSheen 3.5-power + top light reflection) mang lại cảm giác căng bóng trơn dẻo như một giọt keo 502 đọng trên mặt phẳng.
+      - Khóa độ mờ `glassAlpha` ở mức `0.48 - 0.58` thanh thoát, không bao giờ bị bết hay biến thành thanh nhựa đặc.
+    - **Thuật Toán Sóng Lỏng Dẻo Lan Màu Từ Từ (Viscous Flow Wave Diffusion)**:
+      - Tự động lấy mẫu 2 gam màu đại diện `songColorA` và `songColorB` từ bài hát đang phát (ví dụ: xanh biển sâu và trắng pha lê của FocusTunes) ngay trên GPU texture LOD 6.0.
+      - Tích hợp trường sóng chất lỏng dẻo 3 tầng (`wave1`, `wave2`, `wave3`) giao thoa chậm rãi (chu kỳ ~14 giây) theo biến thời gian `u_time`.
+      - 2 gam màu từ từ chảy qua nhau và lan tỏa nhẹ nhàng (`tintStrength: 0.22`) khắp bề mặt thanh keo, chuyển màu êm dịu khi bài hát thay đổi.
+    - **Tinh Giản Cụm Điều Hướng Header Thành Pure Borderless Icons**:
+      - Loại bỏ hoàn toàn viền ngoài, vòng tròn và background pill của các nút `Downloads`, `Home`, `Library`, `Settings` trên `TopHeaderBar.qml`.
+      - Chỉ để lại icon thanh lịch hiển thị phẳng với màu điểm nhấn trích xuất từ hình nền desktop (`headerRoot.accentColor`).
 
 ---
 
@@ -577,3 +599,4 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 2. Cú pháp Python: `python3 -m py_compile backend/*.py`.
 3. Kiểm tra trực quan: Chụp màn hình bằng `/usr/bin/grim` -> xem bằng `view_file`.
 4. Git push: Luôn commit và push lên `git@github.com:trancongduyhieu/Nutsty.git` (nhánh `main`).
+

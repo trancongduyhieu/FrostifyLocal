@@ -73,8 +73,9 @@ Item {
         displacement: 18.0
         aberration: 0.03
         bevelWidth: 24.0
-        tintColor: Qt.rgba(0.04, 0.05, 0.07, 0.65)
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
         backgroundSourceItem: root.backgroundSourceItem
+        isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
 
         // =====================================================================

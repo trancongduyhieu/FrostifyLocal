@@ -14,6 +14,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 u_tint;          // Tint color and alpha
     vec2 u_sourceSize;    // Size of the background texture in pixels
     vec2 u_sourceOffset;  // Global pixel offset of this item inside source texture
+    float u_time;         // Time in seconds for viscous wave flow
+    float u_flowActive;   // 1.0 when music is playing, 0.0 when stopped
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -65,11 +67,13 @@ void main() {
     vec2 normCentered = normalize(centeredCoord);
     grad = normalize(grad + 0.35 * normCentered);
     
-    // SimpMusic liquid lens displacement:
-    // Pulls / magnifies underlying artwork and spreads colors through the gel
+    // =========================================================================
+    // 1. Keo 502 Surface Tension Meniscus Displacement
+    // Độ bẻ cong quang học dạng giọt keo lỏng căng tròn bề mặt
+    // =========================================================================
     float refrHeight = max(18.0, min(u_bevelWidth, halfSize.y * 0.75));
     float t = clamp(1.0 - distInside / refrHeight, 0.0, 1.0);
-    float dispAmount = -abs(u_displacement > 0.0 ? u_displacement : 18.0);
+    float dispAmount = -abs(u_displacement > 0.0 ? u_displacement : 16.0);
     vec2 sampleOffset = circleMap(t) * dispAmount * grad;
     
     vec2 displacedPixel = pixelPos + sampleOffset;
@@ -77,91 +81,65 @@ void main() {
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // Two-tier Viscous Liquid Gel Multi-Tap Diffusion ("Keo nước" lan tỏa màu)
-    // Wide bloom (LOD 3.8 + 20px taps) + Form preservation (LOD 2.0 + 8px taps)
+    // 2. Water-Clear Refraction (Độ trong vắt như keo 502 với tán sắc nhẹ)
     // =========================================================================
-    float rWide = 20.0;
-    float rMed  = 8.0;
-    
-    vec2 w1 = vec2( rWide,  0.0) * pixelStep;
-    vec2 w2 = vec2(-rWide,  0.0) * pixelStep;
-    vec2 w3 = vec2( 0.0,  rWide) * pixelStep;
-    vec2 w4 = vec2( 0.0, -rWide) * pixelStep;
-    vec2 w5 = vec2( rWide * 0.707,  rWide * 0.707) * pixelStep;
-    vec2 w6 = vec2(-rWide * 0.707, -rWide * 0.707) * pixelStep;
-    vec2 w7 = vec2( rWide * 0.707, -rWide * 0.707) * pixelStep;
-    vec2 w8 = vec2(-rWide * 0.707,  rWide * 0.707) * pixelStep;
-
-    vec3 s0_wide = textureLod(source, uv, 3.8).rgb;
-    vec3 s1_wide = textureLod(source, uv+w1, 3.8).rgb;
-    vec3 s2_wide = textureLod(source, uv+w2, 3.8).rgb;
-    vec3 s3_wide = textureLod(source, uv+w3, 3.8).rgb;
-    vec3 s4_wide = textureLod(source, uv+w4, 3.8).rgb;
-    vec3 s5_wide = textureLod(source, uv+w5, 3.8).rgb;
-    vec3 s6_wide = textureLod(source, uv+w6, 3.8).rgb;
-    vec3 s7_wide = textureLod(source, uv+w7, 3.8).rgb;
-    vec3 s8_wide = textureLod(source, uv+w8, 3.8).rgb;
-    vec3 wideBloom = s0_wide * 0.28 + (s1_wide + s2_wide + s3_wide + s4_wide) * 0.11 + (s5_wide + s6_wide + s7_wide + s8_wide) * 0.07;
-
-    vec2 m1 = vec2( rMed,  0.0) * pixelStep;
-    vec2 m2 = vec2(-rMed,  0.0) * pixelStep;
-    vec2 m3 = vec2( 0.0,  rMed) * pixelStep;
-    vec2 m4 = vec2( 0.0, -rMed) * pixelStep;
-    vec3 med0 = textureLod(source, uv, 2.0).rgb;
-    vec3 med1 = textureLod(source, uv+m1, 2.0).rgb;
-    vec3 med2 = textureLod(source, uv+m2, 2.0).rgb;
-    vec3 med3 = textureLod(source, uv+m3, 2.0).rgb;
-    vec3 med4 = textureLod(source, uv+m4, 2.0).rgb;
-    vec3 medBloom = med0 * 0.40 + (med1 + med2 + med3 + med4) * 0.15;
-
-    // Liquid gel composite: 65% wide atmospheric glow + 35% defined shape
-    vec3 diffuseColor = wideBloom * 0.65 + medBloom * 0.35;
-    
-    // SimpMusic Vibrancy & ColorControls: Saturation 1.6x, subtle brightness lift
-    float lum = dot(diffuseColor, vec3(0.2126, 0.7152, 0.0722));
-    vec3 vibrantColor = clamp(mix(vec3(lum), diffuseColor, 1.60) + vec3(0.03 * lum), 0.0, 1.0);
+    float split = u_aberration * 6.0 * circleMap(t);
+    vec3 clearRefraction;
+    clearRefraction.r = textureLod(source, uv + grad * split * pixelStep, 0.5).r;
+    clearRefraction.g = textureLod(source, uv, 0.5).g;
+    clearRefraction.b = textureLod(source, uv - grad * split * pixelStep, 0.5).b;
     
     // =========================================================================
-    // Pure Chromatic Rim Glow (Viền phát sáng đúng màu lem, KHÔNG bị trắng)
+    // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
+    // =========================================================================
+    float rimDistance = clamp(distInside / 8.0, 0.0, 1.0);
+    float rimSheen = pow(1.0 - rimDistance, 3.5) * 0.16;
+    
+    // Phản xạ ánh sáng mép trên (Top Light Specular Reflection)
+    float topReflect = smoothstep(halfSize.y, -halfSize.y * 0.3, centeredCoord.y) * 
+                       pow(clamp(1.0 - abs(distInside - 2.2) / 2.2, 0.0, 1.0), 2.0) * 0.14;
+    float keo502Gloss = rimSheen + topReflect;
+    
+    // =========================================================================
+    // 4. Dynamic Dual-Tone Song Extraction (Trích xuất 2 màu của bài hát)
+    // =========================================================================
+    vec3 songColorA = textureLod(source, vec2(0.20, 0.25), 6.0).rgb;
+    vec3 songColorB = textureLod(source, vec2(0.80, 0.75), 6.0).rgb;
+    
+    float lumA = dot(songColorA, vec3(0.2126, 0.7152, 0.0722));
+    songColorA = mix(songColorA, vec3(0.95, 0.98, 1.0), max(0.0, 0.25 - lumA));
+    
+    // =========================================================================
+    // 5. Viscous Flow Wave Diffusion (Sóng lỏng dẻo lan màu từ từ)
+    // =========================================================================
+    float flowTime = u_time * 0.22;
+    
+    // 3 lớp sóng chất lỏng dẻo giao thoa lượn sóng
+    float wave1 = sin(pixelPos.x * 0.005 + flowTime * 0.8) * 0.5 + 0.5;
+    float wave2 = cos(pixelPos.x * 0.003 - pixelPos.y * 0.015 + flowTime * 0.6) * 0.5 + 0.5;
+    float wave3 = sin((pixelPos.x + pixelPos.y * 0.5) * 0.004 - flowTime * 0.4) * 0.5 + 0.5;
+    
+    float fluidPattern = smoothstep(0.20, 0.80, wave1 * 0.45 + wave2 * 0.35 + wave3 * 0.20);
+    
+    // Hòa sắc giữa 2 gam màu bài hát (ví dụ xanh biển và trắng)
+    vec3 diffusingSongColor = mix(songColorA, songColorB, fluidPattern);
+    
+    // Lan màu nhẹ nhàng (subtle ambient tint ~22%), giữ trọn vẹn độ trong veo của keo
+    float tintStrength = 0.22 * clamp(u_flowActive, 0.0, 1.0);
+    vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
+    
+    // =========================================================================
+    // 6. Final Composite & Water-Clear Transparency
     // =========================================================================
     float rimProfile = smoothstep(2.5, 0.3, distInside);
-    
-    // Lấy mẫu trực tiếp tại mép viền để nắm bắt màu sắc avatar đang tiếp xúc
-    vec2 directUV = clamp((u_sourceOffset + pixelPos) / u_sourceSize, vec2(0.001), vec2(0.999));
-    vec3 directEdgeCol = textureLod(source, directUV, 2.2).rgb;
-    
-    // Màu sắc đại diện cho vùng mép kính (kết hợp màu khuếch tán và màu trực tiếp)
-    vec3 rimSourceCol = mix(vibrantColor, directEdgeCol, 0.45);
-    
-    // Đo đạc độ bão hòa màu sắc (Saturation) để lọc sạch hoàn toàn chữ màu trắng & nền đen
-    float maxC = max(rimSourceCol.r, max(rimSourceCol.g, rimSourceCol.b));
-    float minC = min(rimSourceCol.r, min(rimSourceCol.g, rimSourceCol.b));
-    float chromaSat = maxC > 0.01 ? (maxC - minC) / maxC : 0.0;
-    float chromaLum = dot(rimSourceCol, vec3(0.2126, 0.7152, 0.0722));
-    
-    // CHỈ PHÁT SÁNG KHI LÀ MÀU THỰC SỰ (chromaSat > 0.08 và có ánh sáng):
-    // Tuyệt đối loại trừ màu trắng (chromaSat ~ 0.0) và nền đen (chromaLum ~ 0.0)
-    float isChromatic = smoothstep(0.07, 0.18, chromaSat) * smoothstep(0.04, 0.12, chromaLum);
-    
-    // Đẩy bão hòa màu sắc lên cực đại để viền phát sáng rực rỡ đúng màu tím/hồng/vàng/xanh
-    vec3 pureHue = clamp(mix(vec3(chromaLum), rimSourceCol, 2.5), 0.0, 1.0);
-    vec3 glowingRim = clamp(pureHue * 1.65, 0.0, 1.0);
-    
-    // =========================================================================
-    // SimpMusic Adaptive Darken: 12% on black background, up to 48% on white
-    // =========================================================================
-    float darken = mix(0.12, 0.48, clamp((lum - 0.08) / 0.42, 0.0, 1.0));
-    vec3 tintedArtwork = mix(vibrantColor, u_tint.rgb, darken);
-    float artworkPresence = clamp(lum * 4.0, 0.0, 1.0);
-    vec3 baseGlass = mix(u_tint.rgb, tintedArtwork, artworkPresence);
-    
-    // Phủ viền phát sáng đúng màu đã lem (chỉ khi có màu sắc thực thụ, không phát sáng trắng)
-    vec3 finalColor = mix(baseGlass, glowingRim, rimProfile * isChromatic * 0.95);
+    vec3 organicRim = mix(u_tint.rgb * 1.1 + vec3(0.04), diffusingSongColor, 0.45);
+    vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // Dynamic alpha: preserves translucent acrylic glass over transparent wallpaper
-    // when empty, and gracefully ramps up when vibrant artwork flows under
-    float glassAlpha = mask * mix(clamp(u_tint.a, 0.40, 0.90), 0.95, artworkPresence);
+    // Độ trong suốt keo 502 (Water-Clear Transparency ~ 0.48 - 0.58)
+    // Không bao giờ bị đục xám hay đen ngầu, nhìn thấu các card bên dưới
+    float baseAlpha = clamp(max(u_tint.a, 0.48), 0.48, 0.58);
+    float glassAlpha = mask * mix(baseAlpha, 0.62, u_flowActive * 0.25);
     fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity;
 }
 

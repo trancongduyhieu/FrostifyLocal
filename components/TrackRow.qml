@@ -5,13 +5,14 @@ Rectangle {
     id: row
     height: 48
     radius: 8
-    color: isCurrentTrack ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
-    border.color: isCurrentTrack ? Theme.accentGreen : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent")
+    color: isCurrentTrack ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.12) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+    border.color: isCurrentTrack ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.45) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
     border.width: 1
 
     Behavior on color { ColorAnimation { duration: 100 } }
     Behavior on border.color { ColorAnimation { duration: 100 } }
 
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property int indexNumber: 1
     property string trackTitle: ""
     property string trackArtist: ""
@@ -60,7 +61,7 @@ Rectangle {
                         ? "../assets/icons/media-playback-pause-symbolic.svg"
                         : "../assets/icons/media-playback-start-symbolic.svg"
                 iconSize: 14
-                color: row.isCurrentTrack ? Theme.accentGreen : Theme.textPrimary
+                color: row.isCurrentTrack ? row.accentColor : Theme.textPrimary
             }
 
             Text {
@@ -108,7 +109,7 @@ Rectangle {
                 running: row.isDownloading
                 iconSize: 15
                 progress: row.downloadProgress
-                color: "#00c853"
+                color: row.accentColor
             }
 
             AppIcon {

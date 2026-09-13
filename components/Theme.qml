@@ -19,8 +19,8 @@ QtObject {
     readonly property color textMuted: "#727272"      // Dim 45% gray icons/counters
 
     // Brand Accents
-    readonly property color accentGreen: "#1db954"    // Vibrant emerald green
-    readonly property color accentGreenHover: "#1ed760"
+    readonly property color accentGreen: "#deb06c"    // Warm dynamic wallpaper tone (Zero hardcoded green)
+    readonly property color accentGreenHover: "#eed08c"
     readonly property color accent: accentGreen       // Primary accent alias
     readonly property color accentPill: "#ffffff"
     readonly property color accentPillText: "#000000"

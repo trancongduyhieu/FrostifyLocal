@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
+import QtQuick.Effects
 import Quickshell
 import "."
 
@@ -18,6 +19,8 @@ Item {
 
     property bool isOpen: false
     property var dlMgr: (typeof downloadManager !== "undefined" ? downloadManager : null)
+    property Item backgroundSourceItem: null
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     readonly property var allTasksList: dlMgr ? (dlMgr.tasksList || []) : []
     readonly property var activeTasks: allTasksList.filter(t => t.state === 1 || t.state === 2)
@@ -39,16 +42,11 @@ Item {
         onClicked: root.close()
     }
 
-    // Popover Card - Minimalist Clean (#121212 Nutsty Desktop, 8px radius)
-    Rectangle {
+    // Popover Card - Liquid Glass Acrylic Container
+    Item {
         id: popoverCard
         width: 390
         height: Math.min(Math.max(tasksCol.implicitHeight + 84, 160), 480)
-        radius: 8
-        color: "#121212"
-        border.color: Qt.rgba(1, 1, 1, 0.08)
-        border.width: 1
-        clip: true
 
         // Positioned below header near download pill
         x: Math.max(20, Math.min(parent.width - width - 24, 380))
@@ -66,11 +64,42 @@ Item {
             onClicked: mouse => mouse.accepted = true
         }
 
-        ColumnLayout {
-            id: cardContent
+        // Outer Multi-tier Cinematic Depth Drop Shadow
+        Rectangle {
+            id: shadowShape
             anchors.fill: parent
-            anchors.margins: 14
-            spacing: 12
+            radius: 16
+            color: "#000000"
+            visible: false
+        }
+
+        MultiEffect {
+            anchors.fill: shadowShape
+            source: shadowShape
+            shadowEnabled: true
+            shadowColor: "#66000000"
+            shadowVerticalOffset: 4
+            shadowBlur: 0.55
+            z: 1
+        }
+
+        // Liquid Glass Container (matching PlayerBarBottom)
+        LiquidGlass {
+            id: popoverGlass
+            anchors.fill: parent
+            radius: 16
+            displacement: 16.0
+            aberration: 0.03
+            bevelWidth: 20.0
+            tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+            backgroundSourceItem: root.backgroundSourceItem
+            z: 2
+
+            ColumnLayout {
+                id: cardContent
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
 
             // Header Bar
             RowLayout {
@@ -80,7 +109,7 @@ Item {
                 AppIcon {
                     source: "../assets/icons/download-symbolic.svg"
                     iconSize: 15
-                    color: root.activeTasks.length > 0 ? Theme.accentGreen : Theme.textSecondary
+                    color: root.activeTasks.length > 0 ? root.accentColor : Theme.textSecondary
                 }
 
                 Text {
@@ -96,8 +125,8 @@ Item {
                     radius: 4
                     height: 18
                     width: actCountText.implicitWidth + 10
-                    color: Qt.rgba(30, 215, 96, 0.15)
-                    border.color: Theme.accentGreen
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15)
+                    border.color: root.accentColor
                     border.width: 1
 
                     Text {
@@ -107,7 +136,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 10
                         font.bold: true
-                        color: Theme.accentGreen
+                        color: root.accentColor
                     }
                 }
 
@@ -254,7 +283,7 @@ Item {
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
-                            color: Theme.accentGreen
+                            color: root.accentColor
                         }
 
                         Repeater {
@@ -292,7 +321,7 @@ Item {
                                             anchors.centerIn: parent
                                             size: 16
                                             strokeWidth: 2
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             running: true
                                         }
                                     }
@@ -322,7 +351,7 @@ Item {
                                             Rectangle {
                                                 height: parent.height
                                                 radius: 1.5
-                                                color: Theme.accentGreen
+                                                color: root.accentColor
                                                 width: parent.width * Math.min(1.0, Math.max(0.0, (modelData.progress || 0) / 100.0))
                                                 Behavior on width { NumberAnimation { duration: 150 } }
                                             }
@@ -337,7 +366,7 @@ Item {
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 10
                                                 font.bold: true
-                                                color: Theme.accentGreen
+                                                color: root.accentColor
                                             }
 
                                             Text {
@@ -423,7 +452,7 @@ Item {
                                     AppIcon {
                                         source: "../assets/icons/emblem-ok-symbolic.svg"
                                         iconSize: 14
-                                        color: Theme.accentGreen
+                                        color: root.accentColor
                                     }
 
                                     ColumnLayout {
@@ -457,4 +486,5 @@ Item {
             }
         }
     }
+}
 }

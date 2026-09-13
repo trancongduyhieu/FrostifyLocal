@@ -23,6 +23,7 @@ Rectangle {
     property bool isPlaying: false
     property string sidebarTab: "playlists" // "playlists" or "queue"
     property bool isLoadingRadio: false
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     property var customPlaylists: []
 
@@ -112,7 +113,7 @@ Rectangle {
                     AppIcon {
                         source: "../assets/icons/go-home-symbolic.svg"
                         iconSize: 18
-                        color: root.currentView === "home" ? Theme.accentGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "home" ? root.accentColor : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
 
                     Text {
@@ -121,7 +122,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
-                        color: root.currentView === "home" ? Theme.accentGreen : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "home" ? root.accentColor : (homeH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
                 }
 
@@ -151,7 +152,7 @@ Rectangle {
                     AppIcon {
                         source: "../assets/icons/folder-music-symbolic.svg"
                         iconSize: 18
-                        color: root.currentView === "library" ? Theme.accentGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "library" ? root.accentColor : (libH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
 
                     Text {
@@ -160,7 +161,7 @@ Rectangle {
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
-                        color: root.currentView === "library" ? Theme.accentGreen : (libH.hovered ? "#ffffff" : Theme.textSecondary)
+                        color: root.currentView === "library" ? root.accentColor : (libH.hovered ? "#ffffff" : Theme.textSecondary)
                     }
                 }
 
@@ -252,7 +253,7 @@ Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                             iconSize: 13
-                            color: root.sidebarTab === "playlists" ? Theme.accentGreen : (plTabH.hovered ? "#ffffff" : Theme.textSecondary)
+                            color: root.sidebarTab === "playlists" ? root.accentColor : (plTabH.hovered ? "#ffffff" : Theme.textSecondary)
                         }
 
                         Text {
@@ -293,7 +294,7 @@ Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             source: "../assets/icons/view-queue-symbolic.svg"
                             iconSize: 13
-                            color: root.sidebarTab === "queue" ? Theme.accentGreen : (qTabH.hovered ? "#ffffff" : Theme.textSecondary)
+                            color: root.sidebarTab === "queue" ? root.accentColor : (qTabH.hovered ? "#ffffff" : Theme.textSecondary)
                         }
 
                         Text {
@@ -312,7 +313,7 @@ Rectangle {
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: root.sidebarTab === "queue"
-                            color: root.sidebarTab === "queue" ? Theme.accentGreen : Theme.textMuted
+                            color: root.sidebarTab === "queue" ? root.accentColor : Theme.textMuted
                         }
                     }
 
@@ -476,7 +477,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: plItem.isCurrentlyPlaying ? Theme.accentGreen : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
+                                        color: plItem.isCurrentlyPlaying ? root.accentColor : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
                                         elide: Text.ElideRight
                                     }
 
@@ -503,7 +504,7 @@ Rectangle {
                                             width: 3
                                             height: index === 0 ? 10 : (index === 1 ? 14 : 8)
                                             radius: 1.5
-                                            color: Theme.accentGreen
+                                            color: root.accentColor
                                             anchors.bottom: parent.bottom
 
                                             SequentialAnimation on height {
@@ -682,7 +683,7 @@ Rectangle {
                             ))
 
                             color: isCurrent ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
-                            border.color: isCurrent ? Theme.accentGreen : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
+                            border.color: isCurrent ? root.accentColor : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
                             border.width: 1
 
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -744,7 +745,7 @@ Rectangle {
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             font.bold: true
-                                            color: qItem.isCurrent ? Theme.accentGreen : Theme.textMuted
+                                            color: qItem.isCurrent ? root.accentColor : Theme.textMuted
                                         }
 
                                         // Overlay equalizer if current and playing
@@ -763,7 +764,7 @@ Rectangle {
                                                         width: 2.5
                                                         height: index === 0 ? 8 : (index === 1 ? 12 : 6)
                                                         radius: 1
-                                                        color: Theme.accentGreen
+                                                        color: root.accentColor
                                                         anchors.bottom: parent.bottom
 
                                                         SequentialAnimation on height {
@@ -801,7 +802,7 @@ Rectangle {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         font.bold: true
-                                        color: qItem.isCurrent ? Theme.accentGreen : (qRowH.hovered ? "#ffffff" : Theme.textPrimary)
+                                        color: qItem.isCurrent ? root.accentColor : (qRowH.hovered ? "#ffffff" : Theme.textPrimary)
                                         elide: Text.ElideRight
                                     }
 

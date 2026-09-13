@@ -80,6 +80,7 @@ Scope {
     property bool isLoadingArtist: false
     property var followedArtists: []
     property color accentColor: "#deb06c"
+    property string currentWallpaperPath: ""
 
     Timer {
         id: ytSearchDebounce
@@ -812,9 +813,9 @@ Scope {
         id: masterContainer
         anchors.fill: parent
         radius: (win.maximized || win.fullscreen) ? 0 : 16
-        color: Qt.rgba(0.04, 0.04, 0.06, 0.74)
-        border.color: (win.maximized || win.fullscreen) ? "transparent" : Qt.rgba(1.0, 1.0, 1.0, 0.08)
-        border.width: (win.maximized || win.fullscreen) ? 0 : 1
+        color: Qt.rgba(0.04, 0.04, 0.06, 0.58)
+        border.color: "transparent"
+        border.width: 0
         clip: true
 
         // Global Ambient Velvet Blurred Background for Now Playing (covers 100% of the window)
@@ -868,7 +869,7 @@ Scope {
             id: ambientVignette
             anchors.fill: parent
             z: 0
-            opacity: 0.75
+            opacity: 0.35
 
             // Top subtle shade
             Rectangle {
@@ -921,6 +922,68 @@ Scope {
             }
         }
 
+        // =====================================================================
+        // Dynamic Composite Backdrop Source for Liquid Glass (Triple-Tier)
+        // Tier 1: Live UI Content & Track Cards (mainContentBackdrop)
+        // Tier 2: Active Now Playing Artwork (when music is playing)
+        // Tier 3: Desktop Wallpaper (when idle / no music playing)
+        // =====================================================================
+        Item {
+            id: glassCompositeBackdrop
+            anchors.fill: parent
+            z: -999
+            opacity: 0.001
+
+            // 1. Fallback Background Layer (Wallpaper vs Now Playing Artwork)
+            Item {
+                id: fallbackBackdropContainer
+                anchors.fill: parent
+
+                Image {
+                    id: fallbackWallpaperImg
+                    anchors.fill: parent
+                    source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    visible: opacity > 0.01
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+                }
+
+                Image {
+                    id: fallbackPlayingImg
+                    anchors.fill: parent
+                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    visible: opacity > 0.01
+                    opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+                }
+
+                MultiEffect {
+                    anchors.fill: parent
+                    source: (win.currentTrack && win.isPlaying) ? fallbackPlayingImg : fallbackWallpaperImg
+                    visible: (fallbackPlayingImg.visible || fallbackWallpaperImg.visible)
+                    blurEnabled: true
+                    blur: 0.70
+                    blurMax: 48
+                    saturation: 1.0
+                    brightness: -0.06
+                }
+            }
+
+            // 2. Live Content Layer (Card bài hát, header, etc.)
+            ShaderEffectSource {
+                id: liveContentTexture
+                anchors.fill: parent
+                sourceItem: mainContentBackdrop
+                live: true
+                hideSource: false
+                smooth: true
+            }
+        }
+
         // 1. Main Application Backdrop & Scrolling Content
         Item {
             id: mainContentBackdrop
@@ -939,7 +1002,7 @@ Scope {
                 isSidebarVisible: win.showSidebar
                 isMaximized: win.maximized
                 accentColor: win.accentColor
-                backgroundSourceItem: mainContentBackdrop
+                backgroundSourceItem: glassCompositeBackdrop
 
                 onHomeClicked: {
                     win.isNowPlayingOpen = false;
@@ -1057,6 +1120,7 @@ Scope {
                             isLoading: win.isLoadingHome
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
+                            accentColor: win.accentColor
 
                             onMoodSelected: (title, params) => win.selectMood(title, params)
                             onTrackPlayRequested: trk => {
@@ -1078,6 +1142,7 @@ Scope {
                             isLoading: win.isSearchingYT
                             albumMetadata: win.currentAlbumMetadata
                             localAlbums: win.localAlbums
+                            accentColor: win.accentColor
 
                             onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
                             onDownloadAlbumRequested: trks => win.downloadEntireAlbum(trks)
@@ -1246,7 +1311,7 @@ Scope {
             width: Math.min(600, parent.width - 48)
             height: 66
             z: 50
-            backgroundSourceItem: mainContentBackdrop
+            backgroundSourceItem: glassCompositeBackdrop
 
             currentTrack: win.currentTrack
             isPlaying: win.isPlaying
@@ -1367,6 +1432,8 @@ Scope {
         DownloadQueuePopover {
             id: downloadPopover
             dlMgr: downloadManager
+            accentColor: win.accentColor
+            backgroundSourceItem: glassCompositeBackdrop
         }
     }
 
@@ -1426,6 +1493,7 @@ Scope {
             if (!raw || raw.trim() === "") return;
             try {
                 var p = JSON.parse(raw);
+                if (p.wallpaper) win.currentWallpaperPath = p.wallpaper;
                 if (p.highlightColor) win.accentColor = p.highlightColor;
                 else if (p.accentColor) win.accentColor = p.accentColor;
             } catch(e) {}
@@ -2065,6 +2133,11 @@ Scope {
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
+        function playTrackObj(title: string, artist: string, image: string, path: string) { frostifyIpc.playTrackObj(title, artist, image, path); }
+        function switchNowPlayingTab(tab: string) { frostifyIpc.switchNowPlayingTab(tab); }
+        function testSelectMode() { frostifyIpc.testSelectMode(); }
+        function setDownloadsSubTab(tab: string) { frostifyIpc.setDownloadsSubTab(tab); }
+        function setSortBy(s: string) { frostifyIpc.setSortBy(s); }
         function toggleMaximize() { frostifyIpc.toggleMaximize(); }
     }
 
@@ -2154,6 +2227,42 @@ Scope {
                 win.currentTracks = win.allTracks;
                 win.playTrack(win.allTracks[idx]);
             }
+        }
+        function playTrackObj(title: string, artist: string, image: string, path: string) {
+            var trk = {
+                id: "yt_test",
+                title: title,
+                name: title,
+                artist: artist,
+                image: image,
+                path: path
+            };
+            win.playTrack(trk);
+        }
+        function switchNowPlayingTab(tab: string) {
+            if (ytNowPlayingView) ytNowPlayingView.activeTab = tab;
+        }
+        function testSelectMode() {
+            win.isNowPlayingOpen = false;
+            win.currentView = "library";
+            win.browsingTracks = win.allTracks;
+            mainGrid.sectionTitle = "Downloads";
+            mainGrid.isSelectionMode = true;
+            if (win.allTracks && win.allTracks.length > 0) {
+                mainGrid.selectedTrackPaths = [win.allTracks[0].path];
+            }
+        }
+        function setDownloadsSubTab(tab: string) {
+            win.isNowPlayingOpen = false;
+            win.currentView = "library";
+            mainGrid.sectionTitle = "Downloads";
+            mainGrid.downloadsSubTab = tab;
+        }
+        function setSortBy(s: string) {
+            win.isNowPlayingOpen = false;
+            win.currentView = "library";
+            mainGrid.sectionTitle = "Downloads";
+            mainGrid.sortBy = s;
         }
     }
 

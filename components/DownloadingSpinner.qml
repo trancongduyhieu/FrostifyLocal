@@ -9,7 +9,7 @@ Item {
 
     property bool running: true
     property real progress: -1 // 0 - 100, if < 0 just spin
-    property color color: "#00c853" // Bright Accent Green
+    property color color: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property real iconSize: 18
 
     Item {

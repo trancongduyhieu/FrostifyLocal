@@ -8,8 +8,10 @@ Rectangle {
     width: 176
     height: 250
     radius: Theme.radiusCard
-    color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
-    border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
+    color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+    border.color: (root.track && root.isPlaying)
+                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                  : (cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
     border.width: 1
 
     Behavior on color { ColorAnimation { duration: 120 } }
@@ -19,6 +21,7 @@ Rectangle {
     property bool isPlaying: false
     property bool isSelectionMode: false
     property bool isSelected: false
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     signal playRequested(var trk)
     signal detailsRequested(var trk)
     signal selectionToggled(var trk)
@@ -122,13 +125,13 @@ Rectangle {
                 Behavior on border.color { ColorAnimation { duration: 120 } }
             }
 
-            // Nutsty Floating Green Play Button on Hover
+            // Nutsty Floating Accent Play Button on Hover
             Rectangle {
                 id: greenPlayBtn
                 width: 44
                 height: 44
                 radius: 22
-                color: Theme.accentGreen
+                color: root.accentColor
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.margins: 8
@@ -156,7 +159,7 @@ Rectangle {
                 height: 26
                 radius: 13
                 color: Qt.rgba(0.08, 0.08, 0.1, 0.85)
-                border.color: root.isDownloading ? "#00c853" : Qt.rgba(0, 160, 203, 0.5)
+                border.color: root.isDownloading ? root.accentColor : Qt.rgba(0, 160, 203, 0.5)
                 border.width: 1
                 anchors.right: parent.right
                 anchors.top: parent.top
@@ -170,7 +173,7 @@ Rectangle {
                     running: root.isDownloading
                     iconSize: 15
                     progress: root.downloadProgress
-                    color: "#00c853"
+                    color: root.accentColor
                 }
 
                 AppIcon {
@@ -188,8 +191,8 @@ Rectangle {
                 width: 26
                 height: 26
                 radius: 13
-                color: root.isSelected ? Theme.accentGreen : Qt.rgba(0.08, 0.08, 0.1, 0.85)
-                border.color: root.isSelected ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.6)
+                color: root.isSelected ? root.accentColor : Qt.rgba(0.08, 0.08, 0.1, 0.85)
+                border.color: root.isSelected ? root.accentColor : Qt.rgba(1, 1, 1, 0.6)
                 border.width: 1.5
                 anchors.left: parent.left
                 anchors.top: parent.top
