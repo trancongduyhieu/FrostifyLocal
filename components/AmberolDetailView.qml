@@ -22,6 +22,45 @@ Rectangle {
 
     property string compactTab: "lyrics" // "lyrics" or "art"
 
+    property color accentColor: "#deb06c"
+    property var frostifyPalette: ({
+        "highlightColor": "#deb06c",
+        "baseTextColor": "#f8fafc",
+        "shadowDirectional": "#a6020305",
+        "shadowAmbient": "#66000000"
+    })
+
+    FileView {
+        id: frostifyPaletteFile
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_palette.json"
+        watchChanges: true
+        onFileChanged: {
+            this.reload();
+            delayedPaletteRead.restart();
+        }
+        onLoadedChanged: if (this.loaded) parseFrostifyPalette(this.text())
+        Component.onCompleted: if (this.loaded) parseFrostifyPalette(this.text())
+    }
+
+    Timer {
+        id: delayedPaletteRead
+        interval: 80
+        onTriggered: if (frostifyPaletteFile.loaded) parseFrostifyPalette(frostifyPaletteFile.text())
+    }
+
+    function parseFrostifyPalette(raw) {
+        if (!raw || raw.trim() === "") return;
+        try {
+            var obj = JSON.parse(raw);
+            var updated = Object.assign({}, root.frostifyPalette);
+            for (var k in obj) {
+                updated[k] = obj[k];
+            }
+            root.frostifyPalette = updated;
+            if (obj.highlightColor) root.accentColor = obj.highlightColor;
+        } catch (e) {}
+    }
+
     readonly property bool isCompact: root.width < 720
 
     signal closeRequested()
@@ -45,7 +84,8 @@ Rectangle {
         if (found !== -1) {
             var changed = (currentLyricIndex !== found);
             currentLyricIndex = found;
-            if (changed || forceScroll) {
+            lyricsView.currentIndex = found;
+            if (forceScroll) {
                 lyricsView.positionViewAtIndex(found, ListView.Center);
             }
         }
@@ -398,25 +438,55 @@ Rectangle {
                 }
             }
 
+            // Center track info when compact (replaces the redundant 56px sub-row)
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                spacing: 1
+                visible: root.isCompact
+
+                Text {
+                    Layout.fillWidth: true
+                    text: root.track ? (root.track.title || root.track.name || "Now Playing") : "Now Playing"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: Theme.textPrimary
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: root.track ? (root.track.artist || "") : ""
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    color: Qt.rgba(1, 1, 1, 0.65)
+                    elide: Text.ElideRight
+                    visible: !!text
+                }
+            }
+
             Text {
                 Layout.leftMargin: 8
-                text: root.isCompact ? "Now Playing" : "Now Playing Details & Synced Lyrics"
+                text: "Now Playing Details & Synced Lyrics"
                 font.family: Theme.fontFamily
                 font.pixelSize: 14
                 font.bold: true
                 color: Theme.textSecondary
+                visible: !root.isCompact
             }
 
-            Item { Layout.fillWidth: true }
+            Item { Layout.fillWidth: true; visible: !root.isCompact }
 
             // Segmented pill switch when compact: [Lyrics | Art]
             Rectangle {
                 visible: root.isCompact
-                width: 140
+                width: 144
                 height: 30
                 radius: 15
-                color: "#181818"
-                border.color: "#282828"
+                color: Qt.rgba(0.08, 0.08, 0.10, 0.75)
+                border.color: Qt.rgba(1, 1, 1, 0.10)
                 border.width: 1
 
                 RowLayout {
@@ -427,8 +497,10 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 15
-                        color: root.compactTab === "lyrics" ? Theme.accentGreen : (lyrH.hovered ? "#242424" : "transparent")
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        color: root.compactTab === "lyrics" ? Qt.rgba(1, 1, 1, 0.16) : (lyrH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                        border.color: root.compactTab === "lyrics" ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
                         HoverHandler { id: lyrH }
 
                         Text {
@@ -436,8 +508,8 @@ Rectangle {
                             text: "Lyrics"
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
-                            font.bold: true
-                            color: root.compactTab === "lyrics" ? "#000000" : Theme.textSecondary
+                            font.bold: root.compactTab === "lyrics"
+                            color: root.compactTab === "lyrics" ? "#ffffff" : Qt.rgba(1, 1, 1, 0.55)
                         }
 
                         MouseArea {
@@ -451,8 +523,10 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 15
-                        color: root.compactTab === "art" ? Theme.accentGreen : (artH.hovered ? "#242424" : "transparent")
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        color: root.compactTab === "art" ? Qt.rgba(1, 1, 1, 0.16) : (artH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                        border.color: root.compactTab === "art" ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
                         HoverHandler { id: artH }
 
                         Text {
@@ -460,8 +534,8 @@ Rectangle {
                             text: "Artwork"
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
-                            font.bold: true
-                            color: root.compactTab === "art" ? "#000000" : Theme.textSecondary
+                            font.bold: root.compactTab === "art"
+                            color: root.compactTab === "art" ? "#ffffff" : Qt.rgba(1, 1, 1, 0.55)
                         }
 
                         MouseArea {
@@ -470,67 +544,6 @@ Rectangle {
                             onClicked: root.compactTab = "art"
                         }
                     }
-                }
-            }
-        }
-
-        // Compact Header when window is narrow and showing lyrics
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            spacing: 12
-            visible: root.isCompact && root.compactTab === "lyrics"
-
-            Rectangle {
-                width: 52
-                height: 52
-                radius: 8
-                color: Qt.rgba(1, 1, 1, 0.05)
-                border.color: Qt.rgba(1, 1, 1, 0.08)
-                border.width: 1
-                clip: true
-
-                Image {
-                    anchors.fill: parent
-                    source: root.track && root.track.image ? root.track.image : ""
-                    fillMode: Image.PreserveAspectCrop
-                    visible: status === Image.Ready
-                }
-                Rectangle {
-                    anchors.fill: parent
-                    visible: !(root.track && root.track.image)
-                    color: "#282830"
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 22
-                        font.bold: true
-                        color: "#666677"
-                    }
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 2
-                Text {
-                    Layout.fillWidth: true
-                    text: root.track ? root.track.name : "No track"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 15
-                    font.bold: true
-                    color: Theme.textPrimary
-                    elide: Text.ElideRight
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: root.track ? root.track.artist : "Unknown Artist"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    color: Theme.accentGreen
-                    font.bold: true
-                    elide: Text.ElideRight
                 }
             }
         }
@@ -555,10 +568,6 @@ Rectangle {
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                }
-
                 ColumnLayout {
                     id: artContentCol
                     width: artScrollArea.width
@@ -572,9 +581,9 @@ Rectangle {
                         Layout.preferredWidth: width
                         Layout.preferredHeight: height
                         Layout.alignment: Qt.AlignHCenter
-                        radius: 12
-                        color: "#181818"
-                        border.color: "#282828"
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Qt.rgba(1, 1, 1, 0.10)
                         border.width: 1
                         clip: true
 
@@ -631,7 +640,7 @@ Rectangle {
                             text: root.track ? (root.track.artist || "Unknown Artist") : "Unknown Artist"
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
-                            color: Theme.accentGreen
+                            color: Qt.rgba(1, 1, 1, 0.72)
                             font.bold: true
                             elide: Text.ElideRight
                             horizontalAlignment: root.isCompact ? Text.AlignHCenter : Text.AlignLeft
@@ -659,7 +668,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 10
                                     font.bold: true
-                                    color: "#1ed760"
+                                    color: root.accentColor
                                 }
                             }
 
@@ -713,9 +722,9 @@ Rectangle {
                         Layout.maximumWidth: 320
                         Layout.preferredHeight: 96
                         Layout.alignment: Qt.AlignHCenter
-                        radius: 8
-                        color: "#161618"
-                        border.color: "#28282c"
+                        radius: 12
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
                         border.width: 1
 
                         GridLayout {
@@ -812,8 +821,8 @@ Rectangle {
                         Layout.preferredHeight: 164
                         Layout.alignment: Qt.AlignHCenter
                         radius: 12
-                        color: "#161618"
-                        border.color: artistCardMouse.containsMouse ? "#3e3e46" : "#28282c"
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: artistCardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
                         border.width: 1
                         clip: true
                         visible: (root.songDetails && (root.songDetails.author || root.songDetails.authorThumbnail)) || (root.track && root.track.artist)
@@ -961,8 +970,8 @@ Rectangle {
                         Layout.preferredHeight: (root.isDetailsLoading ? descShimmerCol.implicitHeight : descRealCol.implicitHeight) + 24
                         Layout.alignment: Qt.AlignHCenter
                         radius: 12
-                        color: "#161618"
-                        border.color: "#28282c"
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
                         border.width: 1
 
                         property bool isExpanded: false
@@ -1154,8 +1163,8 @@ Rectangle {
                                         height: 28
                                         Layout.preferredWidth: likeRow.implicitWidth + 16
                                         radius: 14
-                                        color: root.currentLikeStatus === "LIKE" ? Qt.rgba(0.12, 0.84, 0.38, 0.20) : (likeH.hovered ? "#242428" : "#1a1a1d")
-                                        border.color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#2c2c30"
+                                        color: root.currentLikeStatus === "LIKE" ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : (likeH.hovered ? "#242428" : "#1a1a1d")
+                                        border.color: root.currentLikeStatus === "LIKE" ? root.accentColor : "#2c2c30"
                                         border.width: 1
 
                                         RowLayout {
@@ -1166,7 +1175,7 @@ Rectangle {
                                             AppIcon {
                                                 source: "../assets/icons/thumb-up-symbolic.svg"
                                                 iconSize: 12
-                                                color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : "#ffffff"
                                             }
 
                                             Text {
@@ -1174,7 +1183,7 @@ Rectangle {
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 11
                                                 font.bold: true
-                                                color: root.currentLikeStatus === "LIKE" ? "#1ed760" : "#ffffff"
+                                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : "#ffffff"
                                             }
                                         }
 
@@ -1239,7 +1248,7 @@ Rectangle {
                                         anchors.bottom: parent.bottom
                                         width: parent.width * (root.songDetails ? (root.songDetails.likeRatio / 100.0) : 1.0)
                                         radius: 1.5
-                                        color: "#1ed760"
+                                        color: root.accentColor
                                     }
                                 }
 
@@ -1273,7 +1282,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
-                                    color: Theme.accentGreen
+                                    color: root.accentColor
 
                                     MouseArea {
                                         anchors.fill: parent
@@ -1292,9 +1301,9 @@ Rectangle {
                         Layout.maximumWidth: 320
                         Layout.preferredHeight: albRow.implicitHeight + 16
                         Layout.alignment: Qt.AlignHCenter
-                        radius: 10
-                        color: albH.hovered ? "#1c1c20" : "#161618"
-                        border.color: "#28282c"
+                        radius: 12
+                        color: albH.hovered ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
                         border.width: 1
 
                         RowLayout {
@@ -1306,7 +1315,7 @@ Rectangle {
                             AppIcon {
                                 source: "../assets/icons/media-optical-audio-symbolic.svg"
                                 iconSize: 18
-                                color: Theme.accentGreen
+                                color: root.accentColor
                             }
 
                             ColumnLayout {
@@ -1512,18 +1521,15 @@ Rectangle {
                     anchors.rightMargin: root.isCompact ? 8 : 16
                     clip: false
                     spacing: 20
-                    topMargin: height * 0.40
-                    bottomMargin: height * 0.50
+                    topMargin: 32
+                    bottomMargin: height * 0.45
                     currentIndex: root.currentLyricIndex
-                    preferredHighlightBegin: height * 0.42
-                    preferredHighlightEnd: height * 0.50
-                    highlightRangeMode: ListView.ApplyRange
-                    highlightMoveDuration: 350
+                    preferredHighlightBegin: height * 0.40
+                    preferredHighlightEnd: height * 0.40
+                    highlightRangeMode: ListView.StrictlyEnforceRange
+                    highlightMoveDuration: 600
+                    highlightMoveVelocity: -1
                     model: root.activeLyrics
-
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                    }
 
                     delegate: Item {
                         id: lyricRow

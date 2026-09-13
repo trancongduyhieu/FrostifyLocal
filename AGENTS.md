@@ -426,6 +426,28 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Hành động `fullscreen-window` của Niri compositor luôn vẽ một phông nền đen đặc sau cửa sổ để phục vụ trình phát video, làm mất hoàn toàn hiệu ứng kính xuyên thấu.
       - Chuyển phím tắt `Shift+F11` sang `maximize-window-to-edges;` trong `~/.config/niri/cfg/keybinds.kdl` và khai báo `Shortcut { sequences: ["F11", "Shift+F11"] }` trong `shell.qml`, cho phép mở rộng cửa sổ tối đa sát mép màn hình mà vẫn giữ trọn vẹn lớp kính Acrylic nhìn thấu hình nền.
 
+29. **Hệ Thống Cuộn Mượt Kinetic Web-like, Dynamic Chromatic Salience & Bento Glass Inspector (Item 29)**:
+    - **Cuộn Lời Bài Hát Mượt Mà Chuẩn Web (Kinetic Web-Like Lyric Scrolling)**:
+      - Loại bỏ triệt để hiện tượng giật cục/dịch chuyển tức thời (teleporting jump) do gọi trực tiếp `positionViewAtIndex` khi phát nhạc.
+      - Chuyển sang cơ chế dynamic highlight indexing: Trong `updateActiveLyric(forceScroll)`, chỉ cập nhật `lyricsView.currentIndex = found`, kích hoạt engine nội suy chuyển động của Qt Quick với `highlightRangeMode: ListView.StrictlyEnforceRange`, `highlightMoveDuration: 600`, và `highlightMoveVelocity: -1`. Lời bài hát lướt êm ái, mượt mà như cuộn trang web hiện đại.
+      - Ẩn hoàn toàn thanh cuộn dọc (`ScrollBar.vertical`) trên cả hai tab Lyrics và Artwork, tạo thẩm mỹ tối giản, sạch sẽ tuyệt đối.
+    - **Header Tinh Gọn 1 Dòng & Trả Lại Không Gian Thở Cho Lời Hát**:
+      - Xóa bỏ `RowLayout` phụ (chiều cao 56px) vốn chứa thumbnail mini trùng lặp và tên nghệ sĩ màu xanh lá, giải phóng hoàn toàn không gian phía trên.
+      - Tích hợp tên bài hát (13px bold) và nghệ sĩ (11px, màu trắng/slate thanh nhã `rgba(255, 255, 255, 0.65)`) trực tiếp vào thanh Top Bar cạnh nút Back.
+      - Đặt `topMargin: 32` và `bottomMargin: height * 0.45` cho `lyricsView`, đảm bảo các câu hát trên cùng không bao giờ bị cắt cụt hay dính sát vào mép header.
+    - **Xóa Bỏ Triệt Để Màu Xanh Lá Cây & Chuyển Sang Dynamic Chromatic Salience**:
+      - Loại bỏ 100% màu xanh neon `#1ed760` / `Theme.accentGreen` trên toàn bộ Player Bar và Amberol Details View (nút Shuffle, Repeat, Volume scrub, Like ratio bar, nút "Xem thêm ▼", icon album và tên nghệ sĩ).
+      - Đồng bộ động với màu điểm nhấn hình nền (`accentColor` lấy từ `~/.config/noctalia/nutsty_palette.json` -> `highlightColor` / `accentColor` thông qua `FileView` và timer 80ms/100ms trên cả `shell.qml` và `components/AmberolDetailView.qml`).
+      - Pill Switch `[ Lyrics | Artwork ]`: Thiết kế lại thành khoang con nhộng kính mờ Acrylic cao cấp (`Qt.rgba(1, 1, 1, 0.16)` với viền `Qt.rgba(root.accentColor, 0.40)` khi active, không còn xanh lá).
+    - **Tái Thiết Kế Tab Artwork & Inspector Thành Bento Glass Đẳng Cấp**:
+      - Loại bỏ hoàn toàn các khối hộp đen kịt thô ráp (`#161618`, `#28282c`).
+      - Áp dụng triết lý Bento Glass với độ trong suốt tinh tế: `color: Qt.rgba(1, 1, 1, 0.04)`, viền `border.color: Qt.rgba(1, 1, 1, 0.08)`, bo góc đồng tâm \(R = 12\) - \(16\).
+      - Thẻ thông số Audio Specs (CODEC, BITRATE, SAMPLE RATE, CHANNELS) và thẻ Album/Single tinh gọn, tỷ lệ hiển thị cân đối 96px, font chữ sắc nét không bị tràn lề.
+      - Tương tác Like/Dislike mượt mà với thanh tỷ lệ like neon chuyển sang màu `accentColor` đồng bộ hoàn hảo với hình nền.
+    - **Khôi Phục Nút Bật/Tắt Lời Bài Hát Trên Player Bar**:
+      - Trong `components/PlayerBarBottom.qml`, loại bỏ nút Sidebar cạnh thanh âm lượng (vì đã có nút Sidebar ở góc trên bên trái `TopHeaderBar.qml`).
+      - Đặt lại nút **Lời bài hát** (`view-lyrics-symbolic.svg`) cạnh thanh âm lượng: Gọi signal `openDetailsRequested()` để bật/tắt `win.showAmberolDetails`, tích hợp chấm tròn trạng thái và ánh sáng hover theo `root.accentColor`.
+
 ---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)

@@ -25,6 +25,7 @@ Item {
     property real scrubTime: 0.0
     property bool isScrubbingVolume: false
     property bool isLoadingAudio: false
+    property color accentColor: "#deb06c"
 
     signal playPauseClicked()
     signal nextClicked()
@@ -201,7 +202,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
                         // User explicitly requested: "tên nghệ sĩ cùng màu với tên bài hát"
-                        color: (root.currentTrack && artistMouse.containsMouse) ? Theme.accentGreen : Theme.textPrimary
+                        color: (root.currentTrack && artistMouse.containsMouse) ? root.accentColor : Theme.textPrimary
                         x: 0
 
                         readonly property real overflowDist: Math.max(0, implicitWidth - artistContainer.width)
@@ -268,12 +269,12 @@ Item {
                     anchors.centerIn: parent
                     source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                     iconSize: 15
-                    color: root.isShuffle ? Theme.accentGreen : (shufHover.hovered ? "#ffffff" : "#b3b3b3")
+                    color: root.isShuffle ? root.accentColor : (shufHover.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
                     width: 3; height: 3; radius: 1.5
-                    color: Theme.accentGreen
+                    color: root.accentColor
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 1
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -382,12 +383,12 @@ Item {
                     anchors.centerIn: parent
                     source: "../assets/icons/media-playlist-repeat-symbolic.svg"
                     iconSize: 15
-                    color: root.isRepeat ? Theme.accentGreen : (repHover.hovered ? "#ffffff" : "#b3b3b3")
+                    color: root.isRepeat ? root.accentColor : (repHover.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
                     width: 3; height: 3; radius: 1.5
-                    color: Theme.accentGreen
+                    color: root.accentColor
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 1
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -470,7 +471,7 @@ Item {
                             anchors.bottom: parent.bottom
                             width: Math.max(0, parent.width * (root.volume / 100.0))
                             radius: parent.radius
-                            color: volMouse.containsMouse || root.isScrubbingVolume ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.85)
+                            color: volMouse.containsMouse || root.isScrubbingVolume ? root.accentColor : Qt.rgba(1, 1, 1, 0.85)
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
 
@@ -516,32 +517,32 @@ Item {
                 }
             }
 
-            // Queue button
+            // Lyrics / Amberol Details Toggle button
             Item {
                 width: 28; height: 28
                 anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: queueH }
+                HoverHandler { id: lyricsH }
 
                 AppIcon {
                     anchors.centerIn: parent
-                    source: "../assets/icons/view-queue-symbolic.svg"
+                    source: "../assets/icons/view-lyrics-symbolic.svg"
                     iconSize: 15
-                    color: root.isQueueActive ? Theme.accentGreen : (queueH.hovered ? "#ffffff" : "#b3b3b3")
+                    color: root.isLyricsActive ? root.accentColor : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
                     width: 3; height: 3; radius: 1.5
-                    color: Theme.accentGreen
+                    color: root.accentColor
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 1
                     anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isQueueActive
+                    visible: root.isLyricsActive
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.queueClicked()
+                    onClicked: root.openDetailsRequested()
                 }
             }
         }

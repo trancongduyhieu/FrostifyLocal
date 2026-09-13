@@ -78,6 +78,7 @@ Scope {
     property var artistHistoryStack: []
     property bool isLoadingArtist: false
     property var followedArtists: []
+    property color accentColor: "#deb06c"
 
     Timer {
         id: ytSearchDebounce
@@ -1175,6 +1176,7 @@ Scope {
                     track: win.currentTrack
                     currentTime: win.currentTime
                     isPlaying: win.isPlaying
+                    accentColor: win.accentColor
 
                     onCloseRequested: win.showAmberolDetails = false
                     onSeekRequested: sec => win.seekAudio(sec)
@@ -1214,6 +1216,7 @@ Scope {
             isRepeat: win.isRepeat
             isLyricsActive: win.showAmberolDetails
             isQueueActive: win.showSidebar
+            accentColor: win.accentColor
 
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
@@ -1362,6 +1365,39 @@ Scope {
                 win.loadSettings();
             }
         }
+    }
+
+    FileView {
+        id: paletteFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_palette.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            delayedPaletteTimer.restart();
+        }
+        onLoadedChanged: {
+            if (loaded) parsePalette();
+        }
+        Component.onCompleted: {
+            if (loaded) parsePalette();
+        }
+
+        function parsePalette() {
+            var raw = text();
+            if (!raw || raw.trim() === "") return;
+            try {
+                var p = JSON.parse(raw);
+                if (p.highlightColor) win.accentColor = p.highlightColor;
+                else if (p.accentColor) win.accentColor = p.accentColor;
+            } catch(e) {}
+        }
+    }
+
+    Timer {
+        id: delayedPaletteTimer
+        interval: 100
+        repeat: false
+        onTriggered: paletteFileView.parsePalette()
     }
 
     function loadSettings() {
