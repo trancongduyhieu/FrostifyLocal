@@ -806,14 +806,20 @@ Scope {
 
     // Master Container with Nutsty Dark Aesthetic
     Rectangle {
+        id: masterContainer
         anchors.fill: parent
         radius: win.fullscreen ? 0 : Theme.radiusApp
-        color: "#000000"
+        color: "#0b0c0e"
         clip: true
 
-        ColumnLayout {
+        // 1. Main Application Backdrop & Scrolling Content
+        Item {
+            id: mainContentBackdrop
             anchors.fill: parent
-            spacing: 8
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 8
 
             // Top Nutsty Header & Search
             TopHeaderBar {
@@ -1120,49 +1126,57 @@ Scope {
                     }
                 }
             }
+        }
+    }
 
-            // Bottom Player Bar (Centered layout, Amberol SVGs, 240Hz responsive)
-            PlayerBarBottom {
-                id: bottomPlayer
-                Layout.fillWidth: true
-                currentTrack: win.currentTrack
-                isPlaying: win.isPlaying
-                isLoadingAudio: win.isLoadingAudio
-                currentTime: win.currentTime
-                totalDuration: win.totalDuration
-                volume: win.volume
-                isShuffle: win.isShuffle
-                isRepeat: win.isRepeat
-                isLyricsActive: win.showAmberolDetails
-                isQueueActive: win.showSidebar
+        // 2. Floating Liquid Glass Player Bar (Centered Glass Capsule Dock)
+        PlayerBarBottom {
+            id: bottomPlayer
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 16
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(600, parent.width - 48)
+            height: 66
+            z: 50
+            backgroundSourceItem: mainContentBackdrop
 
-                onPlayPauseClicked: win.togglePlay()
-                onNextClicked: win.playNext()
-                onPrevClicked: win.playPrev()
-                onOpenDetailsRequested: {
-                    win.showAmberolDetails = !win.showAmberolDetails;
-                }
-                onQueueClicked: {
-                    win.showSidebar = !win.showSidebar;
-                }
-                onToggleShuffle: {
-                    win.isShuffle = !win.isShuffle;
-                    win.saveSettings();
-                }
-                onToggleRepeat: {
-                    win.isRepeat = !win.isRepeat;
-                    win.saveSettings();
-                }
-                onOpenArtistRequested: (name, chId) => {
-                    if (!chId && amberolView.songDetails) {
-                        if (amberolView.songDetails.channelId) chId = amberolView.songDetails.channelId;
-                        if (amberolView.songDetails.author) name = amberolView.songDetails.author;
-                    }
-                    win.loadArtistDetails(chId || name);
-                }
-                onSeekRequested: sec => win.seekAudio(sec)
-                onReqVolumeChange: vol => win.setVolume(vol)
+            currentTrack: win.currentTrack
+            isPlaying: win.isPlaying
+            isLoadingAudio: win.isLoadingAudio
+            currentTime: win.currentTime
+            totalDuration: win.totalDuration
+            volume: win.volume
+            isShuffle: win.isShuffle
+            isRepeat: win.isRepeat
+            isLyricsActive: win.showAmberolDetails
+            isQueueActive: win.showSidebar
+
+            onPlayPauseClicked: win.togglePlay()
+            onNextClicked: win.playNext()
+            onPrevClicked: win.playPrev()
+            onOpenDetailsRequested: {
+                win.showAmberolDetails = !win.showAmberolDetails;
             }
+            onQueueClicked: {
+                win.showSidebar = !win.showSidebar;
+            }
+            onToggleShuffle: {
+                win.isShuffle = !win.isShuffle;
+                win.saveSettings();
+            }
+            onToggleRepeat: {
+                win.isRepeat = !win.isRepeat;
+                win.saveSettings();
+            }
+            onOpenArtistRequested: (name, chId) => {
+                if (!chId && amberolView.songDetails) {
+                    if (amberolView.songDetails.channelId) chId = amberolView.songDetails.channelId;
+                    if (amberolView.songDetails.author) name = amberolView.songDetails.author;
+                }
+                win.loadArtistDetails(chId || name);
+            }
+            onSeekRequested: sec => win.seekAudio(sec)
+            onReqVolumeChange: vol => win.setVolume(vol)
         }
 
         // Google Account / Cloud Settings Modal

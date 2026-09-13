@@ -249,6 +249,58 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Chuyển Câu Dạng Trượt Cuộn Lên (400ms Slide-Up Fade Out & Reset)**:
       - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
 
+24. **Công Thức Kính Lỏng Thuần Khiết SimpMusic & Floating Player Bar (SimpMusic Pure Liquid Glass - Item 24)**:
+    - **Triết Lý Kiến Trúc Kính Lỏng Thuần Khiết (SimpMusic Pure Backdrop Lens Architecture)**:
+      - *Mục tiêu*: Tái hiện hoàn hảo hiệu ứng kính lỏng (Liquid Glass) sóng sánh như keo nước của SimpMusic Desktop / Android trên nền Linux Wayland (Quickshell / Qt Quick RHI / GLSL 440).
+      - *Cấu trúc các tệp tin liên quan (Component Files)*:
+        1. `components/LiquidGlass.qml`: Harness QML đóng gói `ShaderEffectSource` bắt ảnh nền động từ `backgroundSourceItem` (`smooth: true`, `mipmap: true`, `live: true`), tự động tính toán tọa độ ánh xạ `globalOffset: root.mapToItem(backgroundSourceItem, 0, 0)` và truyền toàn bộ ma trận/uniforms vào shader.
+        2. `assets/shaders/liquid_glass.frag`: Fragment shader GLSL 440 chứa thuật toán quang học đa tầng.
+        3. `assets/shaders/liquid_glass.frag.qsb`: Shader nhị phân RHI biên dịch cho Qt 6 thông qua lệnh: `/usr/lib/qt6/bin/qsb --qt6 assets/shaders/liquid_glass.frag -o assets/shaders/liquid_glass.frag.qsb`.
+        4. `components/PlayerBarBottom.qml`: Floating dock sử dụng `LiquidGlass` với bo góc mềm 16px, chứa mini cover, marquee title loop, cụm nút điều khiển SVG và thanh tiến trình tối giản.
+        5. `shell.qml`: Khởi tạo `mainContentBackdrop` (chứa toàn bộ nội dung scrollable) và gắn làm `backgroundSourceItem` cho `PlayerBarBottom`.
+      - *Khuếch tán keo nước hai tầng (Two-tier Viscous Liquid Gel Diffusion)*:
+        - Lấy mẫu 2 tầng kết hợp: Tầng khí quyển rộng (Wide atmospheric bloom, Mipmap LOD 3.8 + 20px taps) chiếm 65% + Tầng định hình (Form preservation, Mipmap LOD 2.0 + 8px taps) chiếm 35%.
+        - Tăng cường độ bão hòa màu 1.6x (`vibrancy`), giúp màu sắc của bìa album bên dưới tan chảy và lan tỏa mềm mại, sóng sánh như keo nước ("như keo nước").
+      - *Khúc xạ thấu kính dẻo làm lan tỏa & phóng đại Avatar (Curvature Liquid Lens Displacement)*:
+        - Sử dụng hàm cung tròn `circleMap(t) = 1.0 - sqrt(max(0.0, 1.0 - t * t))` kết hợp độ dịch chuyển âm (`dispAmount = -18.0px`) theo hướng pháp tuyến giải tích `gradSdRoundedRect`.
+        - Kéo dãn và phóng đại các đối tượng/avatar bài hát nằm sát mép kính, tạo cảm giác hình ảnh nở bung và tan chảy vào lòng thanh player bar ("playerbar bên trong bị lan ra bởi avatar của bài hát").
+      - *Thuật toán cô lập màu quang phổ & Viền phát sáng đúng màu lem (Chromatic Saturation Isolation)*:
+        - Lấy mẫu trực tiếp tại mép viền (`directUV`) kết hợp màu khuếch tán (`rimSourceCol = mix(vibrantColor, directEdgeCol, 0.45)`).
+        - Đo đạc độ bão hòa quang phổ: `chromaSat = (maxC - minC) / maxC` và độ sáng `chromaLum = dot(rimSourceCol, Luma)`.
+        - **Loại trừ màu trắng tuyệt đối**: Ký tự chữ màu trắng (như "Replay") có `chromaSat ~ 0.0` $\rightarrow$ `isChromatic = smoothstep(0.07, 0.18, chromaSat) * smoothstep(0.04, 0.12, chromaLum) == 0.0`, viền tuyệt đối **KHÔNG BAO GIỜ bị trắng**.
+        - **Phát sáng đúng màu lem**: Avatar màu tím có `chromaSat > 0.45` $\rightarrow$ `isChromatic = 1.0`, kích hoạt viền 2.2px phát sáng rực rỡ đúng màu tím neon (`pureHue = mix(chromaLum, rimSourceCol, 2.5) * 1.65`). Tương tự, card vàng viền vàng neon, card xanh viền xanh neon.
+        - **Triệt tiêu 100% lỗi viền trên nền đen**: Nền đen có `chromaLum < 0.04` $\rightarrow$ `isChromatic == 0.0`, viền tối đen tuyền tuyệt đối, 4 góc hoàn toàn liền mạch không còn vệt sáng.
+      - *Triệt tiêu viền giả bằng Premultiplied Alpha*:
+        - Đầu ra shader bắt buộc tuân thủ chuẩn hòa trộn RHI: `fragColor = vec4(finalColor * mask, mask) * qt_Opacity`. Điều này loại bỏ hoàn toàn viền halo màu trắng/xám tại các pixel khử răng cưa ở 4 góc.
+      - *Độ tối bề mặt thích ứng (Adaptive Surface Darken)*:
+        - Tối nhẹ 12% trên nền đen giúp màu sắc bài hát xuyên qua rực rỡ trong vắt; tự động nâng lên tối đa 48% trên nền trắng để đảm bảo nút bấm và chữ luôn dễ đọc.
+    - **Thiết Kế Thanh Player Bar SimpMusic 16dp**:
+      - *Hình dạng bo góc mềm*: Bo góc vuông nhẹ `radius: 16px` (chuẩn `RoundedCornerShape(16.dp)` của SimpMusic Desktop).
+      - *Hoạt ảnh Marquee Loop (Ping-Pong Animation)*: Khi tên bài hát hoặc tên ca sĩ dài vượt khung, `SequentialAnimation` trong `Item { clip: true }` tự động dừng 1.8s ở đầu $\rightarrow$ trượt mượt sang trái $\rightarrow$ dừng 1.8s ở cuối $\rightarrow$ trượt về đầu. Tuyệt đối không cắt cụt chữ bằng dấu `...`.
+      - *Đồng bộ màu nghệ sĩ*: Tên nghệ sĩ có cùng màu trắng sáng với tên bài hát (`Theme.textPrimary`), khi rê chuột sáng xanh `Theme.accentGreen`.
+      - *Thanh tiến trình trong suốt tối giản (100% Transparent Background Track)*:
+        - `progressBg.color: "transparent"`: Xóa bỏ hoàn toàn vạch màu xám ở phần bài hát chưa chạy.
+        - Chỉ hiển thị thanh màu trắng `#ffffff` thanh mảnh 2.0px (hover 3.5px) cho phần thời lượng đã phát (`elapsed progress`), giúp thanh player bar trong suốt và thanh thoát tuyệt đối.
+        - Scrub handle dot 6px màu trắng và tooltip thời gian mượt mà khi hover/scrub.
+    - **Bẫy Lỗi "Xương Máu" & Bài Học Tránh Lặp Lại Khi Tạo Component Liquid Glass Mới (Crucial Gotchas & Pitfalls)**:
+      1. *Lỗi 4 góc và viền bị vệt sáng trắng trên nền tối (Un-premultiplied Alpha)*:
+         - **Hiện tượng**: Trên nền đen, 4 góc bo của player bar xuất hiện vệt sáng mờ hoặc viền trắng trông như một miếng sticker dán đè lên.
+         - **Nguyên nhân**: Qt Quick RHI (Vulkan/OpenGL) sử dụng công thức hòa trộn Premultiplied Alpha (`GL_ONE, GL_ONE_MINUS_SRC_ALPHA`). Nếu shader xuất `vec4(color, mask)` mà không nhân màu với mask, các pixel khử răng cưa ở biên sẽ bị đội độ sáng lên bất thường.
+         - **Khắc phục**: Luôn luôn xuất `fragColor = vec4(finalColor * mask, mask) * qt_Opacity`.
+      2. *Lỗi viền bị bắt nhầm màu trắng của chữ bên ngoài (White Text Pollution)*:
+         - **Hiện tượng**: Khi thanh player bar đè lên avatar màu tím nhưng gần đó có chữ trắng (như tên bài hát, chữ "Replay"), viền trên bị biến thành màu trắng bệt thay vì phát sáng màu tím.
+         - **Nguyên nhân**: Lấy mẫu biên ngoài `max(vibrantColor, edgeCol)` mà không lọc độ bão hòa, khiến màu trắng `#ffffff` của chữ đè bẹp màu tím của avatar.
+         - **Khắc phục**: Đo độ bão hòa quang phổ `chromaSat = (maxC - minC) / maxC`. Chữ trắng có `chromaSat ~ 0.0` bị triệt tiêu hoàn toàn qua `isChromatic = smoothstep(0.07, 0.18, chromaSat) * smoothstep(...)`. Viền chỉ phát sáng khi tiếp xúc với màu sắc bão hòa thực sự (`chromaSat > 0.45`).
+      3. *Lỗi kính bị đục đen hoặc cứng đơ không có tính dẻo ("keo nước")*:
+         - **Hiện tượng**: Kính trông như một mảng nhựa đen mờ phẳng lì, khi cuộn qua album không thấy màu sắc lan tỏa hay phóng to.
+         - **Nguyên nhân**: Dùng độ tối cố định quá lớn (`darken > 0.4`), thiếu thuật toán thấu kính uốn cong (`circleMap`) và chỉ dùng blur bán kính nhỏ.
+         - **Khắc phục**: Áp dụng công thức SimpMusic: `darken` thích ứng từ 12% (nền đen) đến 48% (nền trắng); kết hợp khuếch tán 2 tầng (wide bloom 20px chiếm 65% + form 8px chiếm 35%) và thấu kính uốn cong âm (`dispAmount = -18.0px`) để kéo và phóng to avatar nở bung vào lòng kính.
+      4. *Lỗi thanh tiến trình có vạch màu xám làm đục bề mặt kính*:
+         - **Hiện tượng**: Xuất hiện một đường chỉ màu xám chạy ngang đáy thanh player bar, làm mất đi tính nguyên khối và độ trong suốt của kính.
+         - **Khắc phục**: Đặt `progressBg.color: "transparent"`. Tuyệt đối không dùng bất kỳ dải màu xám nào làm nền unplayed track.
+      5. *Lỗi quên biên dịch shader `.frag` ra `.frag.qsb`*:
+         - **Cảnh báo**: Mọi sửa đổi trong file mã nguồn `assets/shaders/liquid_glass.frag` sẽ KHÔNG có hiệu lực trong Quickshell nếu chưa chạy lệnh biên dịch: `/usr/lib/qt6/bin/qsb --qt6 assets/shaders/liquid_glass.frag -o assets/shaders/liquid_glass.frag.qsb` và restart lại tiến trình Quickshell.
+
 ---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)

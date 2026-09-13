@@ -983,6 +983,20 @@
   },
   {
     "id": 82,
+    "title": "giữ lấy làm gì",
+    "name": "giữ lấy làm gì",
+    "artist": "MONSTAR",
+    "album": "Over The Moon",
+    "year": "2021",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/giữ lấy làm gì.m4a",
+    "filename": "giữ lấy làm gì.m4a",
+    "duration": "3:20",
+    "image": "/home/apple/.cache/nutsty/thumbnails/f8673a5ec467f45bb25abfa63b852659.jpg",
+    "mtime": 1789221184
+  },
+  {
+    "id": 83,
     "title": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "name": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "artist": "PHẠM KỲ OFFICIAL",
@@ -996,7 +1010,7 @@
     "mtime": 1788945022
   },
   {
-    "id": 83,
+    "id": 84,
     "title": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "name": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "artist": "Trang Xinh Music",
@@ -1010,7 +1024,7 @@
     "mtime": 1788945014
   },
   {
-    "id": 84,
+    "id": 85,
     "title": "死神 / 米津玄師　- 梓川 (cover)",
     "name": "死神 / 米津玄師　- 梓川 (cover)",
     "artist": "Azusagawa",
@@ -1024,7 +1038,7 @@
     "mtime": 1789120436
   },
   {
-    "id": 85,
+    "id": 86,
     "title": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "name": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "artist": "htingale, Renard 狐",
@@ -1038,7 +1052,7 @@
     "mtime": 1789113873
   },
   {
-    "id": 86,
+    "id": 87,
     "title": "西楼别序 (prod.htingale)",
     "name": "西楼别序 (prod.htingale)",
     "artist": "htingale",

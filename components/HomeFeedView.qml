@@ -34,10 +34,10 @@ Rectangle {
         id: flick
         anchors.fill: parent
         contentWidth: parent.width
-        contentHeight: contentCol.implicitHeight + 40
+        contentHeight: contentCol.implicitHeight + 110
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: console.log("[Flickable] contentY changed to:", contentY)
-        Component.onCompleted: contentY = 0
+        Component.onCompleted: contentY = 320
 
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded

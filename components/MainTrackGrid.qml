@@ -104,7 +104,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 20
         contentWidth: width
-        contentHeight: contentCol.height + 40
+        contentHeight: contentCol.height + 110
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 

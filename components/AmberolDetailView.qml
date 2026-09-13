@@ -517,7 +517,7 @@ Rectangle {
                 Layout.maximumWidth: root.isCompact ? 360 : 320
                 Layout.minimumWidth: 260
                 contentWidth: width
-                contentHeight: artContentCol.height + 30
+                contentHeight: artContentCol.height + 110
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
@@ -1515,6 +1515,7 @@ Rectangle {
                         Layout.fillHeight: true
                         clip: true
                         spacing: 16
+                        bottomMargin: 100
                         model: root.activeLyrics
 
                         ScrollBar.vertical: ScrollBar {

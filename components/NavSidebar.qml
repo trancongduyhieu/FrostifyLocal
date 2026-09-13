@@ -359,6 +359,7 @@ Rectangle {
                         clip: true
                         spacing: 4
                         boundsBehavior: Flickable.StopAtBounds
+                        bottomMargin: 100
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                         model: root.allPlaylists
@@ -596,6 +597,7 @@ Rectangle {
                         spacing: 3
                         visible: (root.queueTracks && root.queueTracks.length > 0) || root.isLoadingRadio
                         boundsBehavior: Flickable.StopAtBounds
+                        bottomMargin: 100
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                         footer: ColumnLayout {
