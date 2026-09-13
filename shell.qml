@@ -975,16 +975,7 @@ Scope {
                     id: fallbackImagesComposite
                     anchors.fill: parent
 
-                    // Bottom Layer: Desktop Wallpaper (always present)
-                    Image {
-                        id: fallbackWallpaperImg
-                        anchors.fill: parent
-                        source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                    }
-
-                    // Top Layer: Active Song Artwork (Crossfades gently over 900ms)
+                    // Active Song Artwork (Crossfades gently over 900ms when playing)
                     Image {
                         id: fallbackPlayingImg
                         anchors.fill: parent
@@ -1074,9 +1065,6 @@ Scope {
                 }
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;
-                }
-                onDownloadPopoverRequested: {
-                    downloadPopover.open();
                 }
 
                 onBackRequested: {
