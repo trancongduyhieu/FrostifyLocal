@@ -1712,15 +1712,98 @@ def rate_song_action(video_id, rating):
     except Exception as e:
         sys.stderr.write(f"[rate_song error for {clean_vid}]: {e}\n")
         res["ytm_error"] = str(e)
-    return res
+RELATED_CACHE_DIR = os.path.expanduser("~/.cache/nutsty/related")
+
+def get_song_related_content(video_id, title="", artist=""):
+    clean_vid = resolve_video_id_for_track(video_id, title, artist)
+    if not clean_vid:
+        return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
+
+    os.makedirs(RELATED_CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(RELATED_CACHE_DIR, f"{clean_vid}.json")
+    if os.path.exists(cache_path):
+        cached = load_json(cache_path)
+        if cached and (time.time() - cached.get("timestamp", 0) < 86400):
+            return cached
+
+    yt = get_ytmusic_client()
+    try:
+        wp = yt.get_watch_playlist(clean_vid, limit=1)
+        rel_id = wp.get("related")
+        if not rel_id:
+            return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
+
+        rel_sections = yt.get_song_related(rel_id)
+        you_might_like = []
+        rec_playlists = []
+        similar_artists = []
+
+        for sec in rel_sections:
+            sec_title = sec.get("title", "")
+            contents = sec.get("contents", [])
+            if "You might also like" in sec_title or "bạn có thể thích" in sec_title.lower():
+                for item in contents:
+                    norm = normalize_track(item)
+                    if norm:
+                        you_might_like.append(norm)
+            elif "Recommended playlists" in sec_title or "danh sách phát" in sec_title.lower():
+                for item in contents:
+                    p_id = item.get("playlistId", "")
+                    p_title = item.get("title", "")
+                    thumbs = item.get("thumbnails", [])
+                    img = thumbs[-1].get("url", "") if thumbs else ""
+                    desc = item.get("description", "")
+                    if p_id and p_title:
+                        rec_playlists.append({
+                            "playlistId": p_id,
+                            "id": p_id,
+                            "title": p_title,
+                            "image": img,
+                            "description": desc,
+                            "isOnline": True
+                        })
+            elif "Similar artists" in sec_title or "nghệ sĩ tương tự" in sec_title.lower():
+                for item in contents:
+                    a_name = item.get("title", "")
+                    a_id = item.get("browseId", "")
+                    thumbs = item.get("thumbnails", [])
+                    img = thumbs[-1].get("url", "") if thumbs else ""
+                    subs = item.get("subscribers", "")
+                    if a_name:
+                        similar_artists.append({
+                            "name": a_name,
+                            "channelId": a_id,
+                            "image": img,
+                            "subscribers": subs
+                        })
+
+        res = {
+            "timestamp": time.time(),
+            "videoId": clean_vid,
+            "you_might_also_like": you_might_like[:16],
+            "recommended_playlists": rec_playlists[:12],
+            "similar_artists": similar_artists[:12]
+        }
+        save_json(cache_path, res)
+        return res
+    except Exception as e:
+        sys.stderr.write(f"[get_song_related error for {clean_vid}]: {e}\n")
+        return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating>]")
+        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating> | song_related <id>]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
-    if cmd == "song_details" and len(sys.argv) > 2:
+    if cmd == "song_related" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        title = sys.argv[3] if len(sys.argv) > 3 else ""
+        artist = sys.argv[4] if len(sys.argv) > 4 else ""
+        res = get_song_related_content(vid, title, artist)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "song_details" and len(sys.argv) > 2:
         vid = sys.argv[2]
         res = get_song_details(vid)
         print(json.dumps(res, ensure_ascii=False))

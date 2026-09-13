@@ -444,9 +444,30 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Áp dụng triết lý Bento Glass với độ trong suốt tinh tế: `color: Qt.rgba(1, 1, 1, 0.04)`, viền `border.color: Qt.rgba(1, 1, 1, 0.08)`, bo góc đồng tâm \(R = 12\) - \(16\).
       - Thẻ thông số Audio Specs (CODEC, BITRATE, SAMPLE RATE, CHANNELS) và thẻ Album/Single tinh gọn, tỷ lệ hiển thị cân đối 96px, font chữ sắc nét không bị tràn lề.
       - Tương tác Like/Dislike mượt mà với thanh tỷ lệ like neon chuyển sang màu `accentColor` đồng bộ hoàn hảo với hình nền.
-    - **Khôi Phục Nút Bật/Tắt Lời Bài Hát Trên Player Bar**:
-      - Trong `components/PlayerBarBottom.qml`, loại bỏ nút Sidebar cạnh thanh âm lượng (vì đã có nút Sidebar ở góc trên bên trái `TopHeaderBar.qml`).
-      - Đặt lại nút **Lời bài hát** (`view-lyrics-symbolic.svg`) cạnh thanh âm lượng: Gọi signal `openDetailsRequested()` để bật/tắt `win.showAmberolDetails`, tích hợp chấm tròn trạng thái và ánh sáng hover theo `root.accentColor`.
+29. **Kiến Trúc Giao Diện YouTube Music Now Playing & Điều Hướng Header Liquid Glass (Item 30)**:
+    - **Triết Lý Thiết Kế Bố Cục Tách Đôi 50/50 (Split-Screen Now Playing Architecture)**:
+      - *Component cốt lõi*: `components/YTMusicNowPlayingView.qml` kết hợp `shell.qml`.
+      - *Cột Trái (Left Area - 46%)*:
+        - Mode Switcher Pill `[ Bài hát | Video ]`: Viên nang Liquid Glass khúc xạ thấu kính GPU (`displacement: 5.0`, `bevelWidth: 6.0`, `radius: 18px`), chuyển đổi tức thì giữa chế độ ảnh bìa tĩnh và luồng video in-app nhúng từ YouTube.
+        - Ảnh bìa lớn tỷ lệ 1:1 cắt bo góc mềm mại 18px, lớp phủ phát quang ambient blur từ bìa album phía sau (`MultiEffect` blur: 1.0, blurMax: 64, saturation: 1.4).
+        - Trình phát Video In-App: `MediaPlayer` + `VideoOutput` (`muted: true` để không xung đột luồng âm thanh bit-perfect từ MPV daemon), phân giải URL video trực tiếp qua `ytmusic_helper.py get_url <videoId>`.
+        - Khối thông tin: Tên bài hát (22px bold, text `#ffffff`), nghệ sĩ, nút Thích (`thumb-up-symbolic.svg`) và nút Thêm vào danh sách (`list-add-symbolic.svg`).
+      - *Cột Phải (Right Area - 54%)*:
+        - Thanh điều hướng 3 tab: `[ UP NEXT | LYRICS | RELATED ]` với vạch chỉ báo trượt mượt mà theo `accentColor`.
+        - *Tab 1 - UP NEXT*: Hiển thị danh sách hàng đợi đang phát `win.currentTracks`, sóng âm Equalizer 3 thanh dao động cạnh bài đang chạy, chuột phải mở toàn diện `TrackContextMenu`.
+        - *Tab 2 - LYRICS*: Engine kinetic scrolling DoF với chữ đang hát trắng sáng tuyệt đối 28px bold ở tâm quang học, các câu trước/sau mờ nhạt dần theo khoảng cách ($dist = 1 \rightarrow 2 \rightarrow 3$), hiệu ứng karaoke word-by-word mượt mà. Tự động chuyển sang `UP NEXT` và làm mờ tab Lyrics (`opacity: 0.35`) khi bài hát không có lyric.
+        - *Tab 3 - RELATED*: Bóc tách tự động qua `get_song_related_content` trong `backend/ytmusic_helper.py`, hiển thị 3 nhóm carousels: "You might also like", "Recommended playlists", và "Similar artists".
+    - **Loại Bỏ Sidebar & Điều Hướng Liquid Glass Trên Top Header**:
+      - Xóa bỏ hoàn toàn `NavSidebar.qml` khỏi giao diện để trả lại 100% không gian hiển thị cho Home feed và Now Playing.
+      - Chuyển 3 nút điều hướng (`Home`, `Downloads/Library`, `Settings`) lên cụm Liquid Glass ở góc phải của `TopHeaderBar.qml`. Nút đang kích hoạt có viền sáng neon theo `accentColor` và hiệu ứng hover êm dịu.
+    - **Cơ Chế Thu Gọn / Mở Rộng 1-Chạm Bằng Nút Chevron Trên Player Bar**:
+      - Giữ nguyên kích thước thanh dock 66px của `PlayerBarBottom.qml`.
+      - Thay thế nút lyric bằng nút chevron xoay tròn `[ ∨ / ∧ ]` (`rotation: root.isNowPlayingOpen ? -90 : 90`).
+      - Bấm vào chevron hoặc click tên bài / bìa album trên player bar để chuyển đổi giữa chế độ duyệt (Home) và Now Playing view.
+      - Click phát bất kỳ bài hát nào từ Home, Search, Downloads tự động mở bung Now Playing view.
+    - **Bẫy Lỗi Cần Tránh (Crucial Gotchas)**:
+      - Trong Quickshell, `Process` không sử dụng `StdioCollector { onDataChanged }` mà **bắt buộc** phải dùng `SplitParser { splitMarker: "\n"; onRead: data => { ... } }` kết hợp `onExited` để nạp dữ liệu từ Python daemon.
+      - Khi lồng các phần tử con bên trong `LiquidGlass.qml`, cần khai báo `property alias radius: root.radius` trên `contentContainer` để tránh lỗi cảnh báo `Unable to assign [undefined] to double` khi con gọi `parent.radius`.
 
 ---
 

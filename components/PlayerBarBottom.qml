@@ -20,6 +20,7 @@ Item {
     property bool isShuffle: false
     property bool isRepeat: false
     property bool isLyricsActive: false
+    property bool isNowPlayingOpen: false
     property bool isQueueActive: false
     property bool isScrubbingProgress: false
     property real scrubTime: 0.0
@@ -517,17 +518,19 @@ Item {
                 }
             }
 
-            // Lyrics / Amberol Details Toggle button
+            // Now Playing Expand / Collapse Chevron Button [ ∨ / ∧ ] (YouTube Music Style)
             Item {
                 width: 28; height: 28
                 anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: lyricsH }
+                HoverHandler { id: chevronH }
 
                 AppIcon {
                     anchors.centerIn: parent
-                    source: "../assets/icons/view-lyrics-symbolic.svg"
-                    iconSize: 15
-                    color: root.isLyricsActive ? root.accentColor : (lyricsH.hovered ? "#ffffff" : "#b3b3b3")
+                    source: "../assets/icons/go-previous-symbolic.svg"
+                    iconSize: 14
+                    rotation: root.isNowPlayingOpen ? -90 : 90
+                    Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    color: root.isNowPlayingOpen ? root.accentColor : (chevronH.hovered ? "#ffffff" : "#b3b3b3")
                 }
 
                 Rectangle {
@@ -536,7 +539,7 @@ Item {
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 1
                     anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isLyricsActive
+                    visible: root.isNowPlayingOpen
                 }
 
                 MouseArea {

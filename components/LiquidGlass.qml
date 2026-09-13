@@ -79,6 +79,7 @@ Item {
     Item {
         id: contentContainer
         anchors.fill: parent
+        property alias radius: root.radius
         z: 10
     }
 }

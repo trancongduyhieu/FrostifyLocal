@@ -18,6 +18,8 @@ Rectangle {
     property bool isLoading: false
     property var currentTrack: null
     property bool isPlaying: false
+    property Item backgroundSourceItem: null
+    property color accentColor: Theme.accentGreen
 
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
@@ -93,13 +95,28 @@ Rectangle {
                                 { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
                             ]
 
-                            Rectangle {
-                                id: pillRect
+                            LiquidGlass {
+                                id: pillGlass
                                 height: 32
                                 width: pillTxt.implicitWidth + 24
-                                radius: Theme.radiusPill
-                                color: root.selectedMood === modelData.title ? Theme.accentPill : (pillMouse.containsMouse ? "#333333" : "#242424")
-                                Behavior on color { ColorAnimation { duration: 100 } }
+                                radius: 16
+                                displacement: 5.0
+                                bevelWidth: 6.0
+                                backgroundSourceItem: root.backgroundSourceItem
+                                tintColor: root.selectedMood === modelData.title 
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) 
+                                           : (pillMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.06, 0.07, 0.09, 0.50))
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: parent.radius
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: root.selectedMood === modelData.title 
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.65) 
+                                                  : (pillMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.08))
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                                }
 
                                 Text {
                                     id: pillTxt
@@ -108,7 +125,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
-                                    color: root.selectedMood === modelData.title ? Theme.accentPillText : Theme.textPrimary
+                                    color: root.selectedMood === modelData.title ? "#ffffff" : (pillMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
                                 }
 
                                 MouseArea {
@@ -366,7 +383,7 @@ Rectangle {
                                             font.pixelSize: 11
                                             color: Theme.textMuted
                                             Layout.rightMargin: 8
-                                            visible: modelData.duration && modelData.duration !== "--:--"
+                                            visible: Boolean(modelData && modelData.duration && modelData.duration !== "--:--")
                                         }
                                     }
 

@@ -246,3 +246,23 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - Bảo vệ lệnh tua (`seek`) khi đang crossfade: Lập tức cam kết bài tiếp theo thành bài chính (`commit incoming as current`) trước khi seek để không tua nhầm vào bài đang tắt dần.
     - Tập trung hóa toàn bộ lệnh ghi thuộc tính MPV qua 1 luồng IPC trong daemon để chống xung đột trạng thái.
 
+- [x] **30. Tái Thiết Kế Giao Diện Chuẩn YouTube Music Now Playing & Điều Hướng Liquid Glass (YouTube Music Now Playing Suite - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Tách biệt Split-Screen 50/50 Chuẩn YouTube Music**:
+      - Loại bỏ panel hẹp bên phải (`AmberolDetailView`), thay thế bằng `YTMusicNowPlayingView` toàn màn hình: Cột trái (46%) hiển thị Mode Switcher Liquid Glass `[ Bài hát | Video ]`, artwork lớn tỷ lệ 1:1 cắt bo góc mềm mại kèm ambient blur phát quang phía sau, tên bài hát (22px bold), nghệ sĩ, nút Like và Add to playlist; Cột phải (54%) chứa bộ 3 tab `[ UP NEXT | LYRICS | RELATED ]`.
+    - **Tab Lyrics Động Lực Học DoF & Karaoke Highlight**:
+      - Mặc định mở tab `LYRICS` đầu tiên khi phát bài. Tự động chuyển sang `UP NEXT` và làm mờ tab Lyrics (opacity 0.35) nếu bài hát không có lyric.
+      - Dòng đang hát hiển thị sắc nét 100% màu trắng sáng (`#ffffff`), font 28px bold ở tâm quang học, các câu trước và sau mờ nhẹ theo khoảng cách dòng ($dist = 1 \rightarrow 2 \rightarrow 3$), hiệu ứng karaoke word-by-word mượt mà.
+    - **Tab Up Next & Related Content**:
+      - `UP NEXT`: Đồng bộ danh sách bài hát từ hàng đợi `win.currentTracks`, sóng âm Equalizer 3 thanh dao động cạnh bài đang phát, hỗ trợ click phát bài và menu chuột phải.
+      - `RELATED`: Bóc tách từ `get_song_related_content` trong `backend/ytmusic_helper.py`, hiển thị "You might also like", "Recommended playlists", và "Similar artists".
+    - **Loại Bỏ Hoàn Toàn Sidebar Trái & Điều Hướng Liquid Glass Trên Header**:
+      - Loại bỏ `NavSidebar.qml` để giải phóng 100% chiều rộng cho giao diện duyệt nhạc Home, Downloads và Now Playing.
+      - Di dời 3 nút điều hướng (`Home`, `Downloads/Library`, `Settings`) lên góc phải `TopHeaderBar.qml`, đóng gói trong các nút bấm **Liquid Glass** với hiệu ứng khúc xạ thấu kính GPU thời gian thực.
+    - **Điều Khiển Thu Gọn / Mở Rộng 1-Chạm Bằng Nút Chevron Trên Player Bar**:
+      - Giữ nguyên kích thước chuẩn 66px của `PlayerBarBottom.qml`.
+      - Thay thế nút lyric cũ bằng nút chevron xoay tròn `[ ∨ / ∧ ]` (`rotation: -90 <-> 90`), click để thu gọn về Home hoặc mở bung Now Playing.
+      - Click vào bài hát bất kỳ từ Home, Search, Downloads tự động mở bung Now Playing view.
+    - **Tương Thích Hoàn Hảo Cả Chế Độ Cửa Sổ Thường & Maximize (`Shift+F11`)**:
+      - Đã kiểm tra thực tế bằng `grim` và `view_file` trên Wayland Niri, giao diện co giãn tỷ lệ và hiển thị hoàn hảo ở mọi kích thước màn hình.
+

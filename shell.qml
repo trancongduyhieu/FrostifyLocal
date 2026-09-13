@@ -27,11 +27,11 @@ Scope {
                     statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
                     statusProcess.running = true;
                 }
-                Qt.callLater(function() { amberolView.updateActiveLyric(true); });
+                Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
             }
         }
 
-        property var activeLyrics: amberolView.activeLyrics
+        property var activeLyrics: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? ytNowPlayingView.activeLyrics : []
 
     readonly property string appDir: Quickshell.env("HOME") + "/Applications/FrostifyLocal"
 
@@ -781,7 +781,8 @@ Scope {
 
     property bool isShuffle: false
     property bool isRepeat: false
-    property bool showAmberolDetails: false
+    property bool isNowPlayingOpen: false
+    property alias showAmberolDetails: win.isNowPlayingOpen
     property real widgetX: 60
     property real widgetY: 820
 
@@ -890,6 +891,30 @@ Scope {
                 currentView: win.currentView
                 isSidebarVisible: win.showSidebar
                 isMaximized: win.maximized
+                accentColor: win.accentColor
+                backgroundSourceItem: mainContentBackdrop
+
+                onHomeClicked: {
+                    win.isNowPlayingOpen = false;
+                    if (win.currentView !== "home") win.previousView = win.currentView;
+                    win.currentView = "home";
+                    win.mainSectionTitle = "Home";
+                }
+                onLibraryClicked: {
+                    win.isNowPlayingOpen = false;
+                    if (win.currentView !== "library") win.previousView = win.currentView;
+                    win.currentView = "library";
+                    win.currentAlbumMetadata = null;
+                    mainGrid.albumMetadata = null;
+                    mainGrid.downloadsSubTab = "tracks";
+                    win.browsingTracks = win.allTracks;
+                    win.mainSectionTitle = "Downloads";
+                    mainGrid.sectionTitle = "Downloads";
+                    win.refreshLocalAlbums();
+                }
+                onSettingsClicked: {
+                    settingsModal.visible = true;
+                }
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
@@ -903,6 +928,10 @@ Scope {
                 }
 
                 onBackRequested: {
+                    if (win.isNowPlayingOpen) {
+                        win.isNowPlayingOpen = false;
+                        return;
+                    }
                     win.currentAlbumMetadata = null;
                     mainGrid.albumMetadata = null;
                     if (win.currentView === "playlist" || win.currentView === "search") {
@@ -931,6 +960,7 @@ Scope {
                 }
 
                 onSearchSubmitted: (query, mode) => {
+                    win.isNowPlayingOpen = false;
                     if (mode === "online" || win.currentView === "home" || win.currentView === "search" || win.currentView === "playlist") {
                         if (query && query.trim().length > 0) {
                             win.performYTSearch(query.trim());
@@ -944,251 +974,213 @@ Scope {
                 }
             }
 
-            // Main Content Area: 3-Column Desktop Layout (Nutsty Optimized)
-            RowLayout {
+            // Main Content Area: YouTube Music Split Experience OR Full-Width Browsing
+            Item {
+                id: mainContentContainer
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
-                spacing: 8
+                clip: true
 
-                // Column 1: Left Navigation Sidebar
-                NavSidebar {
-                    id: leftSidebar
-                    Layout.fillHeight: true
-                    Layout.fillWidth: false
-                    readonly property bool shouldBeVisible: win.showSidebar && (!win.showAmberolDetails || win.width >= 900)
-                    visible: shouldBeVisible
-                    Layout.preferredWidth: shouldBeVisible ? 240 : 0
-                    Layout.maximumWidth: shouldBeVisible ? 240 : 0
-                    Layout.minimumWidth: shouldBeVisible ? 240 : 0
-                    playlists: win.playlists
-                    onlinePlaylists: win.homeFeaturedPlaylists
-                    customPlaylists: win.customPlaylists
-                    queueTracks: win.currentTracks
-                    currentTrack: win.currentTrack
-                    isPlaying: win.isPlaying
-                    activePlaylistId: win.activePlaylistId
-                    playingPlaylistId: win.playingPlaylistId
-                    selectedIndex: win.selectedPlaylistIndex
-                    currentView: win.currentView
-                    isLoadingRadio: radioProc.running
+                // 1. Browsing Area (Home Feed, Local Library/Downloads, or Artist Page)
+                Item {
+                    id: browsingContainer
+                    anchors.fill: parent
+                    visible: opacity > 0
+                    opacity: win.isNowPlayingOpen ? 0.0 : 1.0
+                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
-                    onHomeSelected: {
-                        if (win.currentView !== "home") win.previousView = win.currentView;
-                        win.currentView = "home";
-                        win.mainSectionTitle = "Home";
-                        if (win.width < 1020) win.showAmberolDetails = false;
-                    }
-                    onLibrarySelected: {
-                        if (win.currentView !== "library") win.previousView = win.currentView;
-                        win.currentView = "library";
-                        win.currentAlbumMetadata = null;
-                        mainGrid.albumMetadata = null;
-                        mainGrid.downloadsSubTab = "tracks";
-                        win.browsingTracks = win.allTracks;
-                        win.mainSectionTitle = "Downloads";
-                        mainGrid.sectionTitle = "Downloads";
-                        win.refreshLocalAlbums();
-                        if (win.width < 1020) win.showAmberolDetails = false;
-                    }
-                    onSettingsRequested: {
-                        settingsModal.visible = true;
-                    }
-                    onPlaylistSelected: (idx, pl) => {
-                        if (pl && (pl.playlistId || pl.id)) {
-                            win.loadPlaylistTracks(pl);
-                        } else {
-                            if (win.currentView !== "library") win.previousView = win.currentView;
-                            win.currentView = "library";
-                            win.selectedPlaylistIndex = idx;
-                            if (pl && pl.id) win.selectPlaylist(pl.id);
+                    StackLayout {
+                        id: centerStack
+                        anchors.fill: parent
+                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : 1)
+
+                        HomeFeedView {
+                            id: homeView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            backgroundSourceItem: mainContentBackdrop
+                            moods: win.homeMoods
+                            selectedMood: win.selectedMood
+                            sections: win.homeSections
+                            quickPicks: win.homeQuickPicks
+                            featuredPlaylists: win.homeFeaturedPlaylists
+                            isLoading: win.isLoadingHome
+                            currentTrack: win.currentTrack
+                            isPlaying: win.isPlaying
+
+                            onMoodSelected: (title, params) => win.selectMood(title, params)
+                            onTrackPlayRequested: trk => {
+                                win.startRadioFromTrack(trk);
+                                win.isNowPlayingOpen = true;
+                            }
+                            onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
+                            onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                        }
+
+                        MainTrackGrid {
+                            id: mainGrid
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            tracks: win.browsingTracks
+                            currentTrack: win.currentTrack
+                            isPlaying: win.isPlaying
+                            sectionTitle: win.mainSectionTitle
+                            isLoading: win.isSearchingYT
+                            albumMetadata: win.currentAlbumMetadata
+                            localAlbums: win.localAlbums
+
+                            onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
+                            onDownloadAlbumRequested: trks => win.downloadEntireAlbum(trks)
+                            onAlbumSelected: alb => win.loadAlbumDetails(alb)
+
+                            onPlayAllRequested: {
+                                if (!mainGrid.sortedTracks || mainGrid.sortedTracks.length === 0) return;
+                                win.currentTracks = mainGrid.sortedTracks.slice();
+                                if (win.currentView === "playlist") {
+                                    win.playingPlaylistId = win.activePlaylistId;
+                                } else {
+                                    win.playingPlaylistId = "";
+                                }
+                                var first = win.currentTracks[0];
+                                if (first) {
+                                    if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
+                                        win.playOnlineTrack(first, false);
+                                    } else {
+                                        win.playTrack(first);
+                                    }
+                                }
+                                win.isNowPlayingOpen = true;
+                            }
+                            onTrackPlayRequested: trk => {
+                                if (win.isContextMenuActive) return;
+                                if (trk && (trk.type === "album" || (trk.browseId && String(trk.browseId).startsWith("MPREb_")))) {
+                                    win.loadAlbumDetails(trk);
+                                    return;
+                                }
+                                if (win.browsingTracks && win.browsingTracks.length > 0) {
+                                    win.currentTracks = win.browsingTracks;
+                                }
+                                if (win.currentView === "playlist") {
+                                    win.playingPlaylistId = win.activePlaylistId;
+                                } else {
+                                    win.playingPlaylistId = "";
+                                }
+                                if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
+                                    win.playOnlineTrack(trk, false);
+                                } else {
+                                    win.playTrack(trk);
+                                }
+                                win.isNowPlayingOpen = true;
+                            }
+                            onTrackDetailsRequested: trk => {
+                                win.currentTrack = trk;
+                                win.isNowPlayingOpen = true;
+                            }
+                            onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                            onShufflePlayRequested: {
+                                win.shufflePlayBrowsing();
+                                win.isNowPlayingOpen = true;
+                            }
+                            onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
+                            onCreatePlaylistRequested: trks => win.createCustomPlaylistFromTracks(trks)
+                        }
+
+                        ArtistDetailView {
+                            id: artistView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            artistData: win.currentArtistData
+                            isLoading: win.isLoadingArtist
+                            currentTrack: win.currentTrack
+                            isPlaying: win.isPlaying
+                            followedArtists: win.followedArtists
+
+                            onBackRequested: win.goBackFromArtist()
+                            onPlayTrackRequested: (trk, index, trackList) => {
+                                if (win.isContextMenuActive) return;
+                                win.currentTracks = trackList.slice();
+                                win.playingPlaylistId = "";
+                                if (trk) {
+                                    if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                                        win.playOnlineTrack(trk, false);
+                                    } else {
+                                        win.playTrack(trk);
+                                    }
+                                }
+                                win.isNowPlayingOpen = true;
+                            }
+                            onStartRadioRequested: item => {
+                                if (item && item.id) {
+                                    win.startRadioFromTrack(item);
+                                    win.isNowPlayingOpen = true;
+                                }
+                            }
+                            onShuffleArtistRequested: artistObj => {
+                                if (artistObj && artistObj.popular && artistObj.popular.length > 0) {
+                                    var shuffled = artistObj.popular.slice();
+                                    for (var i = shuffled.length - 1; i > 0; i--) {
+                                        var j = Math.floor(Math.random() * (i + 1));
+                                        var temp = shuffled[i];
+                                        shuffled[i] = shuffled[j];
+                                        shuffled[j] = temp;
+                                    }
+                                    win.currentTracks = shuffled;
+                                    win.playingPlaylistId = "";
+                                    win.playOnlineTrack(shuffled[0], false);
+                                    win.isNowPlayingOpen = true;
+                                } else if (artistObj && artistObj.metadata && artistObj.metadata.shuffleId) {
+                                    win.startRadioFromTrack({ id: artistObj.metadata.shuffleId, name: artistObj.metadata.name });
+                                    win.isNowPlayingOpen = true;
+                                }
+                            }
+                            onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
+                            onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
+                            onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                            onToggleFollowRequested: (chId, aName, currFollowed) => win.toggleFollowArtist(chId, aName, currFollowed)
                         }
                     }
-                    onOnlinePlaylistSelected: pl => {
-                        win.loadPlaylistTracks(pl);
-                        if (win.width < 1020) win.showAmberolDetails = false;
-                    }
-                    onCustomPlaylistDeleteRequested: plId => {
-                        win.deleteCustomPlaylist(plId);
-                    }
-                    onTrackSelected: trk => {
+                }
+
+                // 2. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
+                YTMusicNowPlayingView {
+                    id: ytNowPlayingView
+                    anchors.fill: parent
+                    visible: opacity > 0
+                    opacity: win.isNowPlayingOpen ? 1.0 : 0.0
+                    y: win.isNowPlayingOpen ? 0 : 30
+                    Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                    Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+
+                    track: win.currentTrack
+                    currentTime: win.currentTime
+                    totalDuration: win.totalDuration > 0 ? win.totalDuration : 1.0
+                    isPlaying: win.isPlaying
+                    queueTracks: win.currentTracks
+                    playingPlaylistTitle: win.mainSectionTitle || "Queue"
+                    accentColor: win.accentColor
+                    backgroundSourceItem: mainContentBackdrop
+
+                    onSeekRequested: sec => win.seekAudio(sec)
+                    onPlayTrackRequested: (trk, index) => {
                         if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
-                            win.playOnlineTrack(trk);
+                            win.playOnlineTrack(trk, false);
                         } else {
                             win.playTrack(trk);
                         }
                     }
                     onTrackContextMenuRequested: (trk, gx, gy, isQ) => trackContextMenu.openAt(trk, gx, gy, isQ)
-                }
-
-                // Column 2: Center Main Content (Home Feed, Local Library, or Artist Page)
-                StackLayout {
-                    id: centerStack
-                    visible: !win.showAmberolDetails || win.width >= 1020
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 400
-                    currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : 1)
-
-                    HomeFeedView {
-                        id: homeView
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        moods: win.homeMoods
-                        selectedMood: win.selectedMood
-                        sections: win.homeSections
-                        quickPicks: win.homeQuickPicks
-                        featuredPlaylists: win.homeFeaturedPlaylists
-                        isLoading: win.isLoadingHome
-                        currentTrack: win.currentTrack
-                        isPlaying: win.isPlaying
-
-                        onMoodSelected: (title, params) => win.selectMood(title, params)
-                        onTrackPlayRequested: trk => win.startRadioFromTrack(trk)
-                        onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
-                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                    onPlaylistSelected: pl => {
+                        win.loadPlaylistTracks(pl);
+                        win.isNowPlayingOpen = false;
                     }
-
-                    MainTrackGrid {
-                        id: mainGrid
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        tracks: win.browsingTracks
-                        currentTrack: win.currentTrack
-                        isPlaying: win.isPlaying
-                        sectionTitle: win.mainSectionTitle
-                        isLoading: win.isSearchingYT
-                        albumMetadata: win.currentAlbumMetadata
-                        localAlbums: win.localAlbums
-
-                        onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
-                        onDownloadAlbumRequested: trks => win.downloadEntireAlbum(trks)
-                        onAlbumSelected: alb => win.loadAlbumDetails(alb)
-
-                        onPlayAllRequested: {
-                            if (!mainGrid.sortedTracks || mainGrid.sortedTracks.length === 0) return;
-                            win.currentTracks = mainGrid.sortedTracks.slice();
-                            if (win.currentView === "playlist") {
-                                win.playingPlaylistId = win.activePlaylistId;
-                            } else {
-                                win.playingPlaylistId = "";
-                            }
-                            var first = win.currentTracks[0];
-                            if (first) {
-                                if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
-                                    win.playOnlineTrack(first, false);
-                                } else {
-                                    win.playTrack(first);
-                                }
-                            }
-                        }
-                        onTrackPlayRequested: trk => {
-                            if (win.isContextMenuActive) return;
-                            if (trk && (trk.type === "album" || (trk.browseId && String(trk.browseId).startsWith("MPREb_")))) {
-                                win.loadAlbumDetails(trk);
-                                return;
-                            }
-                            if (win.browsingTracks && win.browsingTracks.length > 0) {
-                                win.currentTracks = win.browsingTracks;
-                            }
-                            if (win.currentView === "playlist") {
-                                win.playingPlaylistId = win.activePlaylistId;
-                            } else {
-                                win.playingPlaylistId = "";
-                            }
-                            if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
-                                win.playOnlineTrack(trk, false);
-                            } else {
-                                win.playTrack(trk);
-                            }
-                        }
-                        onTrackDetailsRequested: trk => {
-                            win.currentTrack = trk;
-                            win.showAmberolDetails = true;
-                        }
-                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
-                        onShufflePlayRequested: win.shufflePlayBrowsing()
-                        onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
-                        onCreatePlaylistRequested: trks => win.createCustomPlaylistFromTracks(trks)
+                    onArtistSelected: (name, chId) => {
+                        win.loadArtistDetails(chId || name);
+                        win.isNowPlayingOpen = false;
                     }
-
-                    ArtistDetailView {
-                        id: artistView
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        artistData: win.currentArtistData
-                        isLoading: win.isLoadingArtist
-                        currentTrack: win.currentTrack
-                        isPlaying: win.isPlaying
-                        followedArtists: win.followedArtists
-
-                        onBackRequested: win.goBackFromArtist()
-                        onPlayTrackRequested: (trk, index, trackList) => {
-                            if (win.isContextMenuActive) return;
-                            win.currentTracks = trackList.slice();
-                            win.playingPlaylistId = "";
-                            if (trk) {
-                                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
-                                    win.playOnlineTrack(trk, false);
-                                } else {
-                                    win.playTrack(trk);
-                                }
-                            }
-                        }
-                        onStartRadioRequested: item => {
-                            if (item && item.id) {
-                                win.startRadioFromTrack(item);
-                            }
-                        }
-                        onShuffleArtistRequested: artistObj => {
-                            if (artistObj && artistObj.popular && artistObj.popular.length > 0) {
-                                var shuffled = artistObj.popular.slice();
-                                for (var i = shuffled.length - 1; i > 0; i--) {
-                                    var j = Math.floor(Math.random() * (i + 1));
-                                    var temp = shuffled[i];
-                                    shuffled[i] = shuffled[j];
-                                    shuffled[j] = temp;
-                                }
-                                win.currentTracks = shuffled;
-                                win.playingPlaylistId = "";
-                                win.playOnlineTrack(shuffled[0], false);
-                            } else if (artistObj && artistObj.metadata && artistObj.metadata.shuffleId) {
-                                win.startRadioFromTrack({ id: artistObj.metadata.shuffleId, name: artistObj.metadata.name });
-                            }
-                        }
-                        onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
-                        onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
-                        onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
-                        onToggleFollowRequested: (chId, aName, currFollowed) => win.toggleFollowArtist(chId, aName, currFollowed)
-                    }
-                }
-
-                // Column 3: Amberol Detail View (Right Collapsible Panel)
-                AmberolDetailView {
-                    id: amberolView
-                    visible: win.showAmberolDetails
-                    Layout.fillHeight: true
-                    Layout.fillWidth: win.width < 1020
-                    Layout.preferredWidth: win.width >= 1020 ? 360 : -1
-                    Layout.maximumWidth: win.width >= 1020 ? 380 : -1
-                    Layout.minimumWidth: win.width >= 1020 ? 320 : -1
-                    track: win.currentTrack
-                    currentTime: win.currentTime
-                    isPlaying: win.isPlaying
-                    accentColor: win.accentColor
-
-                    onCloseRequested: win.showAmberolDetails = false
-                    onSeekRequested: sec => win.seekAudio(sec)
-                    onStartRadioRequested: trk => win.startRadioFromTrack(trk)
-                    onDownloadTrackRequested: trk => win.downloadTrack(trk)
-                    onOpenFolderRequested: trk => win.openTrackFolder(trk)
-                    onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
-                    onRateSongRequested: (vid, rating) => win.rateSong(vid, rating)
-                    onSongDisliked: trk => win.handleDislikedTrack(trk)
-                    onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
-                    onCopyLinkRequested: text => {
-                        Quickshell.execDetached(["sh", "-c", 'wl-copy "$1" && notify-send -i audio-x-generic "Nutsty" "Đã sao chép liên kết vào clipboard"', "sh", text]);
+                    onCollapseRequested: {
+                        win.isNowPlayingOpen = false;
                     }
                 }
             }
@@ -1214,18 +1206,19 @@ Scope {
             volume: win.volume
             isShuffle: win.isShuffle
             isRepeat: win.isRepeat
-            isLyricsActive: win.showAmberolDetails
-            isQueueActive: win.showSidebar
+            isLyricsActive: win.isNowPlayingOpen
+            isNowPlayingOpen: win.isNowPlayingOpen
+            isQueueActive: false
             accentColor: win.accentColor
 
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
             onPrevClicked: win.playPrev()
             onOpenDetailsRequested: {
-                win.showAmberolDetails = !win.showAmberolDetails;
+                win.isNowPlayingOpen = !win.isNowPlayingOpen;
             }
             onQueueClicked: {
-                win.showSidebar = !win.showSidebar;
+                win.isNowPlayingOpen = !win.isNowPlayingOpen;
             }
             onToggleShuffle: {
                 win.isShuffle = !win.isShuffle;
@@ -1236,10 +1229,6 @@ Scope {
                 win.saveSettings();
             }
             onOpenArtistRequested: (name, chId) => {
-                if (!chId && amberolView.songDetails) {
-                    if (amberolView.songDetails.channelId) chId = amberolView.songDetails.channelId;
-                    if (amberolView.songDetails.author) name = amberolView.songDetails.author;
-                }
                 win.loadArtistDetails(chId || name);
             }
             onSeekRequested: sec => win.seekAudio(sec)
@@ -1593,6 +1582,7 @@ Scope {
         win.isLoadingAudio = false;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
+        win.isNowPlayingOpen = true;
 
         if (win.syncHistoryToGoogle) {
             win.trackPlayback(trk);
@@ -2025,18 +2015,22 @@ Scope {
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
+        function toggleMaximize() { frostifyIpc.toggleMaximize(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function toggleMaximize() {
+            win.maximized = !win.maximized;
+        }
         function openWindow() {
             win.visible = true;
             if (!statusProcess.running) {
                 statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
                 statusProcess.running = true;
             }
-            Qt.callLater(function() { amberolView.updateActiveLyric(true); });
+            Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
         }
         function closeWindow() {
             win.visible = false;
@@ -2048,19 +2042,17 @@ Scope {
                     statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
                     statusProcess.running = true;
                 }
-                Qt.callLater(function() { amberolView.updateActiveLyric(true); });
+                Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
             }
         }
         function toggleDetails() {
-            win.showAmberolDetails = !win.showAmberolDetails;
+            win.isNowPlayingOpen = !win.isNowPlayingOpen;
         }
         function openArtwork() {
             win.visible = true;
-            win.showAmberolDetails = true;
-            amberolView.compactTab = "art";
+            win.isNowPlayingOpen = true;
         }
         function scrollArtworkDown() {
-            amberolView.scrollArtDown();
         }
         function dislikeCurrentTrack() {
             win.handleDislikedTrack(win.currentTrack);
