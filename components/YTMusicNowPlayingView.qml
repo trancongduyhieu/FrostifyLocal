@@ -33,15 +33,75 @@ Item {
     property string videoStreamUrl: ""
     property bool isLoadingVideo: false
 
+    property string currentLikeStatus: "INDIFFERENT"
+    property var dislikedSongsMap: ({})
+
     signal seekRequested(real seconds)
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
     signal playlistSelected(var pl)
     signal artistSelected(string name, string channelId)
     signal collapseRequested()
+    signal rateSongRequested(string videoId, string rating)
+    signal songDisliked(var trk)
+    signal downloadRequested(var trk)
+
+    FileView {
+        id: dislikedFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_disliked_songs.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            try {
+                var txt = text();
+                if (txt && txt.length > 2) dislikedSongsMap = JSON.parse(txt);
+            } catch (e) {}
+        }
+        Component.onCompleted: {
+            try {
+                var txt = text();
+                if (txt && txt.length > 2) dislikedSongsMap = JSON.parse(txt);
+            } catch (e) {}
+        }
+    }
+
+    function isTrackDisliked(vid) {
+        if (!vid || !dislikedSongsMap) return false;
+        var clean = String(vid).replace("ytdl://", "").replace("yt_", "");
+        return !!dislikedSongsMap[clean];
+    }
+
+    function toggleLike() {
+        if (!root.track) return;
+        var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
+        if (!vid) return;
+        var newStatus = (currentLikeStatus === "LIKE") ? "INDIFFERENT" : "LIKE";
+        currentLikeStatus = newStatus;
+        root.rateSongRequested(vid, newStatus);
+    }
+
+    function dislikeCurrentTrack() {
+        if (!root.track) return;
+        currentLikeStatus = "DISLIKE";
+        var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
+        if (vid) {
+            root.rateSongRequested(vid, "DISLIKE");
+        }
+        root.songDisliked(root.track);
+    }
+
+    function downloadCurrentTrack() {
+        if (!root.track) return;
+        root.downloadRequested(root.track);
+    }
 
     onTrackChanged: {
-        if (!root.track) return;
+        if (!root.track) {
+            currentLikeStatus = "INDIFFERENT";
+            return;
+        }
+        var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
+        currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
         fetchLyrics();
         fetchRelatedContent();
         if (root.mediaMode === "video") {
@@ -573,27 +633,116 @@ Item {
                     }
 
                     RowLayout {
-                        spacing: 12
+                        spacing: 8
 
-                        Item {
-                            width: 28; height: 28
+                        // 1. Like Button
+                        Rectangle {
+                            id: likeBtn
+                            width: 32; height: 32
+                            radius: 8
+                            color: root.currentLikeStatus === "LIKE" 
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                                   : (likeH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                            border.width: 1
+                            border.color: root.currentLikeStatus === "LIKE" ? root.accentColor : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
                             HoverHandler { id: likeH }
+
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/thumb-up-symbolic.svg"
                                 iconSize: 16
-                                color: likeH.hovered ? root.accentColor : Theme.textSecondary
+                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleLike()
                             }
                         }
 
-                        Item {
-                            width: 28; height: 28
-                            HoverHandler { id: listH }
+                        // 2. Dislike Button (Permanent Blacklist)
+                        Rectangle {
+                            id: dislikeBtn
+                            width: 32; height: 32
+                            radius: 8
+                            color: root.currentLikeStatus === "DISLIKE"
+                                   ? Qt.rgba(1.0, 0.25, 0.25, 0.22)
+                                   : (dislikeH.hovered ? Qt.rgba(1.0, 0.25, 0.25, 0.10) : "transparent")
+                            border.width: 1
+                            border.color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            HoverHandler { id: dislikeH }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/thumb-down-symbolic.svg"
+                                iconSize: 16
+                                color: root.currentLikeStatus === "DISLIKE" ? "#ff4444" : (dislikeH.hovered ? "#ff6666" : Theme.textSecondary)
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.dislikeCurrentTrack()
+                            }
+                        }
+
+                        // 3. Download Button
+                        Rectangle {
+                            id: dlBtn
+                            width: 32; height: 32
+                            radius: 8
+                            color: dlH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            HoverHandler { id: dlH }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/download-symbolic.svg"
+                                iconSize: 16
+                                color: dlH.hovered ? "#ffffff" : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.downloadCurrentTrack()
+                            }
+                        }
+
+                        // 4. Plus (+) Add to Playlist / Queue Button
+                        Rectangle {
+                            id: plusBtn
+                            width: 32; height: 32
+                            radius: 8
+                            color: plusH.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            HoverHandler { id: plusH }
+
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/list-add-symbolic.svg"
                                 iconSize: 16
-                                color: listH.hovered ? "#ffffff" : Theme.textSecondary
+                                color: plusH.hovered ? "#ffffff" : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.track) {
+                                        var pt = plusBtn.mapToItem(null, 0, plusBtn.height + 4);
+                                        root.trackContextMenuRequested(root.track, pt.x, pt.y, false);
+                                    }
+                                }
                             }
                         }
                     }

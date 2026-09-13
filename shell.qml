@@ -1229,6 +1229,9 @@ Scope {
                     onCollapseRequested: {
                         win.isNowPlayingOpen = false;
                     }
+                    onRateSongRequested: (vid, r) => win.rateSong(vid, r)
+                    onSongDisliked: trk => win.handleDislikedTrack(trk)
+                    onDownloadRequested: trk => win.downloadTrack(trk)
                 }
             }
         }
