@@ -203,3 +203,46 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - **Vô hiệu hóa auto-fallback trong MPV daemon**: Trong `backend/player_daemon.py`, loại bỏ cơ chế tự nạp file cũ từ session khi MPV đang idle.
     - **Trạng thái trực quan trên thanh Player Bar**: Khi chưa chọn bài, nút Play, Prev, Next hiển thị mờ thanh lịch (opacity 0.65/0.4), con trỏ chuột dạng thường và khóa tương tác click.
 
+- [ ] **25. Bìa Album Động Apple Music (Apple Music Animated Album Artwork Suite - Phần 2)**
+  - *Mục tiêu*: Tích hợp ảnh bìa động dạng video loop nghệ thuật từ Apple Music thay thế cho ảnh vuông tĩnh khi đang phát nhạc.
+  - *Backend Bóc Tách (`backend/ytmusic_helper.py`)*:
+    - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
+    - Truy vấn Apple Music Search API (`types=songs&include[songs]=albums&extend=editorialVideo` và `types=albums`) theo Tên bài + Nghệ sĩ + Thời lượng (sai số $\le 3\text{s}$).
+    - Lọc master playlist HLS `.m3u8` chọn luồng video AVC1 độ phân giải $\ge 720\text{px}$ tối ưu băng thông và giải mã mượt mà.
+  - *Giao diện QML (`components/AmberolDetailView.qml` & Cài đặt)*:
+    - Phát video loop HLS mượt mà trong thẻ Artwork của AmberolDetailView, có hiệu ứng phủ nền ambient mờ phía sau.
+    - Tùy chọn Bật/Tắt "Bìa album động (Animated Cover)" trong `components/SettingsModal.qml`, lưu cấu hình vào `nutsty_settings.json`.
+
+- [ ] **26. Tinh Chỉnh Chiều Sâu Lời Bài Hát & Chuẩn Bo Góc Đồng Tâm (DoF Per-Character Bloom & Concentric Corners - Phần 2)**
+  - *Desktop Lyrics Preset 2 (`components/AppleMusicDesktopLyrics.qml`)*:
+    - Nâng cấp thuật toán phát quang chữ karaoke: Chiếu sáng bloom chuẩn xác theo từng ký tự dựa trên khoảng cách playhead ($1 - |\text{progress} - \text{charCentre}| / \text{reach}$).
+    - Hiệu ứng nhấn nốt ngân dài (held notes): Gia tăng tỷ lệ scale và độ bung sáng bloom khi gặp nốt ngân dài; mở rộng bounding box không giới hạn (unbounded blur) chống xén biên chữ.
+  - *Quy chuẩn Bo Góc Đồng Tâm Toàn App*:
+    - Chuẩn hóa toàn bộ card bài hát, thumbnail và icon theo công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$, xóa bỏ hoàn toàn hiện tượng lệch góc giữa khung ngoài và phần tử bên trong.
+
+- [ ] **27. Bộ Phiên Âm Lời Bài Hát Đa Ngôn Ngữ (Multi-Language Lyrics Romanization Suite - Phần 3)**
+  - *Mục tiêu*: Giúp người dùng dễ dàng hát theo các bài hát tiếng Nhật (Anime/J-pop), tiếng Hàn (K-pop) và tiếng Trung (C-pop) bằng chữ cái Latinh.
+  - *Backend Phiên Âm (`backend/lyrics_helper.py`)*:
+    - Tích hợp engine phiên âm: Tiếng Nhật (Romaji), Tiếng Hàn (Romaja), Tiếng Trung (Pinyin).
+    - Tự động nhận diện ngôn ngữ theo từng câu; sinh dòng phiên âm Latinh tương ứng giữ nguyên mốc thời gian timestamp của synced lyrics.
+  - *Giao diện QML (`AmberolDetailView.qml` & `DesktopLyricsWidget.qml`)*:
+    - Hiển thị dòng phiên âm Latinh ngay bên dưới câu gốc ở cả màn hình chi tiết bài hát và Desktop Lyrics nổi.
+    - Cung cấp toggle switch "Phiên âm lời bài hát Latinh (Romanization)" trong `SettingsModal.qml`.
+
+- [ ] **28. Tối Ưu Hóa Stream Bitrate Cao & Bộ Lọc Hàng Đợi Radio Audio-Only (High Opus/AAC Stream & Radio UGC Filter - Phần 3)**
+  - *Chất lượng Stream Bitrate Cao*:
+    - Cung cấp cấu hình trong Settings: "Chất lượng cao nhất (High - Opus 256k / itag 774 & 251, AAC 256k / itag 141)" và "Tiêu chuẩn (Normal)".
+    - Cấu hình hook `yt-dlp` trong MPV daemon ưu tiên các itag master bitrate cao trước khi fallback về luồng tiêu chuẩn.
+  - *Bộ Lọc Radio Audio-Only*:
+    - Khi tạo đài phát tự động (`get_watch_playlist` / automix radio), tự động kiểm tra `musicVideoType`, loại bỏ các video fan-made UGC, mashup không chính thức để đảm bảo hàng đợi 50 bài luôn là các bản ghi studio master chính thức.
+
+- [ ] **29. Hẹn Giờ Ngủ Âm Lượng Cosine & Bộ Điều Phối MPV IPC Phân Tầng (Sleep Timer Cosine Fade & Centralized MPV Filter Chain - Phần 5)**
+  - *Hẹn Giờ Ngủ (Sleep Timer)*:
+    - Bổ sung tùy chọn hẹn giờ tắt nhạc (15 phút, 30 phút, 45 phút, 60 phút, hoặc Hết bài hát hiện tại) trong Settings / Player Bar.
+    - Khi hết giờ, tự động hạ âm lượng êm dịu theo đường cong Cosine trong 5 giây, giữ im lặng 800ms rồi mới Pause.
+    - Tuyệt đối không can thiệp vào thanh volume người dùng; điều khiển qua `ao-volume` trong MPV để giữ nguyên mức âm lượng ban đầu khi mở lại app.
+  - *Kiến Trúc MPV IPC & Quản Lý Bộ Lọc `af` Phân Tầng*:
+    - Phân tầng chuỗi bộ lọc `af` tập trung: `[Equalizer] -> [Audio Effects / Reverb] -> [Crossfade]`, thoát ký tự an toàn (`\\` cho `:`, `=`, `\\\` cho `'`).
+    - Bảo vệ lệnh tua (`seek`) khi đang crossfade: Lập tức cam kết bài tiếp theo thành bài chính (`commit incoming as current`) trước khi seek để không tua nhầm vào bài đang tắt dần.
+    - Tập trung hóa toàn bộ lệnh ghi thuộc tính MPV qua 1 luồng IPC trong daemon để chống xung đột trạng thái.
+

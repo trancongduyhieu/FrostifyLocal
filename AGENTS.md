@@ -243,6 +243,50 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Chuyển Câu Dạng Trượt Cuộn Lên (400ms Slide-Up Fade Out & Reset)**:
       - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
 
+25. **Kiến Trúc Bìa Album Động Apple Music (Animated Album Artwork Engine - Item 25)**:
+    - **Backend Bóc Tách Token & API (`backend/ytmusic_helper.py`)**:
+      - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
+      - Truy vấn Apple Music Search API (`types=songs&include[songs]=albums&extend=editorialVideo` và `types=albums`) theo `Tên bài + Nghệ sĩ + Thời lượng` (sai số $\le 3\text{s}$).
+      - Phân giải master playlist HLS `.m3u8` chọn luồng video AVC1 có độ phân giải $\ge 720\text{px}$ tối ưu băng thông và giải mã mượt mà.
+      - Lưu cache URL video động vào `~/.cache/frostify/animated_covers.json` để tải tức thì trong 0ms ở các lần phát tiếp theo.
+    - **Giao Diện QML (`components/AmberolDetailView.qml`)**:
+      - Phát video loop HLS mượt mà trong thẻ Artwork của AmberolDetailView, có hiệu ứng phủ nền ambient mờ phía sau.
+      - Tùy chọn Bật/Tắt "Bìa album động (Animated Cover)" trong `components/SettingsModal.qml`, lưu cấu hình bền vững vào `~/.config/noctalia/nutsty_settings.json`.
+
+26. **Chiều Sâu Quang Học Lời Bài Hát & Quy Tắc Bo Góc Đồng Tâm (Optical DoF Bloom & Concentric Corners - Item 26)**:
+    - **Desktop Lyrics Preset 2 (`components/AppleMusicDesktopLyrics.qml`)**:
+      - *Phát quang đơn điểm theo từng ký tự (Per-character glow falloff)*: Cường độ sáng phát quang tính theo khoảng cách liên tục từ đầu kim phát: $\text{intensity} = 1 - |\text{progress} - \text{charCentre}| / \text{reach}$ (với $\text{reach} \approx 1.5$ ký tự).
+      - *Hiệu ứng nhấn nốt ngân dài (Held notes emphasis)*: Độ phóng đại scale và độ bung bloom tỷ lệ thuận với thời lượng ngân của từ, tạo cảm giác phiêu theo giai điệu.
+      - *Hộp bao quang học không giới hạn (Unbounded blur box)*: Mở rộng vùng đệm padding bên trong khung chữ để hiệu ứng mờ quang học không bị cắt cụt (unbounded blur) ở mép ngoài.
+    - **Quy Chuẩn Bo Góc Đồng Tâm (Concentric Rounded Corners)**:
+      - Bắt buộc tuân thủ công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$ cho toàn bộ card bài hát, thumbnail và icon trong toàn bộ ứng dụng (`MainTrackGrid.qml`, `TrackCard.qml`, `NavSidebar.qml`, `AmberolDetailView.qml`), đảm bảo đường cong luôn song song và đồng tâm tuyệt đối.
+
+27. **Engine Phiên Âm Lời Bài Hát Latinh (Lyrics Romanization Engine - Item 27)**:
+    - **Backend Phiên Âm (`backend/lyrics_helper.py`)**:
+      - Tích hợp engine phiên âm: Tiếng Nhật (Romaji), Tiếng Hàn (Romaja), Tiếng Trung (Pinyin).
+      - Phân tích và phát hiện ngôn ngữ theo từng câu; tạo dòng phiên âm Latinh tương ứng đặt giữa câu gốc và câu dịch.
+      - Giữ nguyên vẹn mốc thời gian timestamp của synced lyrics để câu phiên âm sáng đồng bộ với nhịp hát.
+    - **Giao Diện QML (`AmberolDetailView.qml` & `DesktopLyricsWidget.qml`)**:
+      - Hiển thị dòng phiên âm Latinh ngay bên dưới câu gốc ở cả màn hình chi tiết bài hát và Desktop Lyrics nổi.
+      - Cung cấp toggle switch "Phiên âm lời bài hát Latinh (Romanization)" trong `components/SettingsModal.qml`, lưu cấu hình vào `nutsty_settings.json`.
+
+28. **Quản Lý Luồng Phát Bitrate Cao & Lọc Đài Phát Radio (High Opus/AAC Stream & Radio UGC Filter - Item 28)**:
+    - **Chất Lượng Phát Bitrate Cao**:
+      - Cung cấp cấu hình trong Settings: "Chất lượng cao nhất (High - Opus 256k / itag 774 & 251, AAC 256k / itag 141)" và "Tiêu chuẩn (Normal)".
+      - Cấu hình hook `yt-dlp` trong MPV daemon ưu tiên các itag master bitrate cao trước khi fallback về luồng tiêu chuẩn.
+    - **Bộ Lọc Radio Audio-Only (Lọc Sạch Hàng Đợi Đài Phát)**:
+      - Khi tạo đài phát tự động (`get_watch_playlist` / automix radio), tự động kiểm tra `musicVideoType`, loại bỏ các video fan-made UGC, mashup không chính thức để đảm bảo hàng đợi 50 bài luôn là các bản ghi studio master chính thức.
+
+29. **Hẹn Giờ Ngủ Cosine Fade-Out & Quản Lý Bộ Lọc MPV IPC Phân Tầng (Sleep Timer & Centralized MPV Filter Chain - Item 29)**:
+    - **Hẹn Giờ Ngủ (Sleep Timer)**:
+      - Bổ sung tùy chọn hẹn giờ tắt nhạc (15 phút, 30 phút, 45 phút, 60 phút, hoặc Hết bài hát hiện tại) trong Settings / Player Bar.
+      - Khi hết giờ, tự động hạ âm lượng êm dịu theo đường cong Cosine trong 5 giây, giữ im lặng 800ms rồi mới Pause.
+      - Tuyệt đối không can thiệp vào thanh volume người dùng; điều khiển qua `ao-volume` trong MPV để giữ nguyên mức âm lượng ban đầu khi mở lại app.
+    - **Kiến Trúc MPV IPC & Quản Lý Bộ Lọc `af` Phân Tầng**:
+      - Phân tầng chuỗi bộ lọc `af` tập trung: `[Equalizer] -> [Audio Effects / Reverb] -> [Crossfade]`, thoát ký tự an toàn (`\\` cho `:`, `=`, `\\\` cho `'`).
+      - Bảo vệ lệnh tua (`seek`) khi đang crossfade: Lập tức cam kết bài tiếp theo thành bài chính (`commit incoming as current`) trước khi seek để không tua nhầm vào bài đang tắt dần.
+      - Tập trung hóa toàn bộ lệnh ghi thuộc tính MPV qua 1 luồng IPC trong daemon để chống xung đột trạng thái.
+
 ---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
