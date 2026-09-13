@@ -130,6 +130,19 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
           - Tệp mẫu: [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt).
        4. *Giao diện Apple Music Now Playing (3-stop dynamic gradient, lyric cuộn DoF quang học)*:
           - Tệp mẫu: `composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/screens/nowplaying/NowPlayingContentAppleMusic.kt`.
+   - **liquid-glass-react**: `https://github.com/rdev/liquid-glass-react` (Apple's Liquid Glass effect by rdev / Shu Ding)
+     - Dùng để tham khảo và chuyển hóa giải thuật quang học kính lỏng từ React / SVG / WebGL sang GLSL Shader Qt 6 RHI:
+       1. *Signed Distance Field (SDF Rounded Box)*:
+          - Tệp mẫu: `src/shader-utils.ts` (chứa `roundedRectSDF(x, y, width, height, radius)` và hàm tính mép `fragmentShaders.liquidGlass`).
+          - Đo khoảng cách giải tích chính xác từ pixel đến mép bo góc để tạo mặt nạ khử răng cưa và xác định vùng khúc xạ biên.
+       2. *Bẻ cong khúc xạ mép kính (Edge-Only Displacement Mapping)*:
+          - Tệp mẫu: `src/shader-utils.ts` (chứa `smoothStep(0.8, 0, distanceToEdge - 0.15)`).
+          - Bẻ cong và dịch chuyển tọa độ UV tại rìa kính, mô phỏng thấu kính lồi kéo dãn hình nền bên dưới.
+       3. *Quang sai tán sắc quang phổ (RGB Channel Splitting / Chromatic Aberration)*:
+          - Tệp mẫu: `src/index.tsx` (chứa bộ lọc SVG `<feDisplacementMap>` kết hợp `<feColorMatrix>` tách biệt 3 kênh R, G, B với tỷ lệ dịch chuyển khác nhau và hòa trộn bằng `<feBlend mode="screen">`).
+          - Mô phỏng hiện tượng tán sắc lăng kính khi ánh sáng đi qua rìa mép kính bị bẻ cong lệch pha màu sắc.
+       4. *Khử gờ viền sắc và làm dịu biên (Edge Softening)*:
+          - Tệp mẫu: `src/index.tsx` (sử dụng Gaussian blur làm mờ nhẹ viền tán sắc để hòa quyện vào phông nền).
 9. **Con Quay Loading Trực Tuyến (Nutsty Circular Loader)**:
     - Component: `components/CircularSpinner.qml` vẽ bằng Canvas với cung tròn 270°, hai đầu bo tròn (round cap) và `RotationAnimation` vô hạn 360° (0% CPU overhead).
     - Tích hợp vào nút Play/Pause 36px trong `components/PlayerBarBottom.qml` qua thuộc tính `isLoadingAudio`. Khi chuyển bài hát online, icon Play/Pause tạm thời ẩn và con quay xoay mượt mà cho đến khi MPV bắt đầu đếm thời lượng phát nhạc thực tế (`time_pos > 0`).
@@ -196,8 +209,10 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - Tuyệt đối không gán `win.currentTracks = win.allTracks` lúc khởi động trong `LibraryLoader`. Hàng đợi phát nhạc phải giữ nguyên trạng thái trống `[]` cho đến khi người dùng chủ động click chọn bài hát hoặc playlist.
     - Hàm `togglePlay()`, `playNext()`, `playPrev()` phải luôn kiểm tra `if (!win.currentTrack) return;`. Tuyệt đối không tự ý fallback về `currentTracks[0]` (bài propose trong Downloads) khi chưa có bài hát được chọn.
     - Vòng lặp Auto-advance trong `statusProcess` bắt buộc phải kèm điều kiện `win.isPlaying &&` để chỉ chuyển bài khi nhạc đang thực sự phát.
-21. **Hệ Thống Đồ Họa Kính Lỏng Liquid Glass & Phong Cách Apple Music (Kế Thừa Tinh Hoa SimpMusic - Item 24)**:
-    - **Kho mã nguồn tham khảo**: `/home/apple/Applications/SimpMusic/` (Jetpack Compose / Compose Multiplatform).
+21. **Hệ Thống Đồ Họa Kính Lỏng Liquid Glass & Phong Cách Apple Music (Kế Thừa SimpMusic & liquid-glass-react - Item 24)**:
+    - **Kho mã nguồn tham khảo**:
+      - `/home/apple/Applications/SimpMusic/` (Jetpack Compose / Compose Multiplatform / Skiko).
+      - `https://github.com/rdev/liquid-glass-react` (Apple's Liquid Glass React / GLSL / SVG Filters).
     - **Cơ Chế Liquid Glass (Thấu Kính Quang Học Chống Đục Trắng)**:
       - *Tệp cốt lõi*: `LiquidGlass.kt`, `LiquidGlassContainer.kt`, `LiquidGlassTabBar.android.kt`.
       - *Quy tắc Sibling*: Layer nền mang `.layerBackdrop()` và bề mặt kính mang `.drawBackdrop()` bắt buộc phải là anh em (siblings), tuyệt đối không lồng nhau để tránh render-feedback loop.
@@ -259,18 +274,25 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Chuyển Câu Dạng Trượt Cuộn Lên (400ms Slide-Up Fade Out & Reset)**:
       - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
 
-24. **Công Thức Kính Lỏng Thuần Khiết SimpMusic & Floating Player Bar (SimpMusic Pure Liquid Glass - Item 24)**:
-    - **Kho Mã Nguồn Tham Khảo & Các File Mẫu Gốc (SimpMusic Source References)**:
-      - **Đường dẫn thư mục repo**: `/home/apple/Applications/SimpMusic/` (Compose Multiplatform / Jetpack Compose / Skiko).
-      - **Các tệp tin mẫu cốt lõi cần nghiên cứu**:
+24. **Hệ Thống Kính Lỏng Đa Nền Tảng (Dual-Engine Liquid Glass: SimpMusic + liquid-glass-react) & Floating Player Bar (Item 24)**:
+    - **Kho Mã Nguồn Tham Khảo & Các File Mẫu Gốc (Dual-Engine Source References)**:
+      - **Nguồn 1: SimpMusic** (`/home/apple/Applications/SimpMusic/` - Jetpack Compose / Skiko):
         1. [`composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassContainer.kt):
            - Tệp mẫu quan trọng nhất. Chứa hàm `Modifier.liquidGlass(...)` và `Modifier.drawInteractiveGlass(...)`.
            - Chứa toàn bộ hiệu ứng Kyant's backdrop: `vibrancy()`, `colorControls(brightness = 0.05f, contrast = 1f, saturation = 1.5f)`, `blur(lerp(...))`, `lens(minDimension / 4f, minDimension / 2f, false)`.
            - Công thức "Đục đen" (Adaptive Scrim): `val darken = lerp(minScrim, maxScrim, ((luminance - 0.3f) / 0.5f))` — tối dần khi nền sáng để chữ trắng không bao giờ bị chìm hoặc đục trắng ("anti-white veil").
         2. [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassTabBar.android.kt):
-           - Thanh điều hướng capsule 3 lớp: Nền kính lỏng thích ứng độ sáng $\rightarrow$ Blob trượt đàn hồi Damped Drag $\rightarrow$ Ký tự/icon sắc nét trên cùng.
+           - Thanh điều hướng capsule 3 lớp: Nền kính lỏng thích ứng độ sáng -> Blob trượt đàn hồi Damped Drag -> Ký tự/icon sắc nét trên cùng.
         3. [`composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt`](file:///home/apple/Applications/SimpMusic/composeApp/src/androidMain/kotlin/com/maxrave/simpmusic/ui/component/LiquidGlassAppBottomNavigationBar.android.kt):
            - Kỹ thuật tích hợp Mini Player và Tab Bar trên cùng một bề mặt kính lỏng không tạo viền nối.
+      - **Nguồn 2: liquid-glass-react** (`https://github.com/rdev/liquid-glass-react` - Apple's Liquid Glass by rdev & Shu Ding):
+        1. `src/shader-utils.ts`:
+           - Giải thuật hình học giải tích Signed Distance Field: `roundedRectSDF(x, y, width, height, radius)`.
+           - Hàm tính độ sâu khúc xạ mép kính: `displacement = smoothStep(0.8, 0, distanceToEdge - 0.15)`.
+           - Hàm chuyển vị UV: `fragmentShaders.liquidGlass`.
+        2. `src/index.tsx`:
+           - Thuật toán tán sắc quang phổ phân tách 3 kênh RGB: `<feDisplacementMap>` + `<feColorMatrix>` với độ lệch scale khác nhau giữa R, G, B kết hợp `<feBlend mode="screen">`.
+           - Bộ lọc làm mờ làm mềm biên: `<feGaussianBlur>` khử gờ viền tán sắc.
 
     - **Cấu Trúc Tệp Triển Khai Trong Nutsty / FrostifyLocal (Implementation Files)**:
       1. [`components/LiquidGlass.qml`](file:///home/apple/Applications/FrostifyLocal/components/LiquidGlass.qml): Component QML dùng chung cho toàn bộ app. Đóng gói `ShaderEffectSource` bắt ảnh nền động từ `backgroundSourceItem` (`smooth: true`, `mipmap: true`, `live: true`), tự động tính toán tọa độ ánh xạ `globalOffset: root.mapToItem(backgroundSourceItem, 0, 0)` và truyền toàn bộ ma trận/uniforms vào shader.
@@ -331,23 +353,25 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
           ```
         - *Lưu ý sống còn*: Quickshell nạp file bytecode `.frag.qsb`. Nếu sửa file `.frag` mà quên chạy lệnh `qsb`, giao diện sẽ tiếp tục chạy shader cũ và không có bất kỳ thay đổi nào hiển thị.
 
-    - **Nguyên Lý Quang Học Cốt Lõi Của Thuật Toán Kính Lỏng (SimpMusic Core Optical Principles)**:
-      - *Khuếch tán keo nước hai tầng (Two-tier Viscous Liquid Gel Diffusion)*:
-        - Lấy mẫu 2 tầng kết hợp: Tầng khí quyển rộng (Wide atmospheric bloom, Mipmap LOD 3.8 + 20px taps) chiếm 65% + Tầng định hình (Form preservation, Mipmap LOD 2.0 + 8px taps) chiếm 35%.
-        - Tăng cường độ bão hòa màu 1.6x (`vibrancy`), giúp màu sắc của bìa album bên dưới tan chảy và lan tỏa mềm mại, sóng sánh như keo nước.
-      - *Khúc xạ thấu kính dẻo làm lan tỏa & phóng đại Avatar (Curvature Liquid Lens Displacement)*:
-        - Sử dụng hàm cung tròn `circleMap(t) = 1.0 - sqrt(max(0.0, 1.0 - t * t))` kết hợp độ dịch chuyển âm (`dispAmount = -18.0px`) theo hướng pháp tuyến giải tích `gradSdRoundedRect`.
-        - Kéo dãn và phóng đại các đối tượng/avatar bài hát nằm sát mép kính, tạo cảm giác hình ảnh nở bung và tan chảy vào lòng thanh player bar ("playerbar bên trong bị lan ra bởi avatar của bài hát").
-      - *Thuật toán cô lập màu quang phổ & Viền phát sáng đúng màu lem (Chromatic Saturation Isolation)*:
-        - Lấy mẫu trực tiếp tại mép viền (`directUV`) kết hợp màu khuếch tán (`rimSourceCol = mix(vibrantColor, directEdgeCol, 0.45)`).
-        - Đo đạc độ bão hòa quang phổ: `chromaSat = (maxC - minC) / maxC` và độ sáng `chromaLum = dot(rimSourceCol, Luma)`.
-        - **Loại trừ màu trắng tuyệt đối**: Ký tự chữ màu trắng (như "Replay") có `chromaSat ~ 0.0` $\rightarrow$ `isChromatic = smoothstep(0.07, 0.18, chromaSat) * smoothstep(0.04, 0.12, chromaLum) == 0.0`, viền tuyệt đối **KHÔNG BAO GIỜ bị trắng**.
-        - **Phát sáng đúng màu lem**: Avatar màu tím có `chromaSat > 0.45` $\rightarrow$ `isChromatic = 1.0`, kích hoạt viền 2.2px phát sáng rực rỡ đúng màu tím neon (`pureHue = mix(chromaLum, rimSourceCol, 2.5) * 1.65`). Tương tự, card vàng viền vàng neon, card xanh viền xanh neon.
-        - **Triệt tiêu 100% lỗi viền trên nền đen**: Nền đen có `chromaLum < 0.04` $\rightarrow$ `isChromatic == 0.0`, viền tối đen tuyền tuyệt đối, 4 góc hoàn toàn liền mạch không còn vệt sáng.
-      - *Triệt tiêu viền giả bằng Premultiplied Alpha*:
-        - Đầu ra shader bắt buộc tuân thủ chuẩn hòa trộn RHI: `fragColor = vec4(finalColor * mask, mask) * qt_Opacity`. Điều này loại bỏ hoàn toàn viền halo màu trắng/xám tại các pixel khử răng cưa ở 4 góc.
-      - *Độ tối bề mặt thích ứng (Adaptive Surface Darken)*:
-        - Tối nhẹ 12% trên nền đen giúp màu sắc bài hát xuyên qua rực rỡ trong vắt; tự động nâng lên tối đa 48% trên nền trắng để đảm bảo nút bấm và chữ luôn dễ đọc.
+    - **Nguyên Lý Quang Học Cốt Lõi: Sự Kết Tinh Giữa liquid-glass-react & SimpMusic (Dual-Engine Optical Principles)**:
+      - **1. Đóng Góp Từ liquid-glass-react (Apple VisionOS / React GLSL by rdev & Shu Ding)**:
+        - *Hình học giải tích SDF Rounded Box (`sdRoundedBox`)*: Sử dụng hàm khoảng cách có dấu chuẩn xác của Inigo Quilez. Đo khoảng cách âm từ pixel tới mép biên (`distInside = -d`), tạo mặt nạ khử răng cưa mượt mà (`smoothstep(-edgeWidth, edgeWidth, d)`) và xác định chính xác độ sâu khúc xạ `refrHeight`.
+        - *Khúc xạ mép biên chọn lọc (Edge-Only Displacement Mapping)*: Khúc xạ chỉ xảy ra ở viền ngoài (`distInside < bevelWidth`), giữ cho 90% diện tích lòng kính phẳng và trong suốt, bảo đảm các nút bấm, ảnh avatar và thông tin bài hát không bị biến dạng.
+        - *Tán sắc quang phổ quang học (Chromatic Aberration Dispersion)*: Tham số `u_aberration` mô phỏng hiện tượng lăng kính tách ánh sáng trắng thành các vệt quang phổ RGB lệch pha khi đi qua mép vát của thấu kính cong.
+      - **2. Đóng Góp Từ SimpMusic (Compose Multiplatform / Skiko by maxrave-dev)**:
+        - *Khuếch tán keo nước hai tầng (Two-tier Viscous Liquid Gel Diffusion)*: Lấy mẫu 2 tầng kết hợp: Tầng khí quyển rộng (Wide atmospheric bloom, Mipmap LOD 3.8 + 20px taps) chiếm 65% + Tầng định hình (Form preservation, Mipmap LOD 2.0 + 8px taps) chiếm 35%. Giúp màu sắc bìa album bên dưới tan chảy và lan tỏa sóng sánh như một lớp keo nước đặc trong lòng kính.
+        - *Khúc xạ thấu kính dẻo làm lan tỏa & phóng đại Avatar (Curvature Liquid Lens Displacement)*: Sử dụng hàm cung tròn `circleMap(t) = 1.0 - sqrt(max(0.0, 1.0 - t * t))` kết hợp độ dịch chuyển âm (`dispAmount = -18.0px`) theo hướng pháp tuyến giải tích, kéo dãn và phóng to avatar bài hát nằm sát mép kính nở bung vào lòng thanh player bar ("playerbar bên trong bị lan ra bởi avatar của bài hát").
+        - *Tăng cường độ rực màu Vibrancy 1.6x*: Đẩy bão hòa màu sắc của bìa album bên dưới (`saturation 1.6x` + nâng nhẹ độ sáng luma) giúp kính không bao giờ bị xỉn màu.
+        - *Độ tối bề mặt thích ứng (Adaptive Surface Darken / Scrim)*: Tối nhẹ 12% trên nền đen giúp màu sắc bài hát xuyên qua rực rỡ trong vắt; tự động nâng lên tối đa 48% trên nền trắng để đảm bảo nút bấm và chữ luôn dễ đọc, chống hiện tượng đục trắng ("anti-white veil").
+      - **3. Cải Tiến Độc Quyền Của Nutsty Dành Riêng Cho Linux Wayland / Qt 6 RHI**:
+        - *Pháp tuyến giải tích mịn màng (`gradSdRoundedRect`)*: Thay thế hoàn toàn phép xấp xỉ vi phân hữu hạn bằng đạo hàm giải tích của hình chữ nhật bo góc, loại bỏ 100% hiện tượng rung giật số và răng cưa mép tại 4 góc bo.
+        - *Thuật toán cô lập màu quang phổ & Viền phát sáng đúng màu lem (Chromatic Saturation Isolation)*:
+          - Lấy mẫu trực tiếp tại mép viền (`directUV`) kết hợp màu khuếch tán (`rimSourceCol = mix(vibrantColor, directEdgeCol, 0.45)`).
+          - Đo đạc độ bão hòa quang phổ: `chromaSat = (maxC - minC) / maxC` và độ sáng `chromaLum = dot(rimSourceCol, Luma)`.
+          - **Loại trừ màu trắng tuyệt đối**: Ký tự chữ màu trắng (như "Replay") có `chromaSat ~ 0.0` -> `isChromatic == 0.0`, viền tuyệt đối **KHÔNG BAO GIỜ bị trắng**.
+          - **Phát sáng đúng màu lem**: Avatar màu tím có `chromaSat > 0.45` -> `isChromatic = 1.0`, kích hoạt viền 2.2px phát sáng rực rỡ đúng màu tím neon (`pureHue = mix(chromaLum, rimSourceCol, 2.5) * 1.65`). Tương tự, card vàng viền vàng neon, card xanh viền xanh neon.
+          - **Triệt tiêu 100% lỗi viền trên nền đen**: Nền đen có `chromaLum < 0.04` -> `isChromatic == 0.0`, viền tối đen tuyền tuyệt đối, 4 góc hoàn toàn liền mạch không còn vệt sáng.
+        - *Triệt tiêu viền giả bằng Premultiplied Alpha RHI*: Đầu ra shader bắt buộc tuân thủ chuẩn hòa trộn RHI: `fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity`. Điều này loại bỏ hoàn toàn viền halo màu trắng/xám tại các pixel khử răng cưa ở 4 góc bo trên nền tối.
 
     - **Thiết Kế Thanh Player Bar SimpMusic 16dp (`PlayerBarBottom.qml`)**:
       - *Hình dạng bo góc mềm*: Bo góc vuông nhẹ `radius: 16px` (chuẩn `RoundedCornerShape(16.dp)` của SimpMusic Desktop).
