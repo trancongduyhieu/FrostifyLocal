@@ -393,7 +393,20 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
         - **Playlist Item (`plItem`)**: Container radius 8px, viền thường `0.04`, hover `0.12`, selected `0.20`. Thumbnail 38x38 radius 6px có viền hairline `0.16` (hover `0.35`).
         - **Queue Item (`qItem`)**: Container radius 8px, viền thường `0.04`, hover `0.12`, active playing `Theme.accentGreen`. Thumbnail 32x32 radius 6px có viền hairline `0.16` (hover `0.35`).
 
+27. **Tối Ưu Khử Viền Trắng Nghệ Sĩ, Khắc Phục Lỗi Render Góc Thumbnail & Liquid Glass Toàn Màn Hình (Item 27)**:
+    - **Khử Viền Trắng Trang Nghệ Sĩ (`ArtistDetailView.qml`)**:
+      - Xóa bỏ toàn bộ viền trắng tĩnh xung quanh bài hát phổ biến, album, đĩa đơn & EP, và video âm nhạc (MV) trên trang nghệ sĩ. Các thẻ card chuyển sang phong cách tối giản phẳng (frameless clean glass) chỉ sáng nền nhẹ khi di chuột hover (`Qt.rgba(1.0, 1.0, 1.0, 0.08)`), bảo đảm giao diện sang trọng, không bị chia ô thô cứng.
+      - Nền trang nghệ sĩ chuyển hoàn toàn sang `color: "transparent"` để kế thừa lớp kính Acrylic mờ đục của cửa sổ chính thay cho dải gradient tối trước đó.
+    - **Khắc Phục Triệt Để Vệt Đen 4 Góc Thumbnail (Letterbox Scale 1.48 & Concentric Mask)**:
+      - Tỷ lệ zoom ảnh thumbnail YouTube 16:9 (`hqdefault.jpg`) nâng từ `1.34` lên `1.48`, loại bỏ 100% dải đen letterbox ở trên/dưới ảnh để góc bo tròn không bao giờ bị cắt dính viền đen.
+      - Lớp nền placeholder `#202024` trong item mask được ẩn khi ảnh đã tải xong (`visible: !img.visible || img.status !== Image.Ready`), ngăn chặn hiện tượng viền đen lem qua đường cong antialiasing.
+      - Bán kính mask được tính toán đồng tâm chuẩn xác: \(R_{\text{mask}} = R_{\text{outer}} - 1\).
+    - **Liquid Glass Alpha Tự Thích Ứng & Nút Maximize Cửa Sổ Chuẩn Wayland (`liquid_glass.frag` & `TopHeaderBar.qml`)**:
+      - `liquid_glass.frag`: Sửa công thức alpha và hòa trộn nền `baseGlass = mix(u_tint.rgb, tintedArtwork, artworkPresence)`. Khi thanh phát nhạc trôi trên vùng trống/trong suốt (`lum = 0`), shader xuất alpha mờ đục `u_tint.a` thay vì xuất đen kịt `vec4(..., 1.0)`.
+      - Nút Phóng To / Khôi Phục `[ ◻ ]` (`window-maximize-symbolic.svg`): Tích hợp vào `TopHeaderBar.qml` và phím tắt `F11` gọi `win.maximized = !win.maximized`. Tránh kích hoạt chế độ `fullscreen-window` của Niri (vốn tạo phông nền đen đặc sau cửa sổ), giữ trọn vẹn khả năng nhìn xuyên thấu hình nền desktop qua hiệu ứng kính Acrylic.
+
 ---
+
 
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)

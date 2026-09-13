@@ -275,7 +275,7 @@ Rectangle {
                                             Rectangle {
                                                 id: rowMask
                                                 anchors.fill: parent
-                                                radius: 6
+                                                radius: 5.5
                                                 color: "#ffffff"
                                                 visible: false
                                                 layer.enabled: true
@@ -293,6 +293,7 @@ Rectangle {
                                                 Rectangle {
                                                     anchors.fill: parent
                                                     color: "#202024"
+                                                    visible: !rowImg.visible || rowImg.status !== Image.Ready
                                                 }
 
                                                 Image {
@@ -300,7 +301,7 @@ Rectangle {
                                                     anchors.fill: parent
                                                     source: modelData.image || ""
                                                     fillMode: Image.PreserveAspectCrop
-                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                                                     transformOrigin: Item.Center
                                                     asynchronous: true
                                                     visible: status === Image.Ready
@@ -441,7 +442,7 @@ Rectangle {
                                                 Rectangle {
                                                     id: cCoverMask
                                                     anchors.fill: parent
-                                                    radius: 8
+                                                    radius: 7
                                                     color: "#ffffff"
                                                     visible: false
                                                     layer.enabled: true
@@ -459,6 +460,7 @@ Rectangle {
                                                     Rectangle {
                                                         anchors.fill: parent
                                                         color: "#202024"
+                                                        visible: !cCoverImg.visible || cCoverImg.status !== Image.Ready
                                                     }
 
                                                     Image {
@@ -466,7 +468,7 @@ Rectangle {
                                                         anchors.fill: parent
                                                         source: modelData.image || ""
                                                         fillMode: Image.PreserveAspectCrop
-                                                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                                                         transformOrigin: Item.Center
                                                         asynchronous: true
                                                         visible: status === Image.Ready

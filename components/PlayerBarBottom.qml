@@ -71,7 +71,7 @@ Item {
         displacement: 18.0
         aberration: 0.03
         bevelWidth: 24.0
-        tintColor: Qt.rgba(0.02, 0.03, 0.04, 1.0)
+        tintColor: Qt.rgba(0.04, 0.05, 0.07, 0.65)
         backgroundSourceItem: root.backgroundSourceItem
         z: 2
 

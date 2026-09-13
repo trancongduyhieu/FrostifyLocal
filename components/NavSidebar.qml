@@ -409,7 +409,7 @@ Rectangle {
                                     Rectangle {
                                         id: plThumbMask
                                         anchors.fill: parent
-                                        radius: 6
+                                        radius: 5
                                         color: "#ffffff"
                                         visible: false
                                         layer.enabled: true
@@ -427,12 +427,16 @@ Rectangle {
                                         Rectangle {
                                             anchors.fill: parent
                                             color: "#202024"
+                                            visible: !plThumbImg.visible || plThumbImg.status !== Image.Ready
                                         }
 
                                         Image {
+                                            id: plThumbImg
                                             anchors.fill: parent
                                             source: modelData.image || modelData.thumbnail || ""
                                             fillMode: Image.PreserveAspectCrop
+                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                            transformOrigin: Item.Center
                                             asynchronous: true
                                             visible: !!source
                                         }
@@ -700,7 +704,7 @@ Rectangle {
                                     Rectangle {
                                         id: qThumbMask
                                         anchors.fill: parent
-                                        radius: 6
+                                        radius: 5
                                         color: "#ffffff"
                                         visible: false
                                         layer.enabled: true
@@ -718,6 +722,7 @@ Rectangle {
                                         Rectangle {
                                             anchors.fill: parent
                                             color: "#202024"
+                                            visible: !qCoverImg.visible || qCoverImg.status !== Image.Ready
                                         }
 
                                         Image {
@@ -725,7 +730,7 @@ Rectangle {
                                             anchors.fill: parent
                                             source: modelData.image || ""
                                             fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                                             transformOrigin: Item.Center
                                             asynchronous: true
                                             visible: !!source

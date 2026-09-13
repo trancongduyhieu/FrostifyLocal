@@ -794,7 +794,7 @@ Scope {
 
     Shortcut {
         sequence: "F11"
-        onActivated: win.fullscreen = !win.fullscreen
+        onActivated: win.maximized = !win.maximized
     }
 
     Component.onCompleted: {
@@ -808,10 +808,10 @@ Scope {
     Rectangle {
         id: masterContainer
         anchors.fill: parent
-        radius: win.fullscreen ? 0 : 16
+        radius: (win.maximized || win.fullscreen) ? 0 : 16
         color: Qt.rgba(0.04, 0.04, 0.06, 0.74)
-        border.color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
-        border.width: 1
+        border.color: (win.maximized || win.fullscreen) ? "transparent" : Qt.rgba(1.0, 1.0, 1.0, 0.08)
+        border.width: (win.maximized || win.fullscreen) ? 0 : 1
         clip: true
 
         // Ambient Edge Vignette (Option 2 - Cinematic Spatial Depth)
@@ -888,10 +888,14 @@ Scope {
                 currentTab: win.currentTab
                 currentView: win.currentView
                 isSidebarVisible: win.showSidebar
+                isMaximized: win.maximized
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
                     win.visible = false;
+                }
+                onMaximizeWindowRequested: {
+                    win.maximized = !win.maximized;
                 }
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;

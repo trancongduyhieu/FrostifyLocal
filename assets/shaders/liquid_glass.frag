@@ -151,13 +151,17 @@ void main() {
     // SimpMusic Adaptive Darken: 12% on black background, up to 48% on white
     // =========================================================================
     float darken = mix(0.12, 0.48, clamp((lum - 0.08) / 0.42, 0.0, 1.0));
-    vec3 baseGlass = mix(vibrantColor, u_tint.rgb, darken);
+    vec3 tintedArtwork = mix(vibrantColor, u_tint.rgb, darken);
+    float artworkPresence = clamp(lum * 4.0, 0.0, 1.0);
+    vec3 baseGlass = mix(u_tint.rgb, tintedArtwork, artworkPresence);
     
     // Phủ viền phát sáng đúng màu đã lem (chỉ khi có màu sắc thực thụ, không phát sáng trắng)
     vec3 finalColor = mix(baseGlass, glowingRim, rimProfile * isChromatic * 0.95);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // CRITICAL: Premultiplied alpha for Qt Quick RHI rendering pipeline
-    // Guarantees ZERO white corner fringe or halo on dark backgrounds
-    fragColor = vec4(finalColor * mask, mask) * qt_Opacity;
+    // Dynamic alpha: preserves translucent acrylic glass over transparent wallpaper
+    // when empty, and gracefully ramps up when vibrant artwork flows under
+    float glassAlpha = mask * mix(clamp(u_tint.a, 0.40, 0.90), 0.95, artworkPresence);
+    fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity;
 }
+

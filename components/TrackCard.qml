@@ -55,7 +55,7 @@ Rectangle {
             Rectangle {
                 id: trackCoverMask
                 anchors.fill: parent
-                radius: 8
+                radius: 7
                 color: "#ffffff"
                 visible: false
                 layer.enabled: true
@@ -73,6 +73,7 @@ Rectangle {
                 Rectangle {
                     anchors.fill: parent
                     color: "#202024"
+                    visible: !coverImg.visible || coverImg.status !== Image.Ready
                 }
 
                 Image {
@@ -84,7 +85,7 @@ Rectangle {
                         return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                     }
                     fillMode: Image.PreserveAspectCrop
-                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.34 : 1.0
+                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                     transformOrigin: Item.Center
                     asynchronous: true
                     visible: status === Image.Ready

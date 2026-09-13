@@ -15,6 +15,7 @@ Rectangle {
     property bool isSearching: false
     property bool canGoBack: currentView !== "home"
     property bool isSidebarVisible: true
+    property bool isMaximized: false
 
     signal tabSelected(string tab)
     signal searchRequested(string query, string mode)
@@ -23,6 +24,7 @@ Rectangle {
     signal forwardRequested()
     signal downloadPopoverRequested()
     signal toggleSidebarRequested()
+    signal maximizeWindowRequested()
     signal closeWindowRequested()
 
     onCurrentViewChanged: {
@@ -328,6 +330,31 @@ Rectangle {
         }
 
         Item { Layout.fillWidth: true }
+
+        // Window Maximize / Restore Button [ ◻ ]
+        Rectangle {
+            id: maxBtn
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
+            radius: 16
+            color: maxMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            AppIcon {
+                anchors.centerIn: parent
+                source: headerRoot.isMaximized ? "../assets/icons/window-restore-symbolic.svg" : "../assets/icons/window-maximize-symbolic.svg"
+                iconSize: 14
+                color: "#ffffff"
+            }
+
+            MouseArea {
+                id: maxMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: headerRoot.maximizeWindowRequested()
+            }
+        }
 
         // Window Close Button [ ✕ ] (Closes / Minimizes to Desktop Widget)
         Rectangle {

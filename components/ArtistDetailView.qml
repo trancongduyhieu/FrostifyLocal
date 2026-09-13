@@ -41,14 +41,10 @@ Item {
     signal trackContextMenuRequested(var trk, real mouseX, real mouseY)
     signal toggleFollowRequested(string channelId, string artistName, bool currentlyFollowed)
 
-    // Background gradient overlay
+    // Background container (transparent to preserve acrylic window glass)
     Rectangle {
         anchors.fill: parent
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "#1a1a1e" }
-            GradientStop { position: 0.35; color: "#121214" }
-            GradientStop { position: 1.0; color: "#0c0c0e" }
-        }
+        color: "transparent"
     }
 
     // Scrollable Content
@@ -404,7 +400,10 @@ Item {
                             Layout.preferredHeight: 56
                             radius: 8
                             color: rowMouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                            border.color: trackRowItem.isCurrentPlaying ? Theme.accentGreen : "transparent"
+                            border.width: trackRowItem.isCurrentPlaying ? 1 : 0
                             Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
 
                             readonly property bool isCurrentPlaying: {
                                 if (!root.currentTrack) return false;
@@ -453,19 +452,45 @@ Item {
                                     }
                                 }
 
-                                // Track Artwork
-                                Rectangle {
+                                // Track Artwork (Concentric MultiEffect Mask with zero black artifacts)
+                                Item {
                                     Layout.preferredWidth: 42
                                     Layout.preferredHeight: 42
-                                    radius: 6
-                                    color: "#242426"
-                                    clip: true
 
-                                    Image {
+                                    Rectangle {
+                                        id: artRowMask
                                         anchors.fill: parent
-                                        source: modelData.image || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
+                                        radius: 6
+                                        color: "#ffffff"
+                                        visible: false
+                                        layer.enabled: true
+                                    }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            maskEnabled: true
+                                            maskSource: artRowMask
+                                            autoPaddingEnabled: false
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            color: "#202024"
+                                            visible: !artRowImg.visible || artRowImg.status !== Image.Ready
+                                        }
+
+                                        Image {
+                                            id: artRowImg
+                                            anchors.fill: parent
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                            transformOrigin: Item.Center
+                                            asynchronous: true
+                                            visible: status === Image.Ready
+                                        }
                                     }
                                 }
 
@@ -558,9 +583,7 @@ Item {
                                 width: 160
                                 height: 228
                                 radius: 10
-                                color: albCardMouse.containsMouse ? "#242428" : "#18181b"
-                                border.color: albCardMouse.containsMouse ? "#38383e" : "#242428"
-                                border.width: 1
+                                color: albCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
                                 ColumnLayout {
@@ -568,18 +591,44 @@ Item {
                                     anchors.margins: 10
                                     spacing: 8
 
-                                    Rectangle {
+                                    Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width
-                                        radius: 8
-                                        color: "#26262a"
-                                        clip: true
 
-                                        Image {
+                                        Rectangle {
+                                            id: albCoverMask
                                             anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
+                                            radius: 7
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: albCoverMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#202024"
+                                                visible: !albCoverImg.visible || albCoverImg.status !== Image.Ready
+                                            }
+
+                                            Image {
+                                                id: albCoverImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                                transformOrigin: Item.Center
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
                                         }
 
                                         // Play hover pill
@@ -592,6 +641,7 @@ Item {
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
                                             visible: albCardMouse.containsMouse
+                                            z: 2
 
                                             AppIcon {
                                                 anchors.centerIn: parent
@@ -672,9 +722,7 @@ Item {
                                 width: 160
                                 height: 228
                                 radius: 10
-                                color: singleCardMouse.containsMouse ? "#242428" : "#18181b"
-                                border.color: singleCardMouse.containsMouse ? "#38383e" : "#242428"
-                                border.width: 1
+                                color: singleCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
                                 ColumnLayout {
@@ -682,18 +730,44 @@ Item {
                                     anchors.margins: 10
                                     spacing: 8
 
-                                    Rectangle {
+                                    Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width
-                                        radius: 8
-                                        color: "#26262a"
-                                        clip: true
 
-                                        Image {
+                                        Rectangle {
+                                            id: singleCoverMask
                                             anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
+                                            radius: 7
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: singleCoverMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#202024"
+                                                visible: !singleCoverImg.visible || singleCoverImg.status !== Image.Ready
+                                            }
+
+                                            Image {
+                                                id: singleCoverImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                                transformOrigin: Item.Center
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
                                         }
 
                                         // Play hover pill
@@ -706,6 +780,7 @@ Item {
                                             anchors.bottom: parent.bottom
                                             anchors.margins: 6
                                             visible: singleCardMouse.containsMouse
+                                            z: 2
 
                                             AppIcon {
                                                 anchors.centerIn: parent
@@ -785,9 +860,7 @@ Item {
                                 width: 220
                                 height: 172
                                 radius: 10
-                                color: vidCardMouse.containsMouse ? "#242428" : "#18181b"
-                                border.color: vidCardMouse.containsMouse ? "#38383e" : "#242428"
-                                border.width: 1
+                                color: vidCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
                                 ColumnLayout {
@@ -795,19 +868,43 @@ Item {
                                     anchors.margins: 8
                                     spacing: 8
 
-                                    // Video thumbnail (16:9)
-                                    Rectangle {
+                                    // Video thumbnail (16:9 MultiEffect Mask with zero black artifacts)
+                                    Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 114
-                                        radius: 6
-                                        color: "#26262a"
-                                        clip: true
 
-                                        Image {
+                                        Rectangle {
+                                            id: vidThumbMask
                                             anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
+                                            radius: 5.5
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: vidThumbMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#202024"
+                                                visible: !vidCoverImg.visible || vidCoverImg.status !== Image.Ready
+                                            }
+
+                                            Image {
+                                                id: vidCoverImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
                                         }
 
                                         // Play hover icon
@@ -818,6 +915,7 @@ Item {
                                             color: Theme.accentGreen
                                             anchors.centerIn: parent
                                             visible: vidCardMouse.containsMouse
+                                            z: 2
 
                                             AppIcon {
                                                 anchors.centerIn: parent
@@ -906,7 +1004,7 @@ Item {
                                 width: 140
                                 height: 188
                                 radius: 10
-                                color: relCardMouse.containsMouse ? "#242428" : "transparent"
+                                color: relCardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
                                 ColumnLayout {
@@ -940,7 +1038,7 @@ Item {
                                             id: relAvatarMask
                                             anchors.fill: parent
                                             radius: 54
-                                            color: "#000000"
+                                            color: "#ffffff"
                                             visible: false
                                             layer.enabled: true
                                         }
@@ -957,7 +1055,7 @@ Item {
                                             anchors.fill: parent
                                             radius: 54
                                             color: "transparent"
-                                            border.color: relCardMouse.containsMouse ? Theme.accentGreen : Qt.rgba(1, 1, 1, 0.12)
+                                            border.color: relCardMouse.containsMouse ? Theme.accentGreen : "transparent"
                                             border.width: 1.5
                                         }
                                     }
