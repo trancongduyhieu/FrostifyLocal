@@ -21,6 +21,17 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 > 2. **KHÔNG DÙNG VIỀN TRẮNG (WHITE HALO) CHO LYRIC**: Luôn tuân thủ Universal Cinematic Shadows (bóng đổ đa tầng màu tối sâu điện ảnh `#a6020305` và `#66000000`).
 > 3. **PORTABILITY**: Không hardcode đường dẫn người dùng. Luôn dùng `Quickshell.env("HOME")` hoặc `Path.home()`.
 > 4. **WAYBAR & STATUS BAR THUỘC NOCTALIA**: Tinh chỉnh thanh trạng thái Waybar/Noctalia là của repo `noctalia-shell`, không trộn lẫn vào code của Nutsty.
+> 5. **RANH GIỚI NGHIÊM NGẶT GIỮA TODO.MD VÀ AGENTS.MD**:
+>    - `TODO.md`: Chứa toàn bộ lộ trình (Roadmap), danh sách công việc cần làm, ý tưởng và các tính năng đang/sắp triển khai kèm checklist `[ ]` / `[x]`.
+>    - `AGENTS.md`: Là cẩm nang kiến trúc và chuẩn kỹ thuật của codebase. **CHỈ CHỨA NHỮNG GÌ ĐÃ ĐƯỢC THỰC THI VÀ KIỂM CHỨNG THÀNH CÔNG** trong mã nguồn. Tuyệt đối không đưa các tính năng chưa làm (như ADB sync, các hạng mục roadmap đang chờ) vào `AGENTS.md`. Chỉ khi một tính năng trong `TODO.md` hoàn thành và verify thực tế xong, mới được ghi nhận kiến trúc vào `AGENTS.md`.
+> 6. **QUY TRÌNH NGHIÊN CỨU TRƯỚC KHI THAY ĐỔI (RESEARCH WORKFLOW)**:
+>    - Trước khi thêm thư viện mới, thay đổi kiến trúc hoặc áp dụng pattern mới, AI **BẮT BUỘC** phải:
+>      1. Tra cứu tài liệu chính thức (`search_web`, `read_url_content`).
+>      2. Đánh giá ưu/nhược điểm, hiệu năng và các giải pháp thay thế.
+>      3. Khảo sát các dự án nguồn mở hàng đầu (OSS Best Practices) xem cách họ giải quyết bài toán tương tự.
+>      4. Đưa ra giải pháp kỹ thuật tối ưu và trình bày rõ ràng trước khi viết mã nguồn.
+> 7. **QUY TẮC CẬP NHẬT TÀI LIỆU KIẾN TRÚC BẮT BUỘC (MANDATORY ARCHITECTURE UPDATE)**:
+>    - Khi có bất kỳ thay đổi nào về kiến trúc, thêm module, đổi thư viện lõi, hoặc hoàn thành một tính năng lớn từ `TODO.md`, AI **BẮT BUỘC** phải cập nhật lại tài liệu `AGENTS.md` (mô tả kiến trúc chi tiết, giải pháp kỹ thuật, cơ chế hoạt động, file liên quan và các bẫy lỗi cần tránh) kèm tóm tắt changelog.
 
 ---
 
@@ -96,36 +107,31 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - Hỗ trợ đầy đủ lệnh: `enqueue`, `cancel`, `clear_completed` và phát desktop notification qua `notify-send`.
    - Frontend State: `components/DownloadManager.qml` nạp file trạng thái qua `FileView` + polling timer 250ms, cung cấp reactive property `activeTasksCount`.
    - Popover Giao Diện: `components/DownloadQueuePopover.qml` phong cách Minimalist Clean (#121212 Nutsty Desktop, 8px radius, thanh progress 3px mượt mà, nút hủy từng bài, nút mở folder nhạc `~/Music/Downloads_Phone` và nút xóa bài đã tải xong kèm Tooltip chuẩn).
-6. **Đồng bộ điện thoại qua ADB (Item 10)**:
-   - Binary: `/home/apple/.local/bin/adb` (thiết bị `2bd3dce5` đã gắn kết nối).
-   - Thư mục nguồn trên điện thoại: `/storage/emulated/0/Music/Nutsty/`.
-   - Thư mục đích trên máy tính: `~/Music/Nutsty/Tracks/`.
-   - Lệnh sync: `adb pull -a /storage/emulated/0/Music/Nutsty/. ~/Music/Nutsty/Tracks/`.
-7. **Cấu hình & Tinh chỉnh Preset (Item 4 & 9)**:
+6. **Cơ Chế Lưu Trữ & Đồng Bộ Trạng Thái Người Dùng (`nutsty_settings.json`)**:
    - File cấu hình: `~/.config/noctalia/nutsty_settings.json`.
    - Lưu trữ trạng thái người dùng: `isShuffle`, `isRepeat`, preset lyrics, chế độ màu.
    - `shell.qml` nạp tự động qua `FileView` và timer `delayedSettingsRead` (100ms) để bảo đảm Quickshell async read hoàn tất trước khi parse JSON.
    - Khi click Shuffle / Repeat trong `components/PlayerBarBottom.qml`, chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`. Tuyệt đối không gán đè thuộc tính cục bộ làm phá vỡ reactive property binding.
    - Nút "MIC" đã được xóa bỏ hoàn toàn khỏi player bar để giữ giao diện tối giản chuẩn Nutsty.
-8. **Cơ Chế Đồng Bộ Màu Sắc Tức Thì Với Noctalia Bar (Zero-Lag Palette Sync)**:
+7. **Cơ Chế Đồng Bộ Màu Sắc Tức Thì Với Noctalia Bar (Zero-Lag Palette Sync)**:
    - File hook: `~/.config/noctalia/apply_theme.sh`.
    - `palette_extractor.py` chạy ngầm song song (`&`) ngay từ đầu để xuất `nutsty_palette.json` trong ~0.3s.
    - `~/.config/quickshell/noctalia-shell/Commons/Color.qml`: `frostifyPaletteWatcher` gọi `reload()` trước và dùng `delayedNutstyTimer` (200ms) để đọc dữ liệu khi đĩa đã nạp xong, giúp Waybar và Desktop Lyrics đổi màu đồng bộ 100% ngay từ lần đổi hình nền đầu tiên.
-9. **Mã nguồn tham khảo Nutsty**:
+8. **Mã nguồn tham khảo Nutsty**:
    - Vị trí clone: `/home/apple/Applications/Nutsty/`.
    - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete), Playback Tracking (`videostatsPlaybackUrl`, `atrUrl`, `videostatsWatchtimeUrl`) và Return YouTube Dislike API.
-10. **Con Quay Loading Trực Tuyến (Nutsty Circular Loader)**:
+9. **Con Quay Loading Trực Tuyến (Nutsty Circular Loader)**:
     - Component: `components/CircularSpinner.qml` vẽ bằng Canvas với cung tròn 270°, hai đầu bo tròn (round cap) và `RotationAnimation` vô hạn 360° (0% CPU overhead).
     - Tích hợp vào nút Play/Pause 36px trong `components/PlayerBarBottom.qml` qua thuộc tính `isLoadingAudio`. Khi chuyển bài hát online, icon Play/Pause tạm thời ẩn và con quay xoay mượt mà cho đến khi MPV bắt đầu đếm thời lượng phát nhạc thực tế (`time_pos > 0`).
-11. **Tách Biệt Trạng Thái Duyệt Playlist & Phát Nhạc (Decoupled Playlist State)**:
+10. **Tách Biệt Trạng Thái Duyệt Playlist & Phát Nhạc (Decoupled Playlist State)**:
     - `win.activePlaylistId`: ID danh sách đang xem trên giao diện.
     - `win.playingPlaylistId`: ID danh sách đang thực sự phát nhạc.
     - Chỉ hiển thị sóng âm Equalizer 3-bar và text xanh khi `isCurrentlyPlaying && root.isPlaying`. Người dùng bấm duyệt playlist khác sẽ không làm nhảy sóng âm sai lệch.
-12. **Nút Phát Tuần Tự Toàn Bộ Bài Hát (Sequential Play All Button)**:
+11. **Nút Phát Tuần Tự Toàn Bộ Bài Hát (Sequential Play All Button)**:
     - `components/MainTrackGrid.qml`: Thêm nút chính `[ ▶ Phát ]` bo góc tròn màu Emerald Green để bắt đầu phát playlist từ bài đầu tiên (track index 0), kết hợp cùng nút phụ `[ 🔀 Phát ngẫu nhiên ]` dạng kính mờ.
-13. **Xóa Bài Hát Cục Bộ Vĩnh Viễn (Safe Permanent Local File Deletion)**:
+12. **Xóa Bài Hát Cục Bộ Vĩnh Viễn (Safe Permanent Local File Deletion)**:
     - Context Menu chuột phải hỗ trợ "Xóa khỏi thư viện" (`deleteTrack`). Xóa vĩnh viễn tệp âm thanh trên đĩa cứng (`os.remove`) và đồng bộ ngay vào `library.json`, ngăn chặn tình trạng bài hát xuất hiện lại sau khi khởi động lại app.
-14. **Hệ Thống Album Tương Tác Đa Tầng (Interactive Albums Suite - Item 7)**:
+13. **Hệ Thống Album Tương Tác Đa Tầng (Interactive Albums Suite - Item 7)**:
     - **Backend API**:
       - `backend/ytmusic_helper.py`: `get_album_details(browse_id)` bóc tách metadata (ID, browseId, title, artist, year, type, trackCount, duration, ảnh phân giải cao 544x544 `w544-h544-l90-rj`, description) và chuẩn hóa danh sách `tracks`. Endpoint CLI: `python3 backend/ytmusic_helper.py album <browse_id>` và `search_albums <query>`.
       - `backend/library.py`: Quét tag `album` và `year` từ ffprobe, phân nhóm album cục bộ qua `get_grouped_albums()`. Endpoint CLI: `python3 backend/library.py albums`.
@@ -134,11 +140,11 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Toolbar cụm 4 nút: `[ ▶ Phát ]`, `[ 🔀 Phát ngẫu nhiên ]`, `[ + Hàng đợi ]`, `[ 📥 Tải Album ]`.
       - Sub-tab Switcher: `[ Bài hát (N) ]` | `[ Albums (N) ]` trong tab Downloads.
       - `components/HomeFeedView.qml`: Tự động nhận diện `type === "album"` hoặc `MPREb_` khi click card để chuyển vào chế độ xem chi tiết album.
-15. **Tải Lười Dạng Khung Xương Xung Nhịp (Pure Visual Skeleton Shimmer Lazy Loading)**:
+14. **Tải Lười Dạng Khung Xương Xung Nhịp (Pure Visual Skeleton Shimmer Lazy Loading)**:
     - **Triết lý thiết kế**: Tuyệt đối không hiển thị các chuỗi text gây thô phèn như "Loading...", "Searching YouTube Music...", "Đang tạo đài phát...". Toàn bộ trạng thái chờ được thay bằng các thẻ/thanh khung xương (skeleton placeholder) với hiệu ứng xung nhịp thở mượt mà (`SequentialAnimation` độ mờ từ `0.25` sang `0.70`).
     - **Lưới chính (`MainTrackGrid.qml`)**: Sử dụng lưới `Flow` 10 thẻ card vuông `SkeletonTrackCard.qml` (176x250 px, artwork 148x148) khi `isLoading` (chuyển playlist, bấm album, tìm kiếm), bảo đảm cấu trúc layout dạng card grid chuẩn xác 1:1 với `TrackCard.qml`.
     - **Hàng đợi (`NavSidebar.qml`)**: Sử dụng `SkeletonTrackRow.qml` (dòng ngang thu nhỏ). Nhận reactive property `isLoadingRadio: radioProc.running` từ `shell.qml`. Khi click phát bài hát mới từ Home/Search, hàng đợi lập tức giữ bài hiện tại và hiển thị huy hiệu `Queue (1+)` kèm 5 dòng skeleton thu nhỏ bên dưới. Khi radio nạp xong danh sách 50 bài, các skeleton biến mất nhường chỗ cho danh sách thật mà không gây giật lag hay trống rỗng đột ngột.
-16. **Bảng Điều Tra Siêu Dữ Liệu & Thông Số Kỹ Thuật Audio (Metadata & Audio Specs Inspector)**:
+15. **Bảng Điều Tra Siêu Dữ Liệu & Thông Số Kỹ Thuật Audio (Metadata & Audio Specs Inspector)**:
     - **Backend Engine**:
       - `backend/player_daemon.py`: Lệnh `audio_specs` truy xuất trực tiếp từ MPV Unix Domain Socket các trường `audio-codec-name`, `audio-bitrate`, `audio-params` (samplerate, channels) hiển thị thẻ 2x2 Dark Glass thời gian thực.
       - `backend/ytmusic_helper.py`: Lệnh `song_details <videoId|query>` tích hợp API **Return YouTube Dislike** (`https://returnyoutubedislikeapi.com/votes?videoId={videoId}`) trả về số lượt xem (`viewsStr`), lượt thích (`likesStr`), lượt không thích (`dislikesStr`), điểm đánh giá (`rating`), và tỷ lệ thích (`likeRatio`). Tự động phân giải ngược từ `Title + Artist` qua `ytm.search` đối với các file nhạc offline nội bộ.
@@ -148,7 +154,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Thẻ tương tác: Lượt xem (icon mắt), Lượt thích (icon like), Lượt không thích (icon dislike) kèm thanh tỷ lệ thích xanh neon (#1ed760).
       - Hộp chi tiết Album và cụm nút tương tác nhanh: `[ 📥 Tải bài / 📁 Mở thư mục ]`, `[ 📻 Radio ]`, `[ 📋 Sao chép ]`.
       - Hệ thống Icon Trắng Sáng & Zero Emoji: Toàn bộ SVG trong `assets/icons/*.svg` chuẩn hóa `fill="#ffffff"`, kết hợp `MultiEffect.brightness: 1.0` trong `components/AppIcon.qml` để mọi icon luôn hiển thị màu trắng sáng rực rỡ và dễ dàng đổi màu trên nền Dark Glass.
-17. **Hệ Thống Thẻ Biểu Cảm Nutsty, Mô Tả Bài Hát & Blacklist Dislike (Nutsty Expressive Cards & Dislike Blacklist)**:
+16. **Hệ Thống Thẻ Biểu Cảm Nutsty, Mô Tả Bài Hát & Blacklist Dislike (Nutsty Expressive Cards & Dislike Blacklist)**:
     - **Backend Innertube & Blacklist**:
       - `backend/ytmusic_helper.py`: Gọi endpoint `v1/next` của YouTube Innertube (`WEB` client) lấy nhanh (~0.2s) avatar nghệ sĩ chất lượng cao (960px), số người đăng ký kênh (`subscribers`), ngày phát hành, và toàn bộ mô tả bài hát.
       - Phân giải album: Thay thế triệt để chuỗi fallback "Nutsty", tự động phân giải tên album thực tế hoặc hiển thị "Single".
@@ -158,7 +164,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Thẻ Nghệ Sĩ Nutsty (140px): Avatar nghệ sĩ lớn, gradient scrim, badge `Nghệ sĩ`, tên và số lượng người đăng ký.
       - Thẻ Thống Kê & Mô Tả: Ngày phát hành, số lượt xem, nút Thích (xanh Nutsty), nút Không Thích (đỏ neon), thanh tỷ lệ like neon, và khối mô tả mở rộng với nút `[ Xem thêm ▼ / Thu gọn ▲ ]`.
       - Khi bấm Không Thích: Lập tức ghi vào blacklist, loại bài khỏi `currentTracks`/`browsingTracks`, và tự động chuyển sang bài tiếp theo (`playNext()`).
-18. **Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn Nutsty (Interactive Artist Page Suite - Item 21)**:
+17. **Màn Hình Trang Nghệ Sĩ Toàn Diện Chuẩn Nutsty (Interactive Artist Page Suite - Item 21)**:
     - **Backend Engine (`backend/ytmusic_helper.py`)**:
       - `get_artist(channel_id_or_name)` tự động phân giải tên nghệ sĩ sang browseId và bóc tách metadata (avatar phân giải cao 544x544 / 960px, subscribers, views), top bài hát phổ biến ("Phổ biến"), carousels "Albums", "Đĩa đơn & EPs", "Video âm nhạc", danh sách tròn "Nghệ sĩ liên quan", và khối tiểu sử "Giới thiệu".
       - `subscribe_artist_action(channel_id, subscribe)` tích hợp `ytmusic.subscribe_artist` / `unsubscribe_artist`.
@@ -169,18 +175,18 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Danh sách "Phổ biến": Phát bài nạp hàng đợi `win.currentTracks`, chuột phải mở toàn diện `TrackContextMenu`.
       - Carousels ngang: Albums, Đĩa đơn & EPs, Videos, và Nghệ sĩ liên quan (avatar tròn 108px `MultiEffect`).
       - Đa điểm chạm điều hướng: Click tên nghệ sĩ trên `NutstyPlayerBar`, thẻ nghệ sĩ trong `AmberolDetailView`, "Go to artist" trong `TrackContextMenu`.
-19. **Tối Ưu Avatar Nghệ Sĩ 0ms Cache & Shimmer Fallback (Item 22)**:
+18. **Tối Ưu Avatar Nghệ Sĩ 0ms Cache & Shimmer Fallback (Item 22)**:
     - Xóa bỏ triệt để biểu thức mượn tạm ảnh bài hát `track.image` trong `AmberolDetailView.qml`.
     - Hiển thị Shimmer placeholder thở mượt mà (`SequentialAnimation` độ mờ 0.35 - 0.70) khi ảnh chưa sẵn sàng.
     - Bộ nhớ đệm avatar `~/.cache/frostify/artist_avatars.json` ánh xạ tên nghệ sĩ sang thumbnail phân giải cao; QML nạp qua `FileView` hiển thị avatar trong 0ms khi bài hát vừa bắt đầu phát.
-20. **0ms State Clean Reset & Chống Rò Rỉ Trạng Thái Like/Dislike (Item 23)**:
+19. **0ms State Clean Reset & Chống Rò Rỉ Trạng Thái Like/Dislike (Item 23)**:
     - Trong `AmberolDetailView.qml`, sự kiện `onTrackChanged` lập tức reset `currentLikeStatus = "INDIFFERENT"`, `songDetails = null`, `localLikesCount = 0`, `localDislikesCount = 0` ngay trong 0ms.
     - Đọc nhanh danh sách blacklist đồng bộ từ `nutsty_disliked_songs.json` qua `FileView`: Nếu bài hát mới nằm trong blacklist, lập tức sáng đỏ `DISLIKE` ngay trong 0ms; nếu không, giữ nguyên `INDIFFERENT`. Ngăn chặn hoàn toàn hiện tượng bài mới bị "dính" nút Dislike đỏ của bài trước trong thời gian chờ API.
-21. **Khởi Tạo Hàng Đợi Sạch & Ngăn Chặn Auto-Play Khởi Động (Clean Queue & Cold-Start Protection)**:
+20. **Khởi Tạo Hàng Đợi Sạch & Ngăn Chặn Auto-Play Khởi Động (Clean Queue & Cold-Start Protection)**:
     - Tuyệt đối không gán `win.currentTracks = win.allTracks` lúc khởi động trong `LibraryLoader`. Hàng đợi phát nhạc phải giữ nguyên trạng thái trống `[]` cho đến khi người dùng chủ động click chọn bài hát hoặc playlist.
     - Hàm `togglePlay()`, `playNext()`, `playPrev()` phải luôn kiểm tra `if (!win.currentTrack) return;`. Tuyệt đối không tự ý fallback về `currentTracks[0]` (bài propose trong Downloads) khi chưa có bài hát được chọn.
     - Vòng lặp Auto-advance trong `statusProcess` bắt buộc phải kèm điều kiện `win.isPlaying &&` để chỉ chuyển bài khi nhạc đang thực sự phát.
-22. **Hệ Thống Đồ Họa Kính Lỏng Liquid Glass & Phong Cách Apple Music (Kế Thừa Tinh Hoa SimpMusic - Item 24)**:
+21. **Hệ Thống Đồ Họa Kính Lỏng Liquid Glass & Phong Cách Apple Music (Kế Thừa Tinh Hoa SimpMusic - Item 24)**:
     - **Kho mã nguồn tham khảo**: `/home/apple/Applications/SimpMusic/` (Jetpack Compose / Compose Multiplatform).
     - **Cơ Chế Liquid Glass (Thấu Kính Quang Học Chống Đục Trắng)**:
       - *Tệp cốt lõi*: `LiquidGlass.kt`, `LiquidGlassContainer.kt`, `LiquidGlassTabBar.android.kt`.
@@ -198,7 +204,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *Quy Tắc Bo Góc Đồng Tâm (Concentric Rounded Corners)*: Bắt buộc tuân thủ công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$ cho mọi card bài hát, thumbnail và icon. Nếu khung ngoài bo góc 30px và khoảng cách lề (padding/border margin) là 6px thì phần tử bên trong (ảnh bìa/icon) phải bo góc chính xác $30 - 6 = 24\text{px}$, tuyệt đối không dùng bán kính bo góc tùy tiện làm vỡ đường cong đồng tâm.
       - *Sóng Equalizer 6 Cột Cyan*: `AudioPlayingIndicator` vẽ thuần trên Canvas (thay thế Lottie), 6 thanh viên thuốc dao động đối xứng từ tâm giữa (y=75), màu xanh Cyan cố định khi bài hát đang phát.
 
-23. **Kiến Trúc Universal Lyrics Harness & Parametric Multi-Line Engine (Desktop Lyrics Architecture Suite)**:
+22. **Kiến Trúc Universal Lyrics Harness & Parametric Multi-Line Engine (Desktop Lyrics Architecture Suite)**:
     - **Triết Lý Thiết Kế Universal Harness & Presentation Plugins (Tách Biệt Host vs UI)**:
       - *Host Duy Nhất (`components/DesktopLyricsWidget.qml`)*: Đóng vai trò là Universal Harness quản lý tập trung toàn bộ hạ tầng:
         - Layer-shell window (`WlrLayershell.layer: WlrLayer.Bottom`),
@@ -226,7 +232,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Tại mỗi thời điểm, chỉ duy nhất ký tự/từ đang hát được kích hoạt hiệu ứng bloom sáng rực rỡ (`glowEffect`). Các từ đã hát xong giữ màu trắng tĩnh tinh khiết (`#ffffff`), các từ chưa hát mang màu xám mờ (`colPendingText`).
     - **Đồng Bộ Tọa Độ Tự Động & Đặt Lại Mặc Định Tức Thì (Reactive Auto-Reset Binding)**:
       - Tọa độ lưu bền vững vào `~/.config/noctalia/nutsty_settings.json` (`desktopLyricsCustomX`, `desktopLyricsCustomY`).
-24. **Hệ Thống Lyric Tối Giản Điện Ảnh Lướt Nhòe (Minimalist Word-by-Word Motion Blur Engine - Preset 3)**:
+23. **Hệ Thống Lyric Tối Giản Điện Ảnh Lướt Nhòe (Minimalist Word-by-Word Motion Blur Engine - Preset 3)**:
     - **Triết Lý Thiết Kế & Cấu Trúc Bố Cục (1 Câu Chia 2 Dòng)**:
       - *Căn lề*: Căn lề trái (`anchors.left: parent.left`), tự động tách 1 câu lyric thành 2 hàng cân đối (Hàng 1: nửa đầu câu, Hàng 2: nửa sau câu).
       - *Typography*: Toàn bộ chữ thường (`toLowerCase()`), font cổ điển thơ mộng *Instrument Serif* 34px (tự động fallback sang *Noto Serif* khi có dấu tiếng Việt), màu trắng tinh khiết `#ffffff`, viền bóng điện ảnh thích ứng sâu (`colShadowDir` và `colShadowAmb`).
@@ -242,50 +248,6 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *GPU Shader tối ưu 0% overhead qua `layer.effect: MultiEffect`*: Hiệu ứng nhòe chuyển động chỉ kích hoạt trong đúng 220ms của animation xuất hiện (`layer.enabled: wordBlur > 0.02`), tự động tắt hoàn toàn khi từ đã rõ nét.
     - **Chuyển Câu Dạng Trượt Cuộn Lên (400ms Slide-Up Fade Out & Reset)**:
       - Khi chuyển sang câu lyric mới, toàn bộ 2 hàng của câu cũ cùng trượt cuộn lên trên (`y: -exitProgress * 44`) kèm hiệu ứng nhòe toàn câu trong 400ms (`Easing.OutCubic`), sau đó reset lại trạng thái và bắt đầu lại chu trình cho câu tiếp theo.
-
-25. **Kiến Trúc Bìa Album Động Apple Music (Animated Album Artwork Engine - Item 25)**:
-    - **Backend Bóc Tách Token & API (`backend/ytmusic_helper.py`)**:
-      - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
-      - Truy vấn Apple Music Search API (`types=songs&include[songs]=albums&extend=editorialVideo` và `types=albums`) theo `Tên bài + Nghệ sĩ + Thời lượng` (sai số $\le 3\text{s}$).
-      - Phân giải master playlist HLS `.m3u8` chọn luồng video AVC1 có độ phân giải $\ge 720\text{px}$ tối ưu băng thông và giải mã mượt mà.
-      - Lưu cache URL video động vào `~/.cache/frostify/animated_covers.json` để tải tức thì trong 0ms ở các lần phát tiếp theo.
-    - **Giao Diện QML (`components/AmberolDetailView.qml`)**:
-      - Phát video loop HLS mượt mà trong thẻ Artwork của AmberolDetailView, có hiệu ứng phủ nền ambient mờ phía sau.
-      - Tùy chọn Bật/Tắt "Bìa album động (Animated Cover)" trong `components/SettingsModal.qml`, lưu cấu hình bền vững vào `~/.config/noctalia/nutsty_settings.json`.
-
-26. **Chiều Sâu Quang Học Lời Bài Hát & Quy Tắc Bo Góc Đồng Tâm (Optical DoF Bloom & Concentric Corners - Item 26)**:
-    - **Desktop Lyrics Preset 2 (`components/AppleMusicDesktopLyrics.qml`)**:
-      - *Phát quang đơn điểm theo từng ký tự (Per-character glow falloff)*: Cường độ sáng phát quang tính theo khoảng cách liên tục từ đầu kim phát: $\text{intensity} = 1 - |\text{progress} - \text{charCentre}| / \text{reach}$ (với $\text{reach} \approx 1.5$ ký tự).
-      - *Hiệu ứng nhấn nốt ngân dài (Held notes emphasis)*: Độ phóng đại scale và độ bung bloom tỷ lệ thuận với thời lượng ngân của từ, tạo cảm giác phiêu theo giai điệu.
-      - *Hộp bao quang học không giới hạn (Unbounded blur box)*: Mở rộng vùng đệm padding bên trong khung chữ để hiệu ứng mờ quang học không bị cắt cụt (unbounded blur) ở mép ngoài.
-    - **Quy Chuẩn Bo Góc Đồng Tâm (Concentric Rounded Corners)**:
-      - Bắt buộc tuân thủ công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$ cho toàn bộ card bài hát, thumbnail và icon trong toàn bộ ứng dụng (`MainTrackGrid.qml`, `TrackCard.qml`, `NavSidebar.qml`, `AmberolDetailView.qml`), đảm bảo đường cong luôn song song và đồng tâm tuyệt đối.
-
-27. **Engine Phiên Âm Lời Bài Hát Latinh (Lyrics Romanization Engine - Item 27)**:
-    - **Backend Phiên Âm (`backend/lyrics_helper.py`)**:
-      - Tích hợp engine phiên âm: Tiếng Nhật (Romaji), Tiếng Hàn (Romaja), Tiếng Trung (Pinyin).
-      - Phân tích và phát hiện ngôn ngữ theo từng câu; tạo dòng phiên âm Latinh tương ứng đặt giữa câu gốc và câu dịch.
-      - Giữ nguyên vẹn mốc thời gian timestamp của synced lyrics để câu phiên âm sáng đồng bộ với nhịp hát.
-    - **Giao Diện QML (`AmberolDetailView.qml` & `DesktopLyricsWidget.qml`)**:
-      - Hiển thị dòng phiên âm Latinh ngay bên dưới câu gốc ở cả màn hình chi tiết bài hát và Desktop Lyrics nổi.
-      - Cung cấp toggle switch "Phiên âm lời bài hát Latinh (Romanization)" trong `components/SettingsModal.qml`, lưu cấu hình vào `nutsty_settings.json`.
-
-28. **Quản Lý Luồng Phát Bitrate Cao & Lọc Đài Phát Radio (High Opus/AAC Stream & Radio UGC Filter - Item 28)**:
-    - **Chất Lượng Phát Bitrate Cao**:
-      - Cung cấp cấu hình trong Settings: "Chất lượng cao nhất (High - Opus 256k / itag 774 & 251, AAC 256k / itag 141)" và "Tiêu chuẩn (Normal)".
-      - Cấu hình hook `yt-dlp` trong MPV daemon ưu tiên các itag master bitrate cao trước khi fallback về luồng tiêu chuẩn.
-    - **Bộ Lọc Radio Audio-Only (Lọc Sạch Hàng Đợi Đài Phát)**:
-      - Khi tạo đài phát tự động (`get_watch_playlist` / automix radio), tự động kiểm tra `musicVideoType`, loại bỏ các video fan-made UGC, mashup không chính thức để đảm bảo hàng đợi 50 bài luôn là các bản ghi studio master chính thức.
-
-29. **Hẹn Giờ Ngủ Cosine Fade-Out & Quản Lý Bộ Lọc MPV IPC Phân Tầng (Sleep Timer & Centralized MPV Filter Chain - Item 29)**:
-    - **Hẹn Giờ Ngủ (Sleep Timer)**:
-      - Bổ sung tùy chọn hẹn giờ tắt nhạc (15 phút, 30 phút, 45 phút, 60 phút, hoặc Hết bài hát hiện tại) trong Settings / Player Bar.
-      - Khi hết giờ, tự động hạ âm lượng êm dịu theo đường cong Cosine trong 5 giây, giữ im lặng 800ms rồi mới Pause.
-      - Tuyệt đối không can thiệp vào thanh volume người dùng; điều khiển qua `ao-volume` trong MPV để giữ nguyên mức âm lượng ban đầu khi mở lại app.
-    - **Kiến Trúc MPV IPC & Quản Lý Bộ Lọc `af` Phân Tầng**:
-      - Phân tầng chuỗi bộ lọc `af` tập trung: `[Equalizer] -> [Audio Effects / Reverb] -> [Crossfade]`, thoát ký tự an toàn (`\\` cho `:`, `=`, `\\\` cho `'`).
-      - Bảo vệ lệnh tua (`seek`) khi đang crossfade: Lập tức cam kết bài tiếp theo thành bài chính (`commit incoming as current`) trước khi seek để không tua nhầm vào bài đang tắt dần.
-      - Tập trung hóa toàn bộ lệnh ghi thuộc tính MPV qua 1 luồng IPC trong daemon để chống xung đột trạng thái.
 
 ---
 
