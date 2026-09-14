@@ -266,3 +266,35 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - **Tương Thích Hoàn Hảo Cả Chế Độ Cửa Sổ Thường & Maximize (`Shift+F11`)**:
       - Đã kiểm tra thực tế bằng `grim` và `view_file` trên Wayland Niri, giao diện co giãn tỷ lệ và hiển thị hoàn hảo ở mọi kích thước màn hình.
 
+- [x] **31. Up Next Mood Pills, Download Toggle Delete & PlayerBar Rounded Cover (ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Mood Filter Chips Động Trong UP NEXT (`YTMusicNowPlayingView.qml` & `backend/ytmusic_helper.py`)**:
+      - Bóc tách danh sách Mood Chips từ Innertube `v1/next` (`subHeaderChipCloud.chipCloudRenderer.chips`) trả về các chip tâm trạng chuẩn YouTube Music: `All`, `Deep cuts`, `Popular`, `Discover`, `Familiar`, `Romance`, `Party`, `Workout`, `2010s`, `2020s`, `Pop`, `Latin pop`, `Reggaeton`,...
+      - Thanh cuộn ngang `Flickable` hỗ trợ cuộn chuột ngang (`WheelHandler` tự chuyển đổi `angleDelta.y` sang horizontal scroll), bo góc viên thuốc `radius: 15` (chiều cao 30px, padding ngang 12px).
+      - Chip Active: Nền trắng tinh khiết `#ffffff`, chữ đen đậm `#000000`. Chip Inactive: Nền kính mờ `Qt.rgba(1, 1, 1, 0.08)`, viền mờ `0.12`, chữ trắng sáng, hover sáng nhẹ `0.16`.
+      - Khi click mood chip: Tự động gửi request `filter_queue` với `playlistId` và `params`, làm mờ nhẹ danh sách chờ (opacity 0.45), giữ nguyên bài hát đang phát ở vị trí đầu tiên (track index 0) và nạp 24 bài hát mới theo mood vào hàng đợi `queueTracks` / `win.currentTracks`.
+    - **Nút Download Đổi Chiều (Toggle Delete Khi Đã Tải Xong)**:
+      - Khi bài hát chưa tải: Hiển thị icon mũi tên tải xuống (`download-symbolic.svg`), click vào sẽ nạp tác vụ tải qua `downloadManager.enqueue(trk)`.
+      - Khi bài hát đang tải: Hiển thị con quay tiến trình `DownloadingSpinner` xoay tròn kèm % tiến trình.
+      - Khi bài hát đã tải xong hoặc là tệp cục bộ (`isDone === true`): Hiển thị dấu kiểm tra verify `emblem-ok-symbolic.svg` màu `root.accentColor`.
+      - Khi người dùng click vào dấu verify: Gọi `downloadManager.deleteDownloaded(videoId, track)`, xóa vĩnh viễn file âm thanh và `.lrc` trên đĩa (`backend/library.py delete`), xóa task khỏi `download_manager.py`, loại bài hát khỏi `win.allTracks` và `downloadTasks` trong bộ nhớ QML với độ trễ 0ms, icon verify lập tức chuyển ngược về mũi tên download, phát thông báo desktop qua `notify-send`.
+    - **Bo Góc Tròn MultiEffect Chuẩn 8px & Khử Dải Đen Cho PlayerBar (`PlayerBarBottom.qml`)**:
+      - Khắc phục lỗi hình chữ nhật sắc lẹm do `clip: true` trên `Rectangle` không cắt được ảnh con `Image` trong Qt Quick.
+      - Sử dụng mặt nạ `Rectangle { id: miniCoverMask; radius: 8 }` kết hợp `MultiEffect { maskEnabled: true; maskSource: miniCoverMask }`.
+      - Khử dải đen letterbox cho ảnh thumbnail tỷ lệ 16:9 YouTube qua hệ số phóng đại `scale: (implicitWidth / implicitHeight > 1.3) ? 1.48 : 1.0; transformOrigin: Item.Center; fillMode: Image.PreserveAspectCrop`.
+      - Bổ sung viền hairline 1px `border.color: Qt.rgba(1.0, 1.0, 1.0, 0.16)` đồng bộ với TrackCard và Download item.
+ 
+- [x] **32. Dynamic Play/Pause Palette, Clean Hover-to-Scroll Mood Bar & Unbroken Queue Continuity (ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Dynamic Play/Pause Palette Engine**:
+      - Tách biệt hoàn toàn bảng màu giao diện: Khi phát nhạc (`isPlaying === true`), tự động trích xuất màu sắc nghệ thuật của bìa bài hát (`track.image`) qua `palette_extractor.py` và áp dụng cho toàn bộ accent màu (Equalizer sóng âm, slider, nút play, mood chip active).
+      - Khi tạm dừng (`isPlaying === false`), tự động khôi phục màu sắc gốc của hình nền desktop từ `nutsty_palette.json`.
+    - **Clean Edge-to-Edge Hover-to-Scroll Mood Bar**:
+      - Xóa bỏ triệt để dải đen che gradient ở 2 cạnh trái/phải thanh Mood Chips trong `YTMusicNowPlayingView.qml`.
+      - Tích hợp vùng cảm biến rê chuột tự động cuộn (Zero-Interference Hover Sensor): Rê chuột vào khoảng trống mép trái hoặc mép phải sẽ tự động cuộn ngang thanh Mood Chips nhẹ nhàng mà không cần bấm nút trái/phải thô kệch.
+      - Sử dụng cờ không nuốt sự kiện `propagateComposedEvents: true` giúp người dùng vẫn click chọn chip nằm dưới vùng cảm biến 100% tự nhiên.
+    - **Unbroken Reactive Queue Continuity & High-Res Cover Sync**:
+      - Khắc phục triệt để lỗi ảnh bài hát bị đứng đơ ở bài cũ: Sử dụng cờ phản ứng `highResFailed` thay thế cho lệnh gán đè `source` thủ công (vốn làm đứt liên kết binding QML).
+      - Khắc phục lỗi hàng đợi "All" chỉ hiện 1 bài khi chọn bài mới từ Home/ngoài: Loại bỏ các lệnh gán đè thủ công lên `queueTracks`, chuyển sang cơ chế reactive signal `queueUpdated` và cập nhật tập trung vào `win.currentTracks`.
+      - Hoàn thiện cơ chế nạp lại hàng đợi và Mood Chips mỗi khi chuyển bài mới, đảm bảo danh sách bài hát kế tiếp luôn đầy đủ 20+ bài.
+

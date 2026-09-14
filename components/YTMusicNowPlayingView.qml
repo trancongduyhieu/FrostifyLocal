@@ -33,6 +33,13 @@ Item {
     property string currentLikeStatus: "INDIFFERENT"
     property var dislikedSongsMap: ({})
 
+    property var moodChips: []
+    property int selectedMoodIndex: 0
+    property bool isLoadingMoodChips: false
+    property bool isLoadingMoodQueue: false
+    property string lastMoodChipsVid: ""
+    property bool highResFailed: false
+
     signal seekRequested(real seconds)
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
@@ -42,6 +49,7 @@ Item {
     signal rateSongRequested(string videoId, string rating)
     signal songDisliked(var trk)
     signal downloadRequested(var trk)
+    signal queueUpdated(var newTracks)
 
     FileView {
         id: dislikedFileView
@@ -95,12 +103,43 @@ Item {
     onTrackChanged: {
         if (!root.track) {
             currentLikeStatus = "INDIFFERENT";
+            root.moodChips = [];
+            root.selectedMoodIndex = 0;
             return;
         }
+        root.highResFailed = false;
         var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
         currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
+
+        // Check if the newly playing track is already part of the active queue (e.g. playing next within the current mood)
+        var isAlreadyInQueue = false;
+        if (root.queueTracks && root.queueTracks.length > 1) {
+            for (var i = 0; i < root.queueTracks.length; ++i) {
+                var qTrk = root.queueTracks[i];
+                if (typeof win !== "undefined" && win && win.isSameTrack(qTrk, root.track)) {
+                    isAlreadyInQueue = true;
+                    break;
+                }
+            }
+        }
+
         fetchLyrics();
         fetchRelatedContent();
+
+        if (!isAlreadyInQueue) {
+            // New seed track selected from outside the current queue (Home / Downloads / Search):
+            // Reset mood index, clear cached vid, and fetch fresh mood chips + queue!
+            root.selectedMoodIndex = 0;
+            root.lastMoodChipsVid = "";
+            fetchMoodChips();
+        }
+        // If already in queue: keep current queueTracks & selectedMoodIndex untouched!
+    }
+
+    onVisibleChanged: {
+        if (visible && root.track && (!root.moodChips || root.moodChips.length === 0)) {
+            fetchMoodChips();
+        }
     }
 
     onCurrentTimeChanged: {
@@ -117,15 +156,16 @@ Item {
         if (!url || typeof url !== "string") return "";
         if (url.indexOf("googleusercontent.com") !== -1 || url.indexOf("ggpht.com") !== -1) {
             if (/=w\d+-h\d+/.test(url)) {
-                return url.replace(/=w\d+-h\d+[^=]*$/, "=w1080-h1080-l90-rj");
+                return url.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
             } else if (url.indexOf("=") !== -1) {
-                return url.split("=")[0] + "=w1080-h1080-l90-rj";
+                return url.split("=")[0] + "=w1200-h1200-l90-rj";
             } else {
-                return url + "=w1080-h1080-l90-rj";
+                return url + "=w1200-h1200-l90-rj";
             }
         }
         if (url.indexOf("i.ytimg.com") !== -1) {
-            return url.replace(/(hqdefault|mqdefault|sddefault|default)\.jpg/, "maxresdefault.jpg");
+            var clean = url.split("?")[0];
+            return clean.replace(/(hqdefault|mqdefault|sddefault|default)\.jpg/, "maxresdefault.jpg");
         }
         return url;
     }
@@ -264,6 +304,130 @@ Item {
         }
     }
 
+    function fetchMoodChips() {
+        if (!root.track) {
+            root.moodChips = [];
+            root.selectedMoodIndex = 0;
+            return;
+        }
+        var vid = root.track.videoId || "";
+        if (!vid && root.track.path && root.track.path.startsWith("ytdl://")) {
+            vid = root.track.path.replace("ytdl://", "");
+        }
+        if (!vid) {
+            root.moodChips = [];
+            root.selectedMoodIndex = 0;
+            return;
+        }
+        if (vid === lastMoodChipsVid && root.moodChips.length > 0 && root.queueTracks && root.queueTracks.length > 1) return;
+
+        lastMoodChipsVid = vid;
+        isLoadingMoodChips = true;
+        selectedMoodIndex = 0;
+        moodChipsProc.running = false;
+        moodChipsProc.command = [
+            "python3", "-u",
+            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+            "next_chips", vid
+        ];
+        moodChipsProc.running = true;
+    }
+
+    function selectMoodChip(index) {
+        if (index === root.selectedMoodIndex || index < 0 || index >= root.moodChips.length) return;
+        loadQueueForChipIndex(index);
+    }
+
+    function loadQueueForChipIndex(index) {
+        if (index < 0 || index >= root.moodChips.length) return;
+        root.selectedMoodIndex = index;
+        var chip = root.moodChips[index];
+        if (!chip) return;
+
+        var vid = root.track ? (root.track.videoId || "") : "";
+        if (!vid && root.track && root.track.path && root.track.path.startsWith("ytdl://")) {
+            vid = root.track.path.replace("ytdl://", "");
+        }
+        if (!vid) return;
+
+        var plId = chip.playlistId || ("RDAMVM" + vid);
+        var params = chip.params || "";
+
+        root.isLoadingMoodQueue = true;
+        moodQueueProc.running = false;
+        moodQueueProc.command = [
+            "python3", "-u",
+            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+            "filter_queue", vid, plId, params
+        ];
+        moodQueueProc.running = true;
+    }
+
+    Process {
+        id: moodChipsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        root.moodChips = arr;
+                        var selIdx = 0;
+                        for (var i = 0; i < arr.length; ++i) {
+                            if (arr[i].selected) {
+                                selIdx = i;
+                                break;
+                            }
+                        }
+                        root.selectedMoodIndex = selIdx;
+                        // Auto-load queue for the active chip (typically "All") for this newly selected track!
+                        root.loadQueueForChipIndex(selIdx);
+                    }
+                    root.isLoadingMoodChips = false;
+                } catch (e) {
+                    root.isLoadingMoodChips = false;
+                }
+            }
+        }
+        onExited: (code, status) => {
+            root.isLoadingMoodChips = false;
+        }
+    }
+
+    Process {
+        id: moodQueueProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        var cur = root.track;
+                        var filtered = arr.filter(function(t) {
+                            if (!cur) return true;
+                            if (cur.videoId && t.videoId && cur.videoId === t.videoId) return false;
+                            if (cur.path && t.path && cur.path === t.path) return false;
+                            return true;
+                        });
+                        var newQueue = cur ? [cur].concat(filtered) : filtered;
+                        root.queueUpdated(newQueue);
+                        if (typeof win !== "undefined" && win) {
+                            win.currentTracks = newQueue;
+                        }
+                    }
+                    root.isLoadingMoodQueue = false;
+                } catch (e) {
+                    root.isLoadingMoodQueue = false;
+                }
+            }
+        }
+        onExited: (code, status) => {
+            root.isLoadingMoodQueue = false;
+        }
+    }
+
 
     // =========================================================================
     // MAIN 2-COLUMN SPLIT SCREEN (50% Left Artwork/Video | 50% Right Tabs)
@@ -336,14 +500,22 @@ Item {
                         Image {
                             id: bigCoverImg
                             anchors.fill: parent
-                            source: root.track && root.track.image ? root.getHighResImage(root.track.image) : ""
+                            source: {
+                                if (!root.track || !root.track.image) return "";
+                                if (root.highResFailed) return root.track.image;
+                                return root.getHighResImage(root.track.image);
+                            }
                             fillMode: Image.PreserveAspectCrop
                             scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                             transformOrigin: Item.Center
                             asynchronous: true
+                            mipmap: true
+                            smooth: true
+                            sourceSize.width: 1200
+                            sourceSize.height: 1200
                             onStatusChanged: {
-                                if (status === Image.Error && root.track && root.track.image && source !== root.track.image) {
-                                    source = root.track.image;
+                                if (status === Image.Error && !root.highResFailed && root.track && root.track.image) {
+                                    root.highResFailed = true;
                                 }
                             }
                         }
@@ -415,95 +587,66 @@ Item {
 
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: 12
+                        spacing: 14
 
-                        // 1. Like & Dislike Segmented Pill (Dark Glass Container)
+                        // 1. Like Pure Frameless Button
                         Rectangle {
-                            height: 38
-                            width: likeDislikeRow.implicitWidth + 8
-                            radius: 19
-                            color: Qt.rgba(1.0, 1.0, 1.0, 0.07)
-                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                            border.width: 1
+                            id: likeBtn
+                            width: 36; height: 36
+                            radius: 18
+                            color: likeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
 
-                            RowLayout {
-                                id: likeDislikeRow
+                            HoverHandler { id: likeH }
+
+                            AppIcon {
                                 anchors.centerIn: parent
-                                spacing: 0
+                                source: "../assets/icons/thumb-up-symbolic.svg"
+                                iconSize: 18
+                                scale: likeH.hovered ? 1.10 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
+                            }
 
-                                // Like Button
-                                Rectangle {
-                                    width: 46; height: 32
-                                    radius: 16
-                                    color: root.currentLikeStatus === "LIKE" 
-                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-                                           : (likeH.hovered ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
-                                    border.width: 1
-                                    border.color: root.currentLikeStatus === "LIKE" ? root.accentColor : "transparent"
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                    HoverHandler { id: likeH }
-
-                                    AppIcon {
-                                        anchors.centerIn: parent
-                                        source: "../assets/icons/thumb-up-symbolic.svg"
-                                        iconSize: 16
-                                        color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.toggleLike()
-                                    }
-                                }
-
-                                // 1px Vertical Separator
-                                Rectangle {
-                                    width: 1; height: 18
-                                    color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                                }
-
-                                // Dislike Button (Permanent Blacklist)
-                                Rectangle {
-                                    id: dislikeBtn
-                                    width: 46; height: 32
-                                    radius: 16
-                                    color: root.currentLikeStatus === "DISLIKE"
-                                           ? Qt.rgba(0.9, 0.25, 0.25, 0.25)
-                                           : (dislikeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.10) : "transparent")
-                                    border.width: 1
-                                    border.color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : "transparent"
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                    HoverHandler { id: dislikeH }
-
-                                    AppIcon {
-                                        anchors.centerIn: parent
-                                        source: "../assets/icons/thumb-down-symbolic.svg"
-                                        iconSize: 16
-                                        color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : (dislikeH.hovered ? "#ffffff" : Theme.textSecondary)
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.dislikeCurrentTrack()
-                                    }
-                                }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleLike()
                             }
                         }
 
-                        // 2. Download Circular Glass Chip
+                        // 2. Dislike Pure Frameless Button
+                        Rectangle {
+                            id: dislikeBtn
+                            width: 36; height: 36
+                            radius: 18
+                            color: dislikeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            HoverHandler { id: dislikeH }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/thumb-down-symbolic.svg"
+                                iconSize: 18
+                                scale: dislikeH.hovered ? 1.10 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                                color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : (dislikeH.hovered ? "#ffffff" : Theme.textSecondary)
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.dislikeCurrentTrack()
+                            }
+                        }
+
+                        // 3. Download Pure Frameless Button
                         Rectangle {
                             id: dlBtn
-                            width: 38; height: 38
-                            radius: 19
-                            color: dlH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.07)
-                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                            border.width: 1
+                            width: 36; height: 36
+                            radius: 18
+                            color: dlH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             property string vid: {
@@ -512,9 +655,23 @@ Item {
                                 if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
                                 return "";
                             }
-                            property bool isDl: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.isDownloading(vid) : false
-                            property real dlProg: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.getProgress(vid) : -1
-                            property bool isDone: (typeof downloadManager !== "undefined" && downloadManager && vid) ? downloadManager.isDownloaded(vid) : false
+                            property bool isDl: Boolean(typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.isDownloading(vid))
+                            property real dlProg: (typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.getProgress(vid) !== undefined) ? downloadManager.getProgress(vid) : -1
+                            property bool isDone: {
+                                if (!root.track) return false;
+                                if (typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.isDownloaded(vid)) return true;
+                                if (root.track.path && !root.track.path.startsWith("ytdl://") && !root.track.path.startsWith("http")) return true;
+                                if (typeof win !== "undefined" && win && win.allTracks) {
+                                    var tName = (root.track.title || root.track.name || "").toLowerCase().trim();
+                                    for (var i = 0; i < win.allTracks.length; ++i) {
+                                        var at = win.allTracks[i];
+                                        if (vid && at.image && at.image.indexOf(vid) !== -1) return true;
+                                        var aName = (at.title || at.name || "").toLowerCase().trim();
+                                        if (tName && aName && tName === aName) return true;
+                                    }
+                                }
+                                return false;
+                            }
 
                             HoverHandler { id: dlH }
 
@@ -531,7 +688,9 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !parent.isDl && parent.isDone
                                 source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 16
+                                iconSize: 18
+                                scale: dlH.hovered ? 1.10 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
                                 color: root.accentColor
                             }
 
@@ -539,25 +698,33 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !parent.isDl && !parent.isDone
                                 source: "../assets/icons/download-symbolic.svg"
-                                iconSize: 16
+                                iconSize: 18
+                                scale: dlH.hovered ? 1.10 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
                                 color: dlH.hovered ? "#ffffff" : Theme.textSecondary
                             }
 
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.downloadCurrentTrack()
+                                onClicked: {
+                                    if (parent.isDone) {
+                                        if (typeof downloadManager !== "undefined" && downloadManager) {
+                                            downloadManager.deleteDownloaded(parent.vid, root.track);
+                                        }
+                                    } else {
+                                        root.downloadCurrentTrack();
+                                    }
+                                }
                             }
                         }
 
-                        // 3. Plus (+) Add to Playlist / Queue Circular Glass Chip
+                        // 4. Plus (+) Add to Playlist / Queue Pure Frameless Button
                         Rectangle {
                             id: plusBtn
-                            width: 38; height: 38
-                            radius: 19
-                            color: plusH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.07)
-                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                            border.width: 1
+                            width: 36; height: 36
+                            radius: 18
+                            color: plusH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             HoverHandler { id: plusH }
@@ -565,7 +732,9 @@ Item {
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/list-add-symbolic.svg"
-                                iconSize: 16
+                                iconSize: 18
+                                scale: plusH.hovered ? 1.10 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
                                 color: plusH.hovered ? "#ffffff" : Theme.textSecondary
                             }
 
@@ -728,6 +897,7 @@ Item {
                     x: currentTabObj ? currentTabObj.x : 0
                     width: currentTabObj ? currentTabObj.width : 50
 
+                    Behavior on color { ColorAnimation { duration: 450; easing.type: Easing.OutQuad } }
                     Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 }
@@ -777,12 +947,180 @@ Item {
                             }
                         }
 
+                        // Mood Filter Chips (YouTube Music Up Next Pills)
+                        Item {
+                            id: moodChipsContainer
+                            Layout.fillWidth: true
+                            implicitHeight: (root.moodChips.length > 0 || root.isLoadingMoodChips) ? 36 : 0
+                            visible: implicitHeight > 0
+                            clip: true
+
+                            // Auto-scroll continuous timers
+                            Timer {
+                                id: leftScrollTimer
+                                interval: 16
+                                repeat: true
+                                running: false
+                                onTriggered: {
+                                    moodFlickable.contentX = Math.max(0, moodFlickable.contentX - 6);
+                                    if (moodFlickable.contentX <= 0) running = false;
+                                }
+                            }
+
+                            Timer {
+                                id: rightScrollTimer
+                                interval: 16
+                                repeat: true
+                                running: false
+                                onTriggered: {
+                                    var maxScroll = moodFlickable.contentWidth - moodFlickable.width;
+                                    moodFlickable.contentX = Math.min(maxScroll, moodFlickable.contentX + 6);
+                                    if (moodFlickable.contentX >= maxScroll) running = false;
+                                }
+                            }
+
+                            // Left Edge Hover-to-scroll Zone (Clean, Invisible, No Dark Scrim)
+                            Item {
+                                id: leftMoodScrim
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 36
+                                z: 10
+                                visible: moodFlickable.contentX > 4
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    propagateComposedEvents: true
+                                    onEntered: leftScrollTimer.running = true
+                                    onExited: leftScrollTimer.running = false
+                                    onPressed: (mouse) => { mouse.accepted = false; }
+                                }
+                            }
+
+                            // Right Edge Hover-to-scroll Zone (Clean, Invisible, No Dark Scrim)
+                            Item {
+                                id: rightMoodScrim
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 36
+                                z: 10
+                                visible: moodFlickable.contentWidth > moodFlickable.width && moodFlickable.contentX < moodFlickable.contentWidth - moodFlickable.width - 4
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    propagateComposedEvents: true
+                                    onEntered: rightScrollTimer.running = true
+                                    onExited: rightScrollTimer.running = false
+                                    onPressed: (mouse) => { mouse.accepted = false; }
+                                }
+                            }
+
+                            Flickable {
+                                id: moodFlickable
+                                anchors.fill: parent
+                                contentWidth: moodChipsRow.width + 16
+                                contentHeight: height
+                                flickableDirection: Flickable.HorizontalFlick
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                DragHandler {
+                                    target: null
+                                    xAxis.enabled: true
+                                    yAxis.enabled: false
+                                    cursorShape: Qt.OpenHandCursor
+                                    onTranslationChanged: {
+                                        var newX = moodFlickable.contentX - translation.x;
+                                        moodFlickable.contentX = Math.max(0, Math.min(moodFlickable.contentWidth - moodFlickable.width, newX));
+                                    }
+                                }
+
+                                WheelHandler {
+                                    target: moodFlickable
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: event => {
+                                        var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
+                                        moodFlickable.contentX = Math.max(0, Math.min(moodFlickable.contentWidth - moodFlickable.width, moodFlickable.contentX - delta));
+                                    }
+                                }
+
+                                Row {
+                                    id: moodChipsRow
+                                    spacing: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    // Real Mood Chips
+                                    Repeater {
+                                        model: root.moodChips
+                                        delegate: Rectangle {
+                                            id: chipRect
+                                            height: 30
+                                            radius: 15
+                                            readonly property bool isSelected: index === root.selectedMoodIndex
+                                            width: chipLabel.implicitWidth + 24
+                                            color: isSelected 
+                                                   ? "#ffffff" 
+                                                   : (chipMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.08))
+                                            border.color: isSelected ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                            border.width: 1
+
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                            Text {
+                                                id: chipLabel
+                                                anchors.centerIn: parent
+                                                text: modelData.title || ""
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.weight: chipRect.isSelected ? Font.DemiBold : Font.Normal
+                                                color: chipRect.isSelected ? "#000000" : "#ffffff"
+                                            }
+
+                                            MouseArea {
+                                                id: chipMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.selectMoodChip(index)
+                                            }
+                                        }
+                                    }
+
+                                    // Skeleton loading pills when fetching chips
+                                    Repeater {
+                                        model: (root.isLoadingMoodChips && root.moodChips.length === 0) ? [50, 75, 65, 80] : 0
+                                        delegate: Rectangle {
+                                            height: 30
+                                            width: modelData + 20
+                                            radius: 15
+                                            color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
+                                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                                            border.width: 1
+
+                                            SequentialAnimation on opacity {
+                                                loops: Animation.Infinite
+                                                running: root.isLoadingMoodChips
+                                                NumberAnimation { from: 0.35; to: 0.75; duration: 650; easing.type: Easing.InOutQuad }
+                                                NumberAnimation { from: 0.75; to: 0.35; duration: 650; easing.type: Easing.InOutQuad }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         ListView {
                             id: queueListView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             clip: true
                             spacing: 4
+                            opacity: root.isLoadingMoodQueue ? 0.45 : 1.0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
                             model: root.queueTracks
 
                             delegate: Rectangle {
@@ -1275,78 +1613,82 @@ Item {
                                     Repeater {
                                         model: (root.relatedData && root.relatedData.similar_artists) ? root.relatedData.similar_artists : []
 
-                                        ColumnLayout {
-                                            Layout.preferredWidth: 90
-                                            spacing: 6
-                                            Layout.alignment: Qt.AlignHCenter
+                                        Item {
+                                            width: 90
+                                            height: 120
 
-                                            Item {
-                                                Layout.preferredWidth: 76
-                                                Layout.preferredHeight: 76
-                                                Layout.alignment: Qt.AlignHCenter
-
-                                                Rectangle {
-                                                    id: simArtMask
-                                                    anchors.fill: parent
-                                                    radius: 38
-                                                    color: "#ffffff"
-                                                    visible: false
-                                                    layer.enabled: true
-                                                }
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                spacing: 6
 
                                                 Item {
-                                                    anchors.fill: parent
-                                                    layer.enabled: true
-                                                    layer.effect: MultiEffect {
-                                                        maskEnabled: true
-                                                        maskSource: simArtMask
-                                                        autoPaddingEnabled: false
+                                                    Layout.preferredWidth: 76
+                                                    Layout.preferredHeight: 76
+                                                    Layout.alignment: Qt.AlignHCenter
+
+                                                    Rectangle {
+                                                        id: simArtMask
+                                                        anchors.fill: parent
+                                                        radius: 38
+                                                        color: "#ffffff"
+                                                        visible: false
+                                                        layer.enabled: true
                                                     }
 
-                                                    Image {
-                                                        id: simArtImg
+                                                    Item {
                                                         anchors.fill: parent
-                                                        source: modelData.image || ""
-                                                        fillMode: Image.PreserveAspectCrop
-                                                        asynchronous: true
-                                                        visible: status === Image.Ready
+                                                        layer.enabled: true
+                                                        layer.effect: MultiEffect {
+                                                            maskEnabled: true
+                                                            maskSource: simArtMask
+                                                            autoPaddingEnabled: false
+                                                        }
+
+                                                        Image {
+                                                            id: simArtImg
+                                                            anchors.fill: parent
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            asynchronous: true
+                                                            visible: status === Image.Ready
+                                                        }
+
+                                                        Rectangle {
+                                                            anchors.fill: parent
+                                                            color: "#222226"
+                                                            visible: simArtImg.status !== Image.Ready
+                                                        }
                                                     }
 
                                                     Rectangle {
                                                         anchors.fill: parent
-                                                        color: "#222226"
-                                                        visible: simArtImg.status !== Image.Ready
+                                                        radius: 38
+                                                        color: "transparent"
+                                                        border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
+                                                        border.width: 1.5
                                                     }
                                                 }
 
-                                                Rectangle {
-                                                    anchors.fill: parent
-                                                    radius: 38
-                                                    color: "transparent"
-                                                    border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
-                                                    border.width: 1.5
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.name || ""
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: simArtMouse.containsMouse ? root.accentColor : "#ffffff"
+                                                    elide: Text.ElideRight
+                                                    horizontalAlignment: Text.AlignHCenter
                                                 }
-                                            }
 
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.name || ""
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: simArtMouse.containsMouse ? root.accentColor : "#ffffff"
-                                                elide: Text.ElideRight
-                                                horizontalAlignment: Text.AlignHCenter
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.subscribers || "Nghệ sĩ"
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 10
-                                                color: Theme.textMuted
-                                                elide: Text.ElideRight
-                                                horizontalAlignment: Text.AlignHCenter
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.subscribers || "Nghệ sĩ"
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 10
+                                                    color: Theme.textMuted
+                                                    elide: Text.ElideRight
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                }
                                             }
 
                                             MouseArea {

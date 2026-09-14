@@ -48,6 +48,14 @@ class DownloadManager:
         self.lock = threading.Lock()
         self.queue = []  # list of dict: {videoId, title, artist, thumbnail}
         self.tasks = {}  # videoId -> dict of info & state
+        if os.path.exists(STATUS_FILE):
+            try:
+                with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                    _data = json.load(f)
+                if "tasks" in _data and isinstance(_data["tasks"], dict):
+                    self.tasks = _data["tasks"]
+            except Exception:
+                pass
         self.active_downloads = set()
         self.current_task = None
         self.batch_total = 0
@@ -159,6 +167,19 @@ class DownloadManager:
             "queue_len": len(self.queue),
             "active_count": len(self.active_downloads) + len(self.queue)
         })
+
+    def remove(self, video_id):
+        with self.lock:
+            self.queue = [t for t in self.queue if t["videoId"] != video_id]
+            if video_id in self.tasks:
+                del self.tasks[video_id]
+        self.emit_event({
+            "event": "task_removed",
+            "videoId": video_id,
+            "queue_len": len(self.queue),
+            "active_count": len(self.active_downloads) + len(self.queue)
+        })
+        self._save_status()
 
     def clear_completed(self):
         with self.lock:
@@ -428,6 +449,8 @@ def run_daemon():
                                         )
                                     elif action == "cancel":
                                         manager.cancel(cmd.get("videoId"))
+                                    elif action in ("remove", "delete"):
+                                        manager.remove(cmd.get("videoId"))
                                     elif action == "clear_completed":
                                         manager.clear_completed()
                                     elif action == "status":
@@ -534,6 +557,33 @@ def client_clear_completed():
             return False
     return True
 
+def client_remove(video_id):
+    """CLI client helper to remove a task from status"""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if "tasks" in data and video_id in data["tasks"]:
+                del data["tasks"][video_id]
+            with open(STATUS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    if os.path.exists(SOCKET_PATH):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(SOCKET_PATH)
+            payload = {"action": "remove", "videoId": video_id}
+            s.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+            s.close()
+            print(json.dumps({"success": True, "action": "remove", "videoId": video_id}))
+            return True
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            return False
+    return True
+
 def get_status():
     if os.path.exists(STATUS_FILE):
         try:
@@ -555,6 +605,9 @@ if __name__ == "__main__":
             a = sys.argv[4] if len(sys.argv) > 4 else "Artist"
             thumb = sys.argv[5] if len(sys.argv) > 5 else ""
             client_enqueue(vid, t, a, thumb)
+        elif cmd in ("remove", "delete"):
+            vid = sys.argv[2] if len(sys.argv) > 2 else ""
+            client_remove(vid)
         elif cmd in ("clear", "clear_completed"):
             client_clear_completed()
         elif cmd == "status":
@@ -565,6 +618,6 @@ if __name__ == "__main__":
             mgr.enqueue(vid, "Test Track", "Test Artist")
             time.sleep(5)
         else:
-            print("Usage: download_manager.py [daemon | add <videoId> [title] [artist] [thumb] | status]")
+            print("Usage: download_manager.py [daemon | add <videoId> [title] [artist] [thumb] | remove <videoId> | status]")
     else:
         run_daemon()

@@ -96,6 +96,82 @@ Item {
         root.downloadTasks = updated;
     }
 
+    function deleteDownloaded(videoId, trk) {
+        if (!videoId && trk) {
+            videoId = trk.videoId || "";
+            if (!videoId && trk.path && trk.path.startsWith("ytdl://")) {
+                videoId = trk.path.replace("ytdl://", "");
+            }
+        }
+        if (!videoId && (!trk || !(trk.title || trk.name))) return;
+
+        var updated = Object.assign({}, root.downloadTasks);
+        var task = updated[videoId];
+        var filePath = (task && task.path) ? task.path : "";
+        if (!filePath && trk && trk.path && !trk.path.startsWith("ytdl://")) {
+            filePath = trk.path;
+        }
+
+        var songTitle = (trk && (trk.title || trk.name)) ? (trk.title || trk.name) : (task ? task.title : "");
+
+        // Find file path in win.allTracks if not set yet
+        if ((!filePath || filePath.startsWith("ytdl://")) && typeof win !== "undefined" && win && win.allTracks) {
+            var tName = (songTitle || "").toLowerCase().trim();
+            for (var i = 0; i < win.allTracks.length; ++i) {
+                var at = win.allTracks[i];
+                if ((videoId && at.image && at.image.indexOf(videoId) !== -1) || 
+                    (tName && (at.title || at.name || "").toLowerCase().trim() === tName)) {
+                    filePath = at.path || "";
+                    if (!songTitle) songTitle = at.title || at.name || "";
+                    break;
+                }
+            }
+        }
+
+        // 1. Instantly update in-memory state for 0ms UI reactivity
+        if (videoId && updated[videoId]) {
+            delete updated[videoId];
+            root.downloadTasks = updated;
+            root.tasksList = root.getTasksList();
+        }
+
+        if (typeof win !== "undefined" && win && win.allTracks) {
+            win.allTracks = win.allTracks.filter(function(item) {
+                if (filePath && item.path === filePath) return false;
+                if (videoId && item.image && item.image.indexOf(videoId) !== -1) return false;
+                var iname = (item.title || item.name || "").toLowerCase().trim();
+                if (songTitle && iname && iname === (songTitle || "").toLowerCase().trim()) return false;
+                return true;
+            });
+        }
+
+        // 2. Call backend library.py to delete file, .lrc and update library.json
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/library.py", "delete",
+            filePath, "", songTitle
+        ]);
+
+        // 3. Remove task from download_manager daemon
+        if (videoId) {
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/download_manager.py", "remove",
+                videoId
+            ]);
+        }
+
+        // 4. Reload library model if available
+        if (typeof libLoader !== "undefined" && libLoader && libLoader.reload) {
+            libLoader.reload();
+        }
+
+        // 5. Desktop notification
+        Quickshell.execDetached([
+            "notify-send", "Nutsty",
+            "Đã xóa bài hát khỏi thư viện tải về: " + songTitle,
+            "-a", "Nutsty"
+        ]);
+    }
+
     function getTasksList() {
         if (!root.downloadTasks) return [];
         var arr = [];

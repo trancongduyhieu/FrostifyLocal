@@ -265,5 +265,71 @@ def main():
     print(f"Successfully generated palette at {out_file}")
     print(json.dumps(result, indent=2))
 
+SONG_PALETTES_CACHE = Path.home() / ".cache" / "nutsty" / "song_palettes.json"
+
+def extract_song_palette(img_src: str) -> dict:
+    default_res = {"highlightColor": "#f4afb3", "theme": "crimson"}
+    if not img_src or not str(img_src).strip():
+        return default_res
+
+    clean_src = str(img_src).strip()
+    cache_key = clean_src
+
+    try:
+        if SONG_PALETTES_CACHE.exists():
+            data = json.loads(SONG_PALETTES_CACHE.read_text(encoding="utf-8"))
+            if cache_key in data:
+                return data[cache_key]
+    except Exception:
+        pass
+
+    try:
+        if clean_src.startswith("http://") or clean_src.startswith("https://"):
+            import urllib.request
+            import io
+            req = urllib.request.Request(clean_src, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                content = resp.read()
+            img = Image.open(io.BytesIO(content))
+        else:
+            path_str = clean_src.replace("file://", "")
+            p = Path(os.path.expanduser(path_str))
+            if not p.exists():
+                return default_res
+            img = Image.open(p)
+
+        pal = extract_adaptive_palette(img, is_light=False)
+        res = {
+            "highlightColor": pal["highlightColor"],
+            "theme": pal["theme"],
+            "baseTextColor": pal.get("baseTextColor", "#f8fafc")
+        }
+
+        try:
+            SONG_PALETTES_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            existing = {}
+            if SONG_PALETTES_CACHE.exists():
+                try:
+                    existing = json.loads(SONG_PALETTES_CACHE.read_text(encoding="utf-8"))
+                except Exception:
+                    existing = {}
+            existing[cache_key] = res
+            if len(existing) > 500:
+                # Keep cache bounded
+                existing = dict(list(existing.items())[-400:])
+            SONG_PALETTES_CACHE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+        return res
+    except Exception as e:
+        sys.stderr.write(f"[extract_song_palette error]: {e}\n")
+        return default_res
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "song_palette":
+        src = sys.argv[2] if len(sys.argv) > 2 else ""
+        res = extract_song_palette(src)
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(0)
     main()

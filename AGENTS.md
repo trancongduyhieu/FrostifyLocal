@@ -560,7 +560,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
         - Mode Switcher Pill `[ Bài hát | Video ]`: Viên nang Liquid Glass khúc xạ thấu kính GPU (`displacement: 5.0`, `bevelWidth: 6.0`, `radius: 18px`), chuyển đổi tức thì giữa chế độ ảnh bìa tĩnh và luồng video in-app nhúng từ YouTube.
         - Ảnh bìa lớn tỷ lệ 1:1 cắt bo góc mềm mại 18px, lớp phủ phát quang ambient blur từ bìa album phía sau (`MultiEffect` blur: 1.0, blurMax: 64, saturation: 1.4).
         - Trình phát Video In-App: `MediaPlayer` + `VideoOutput` (`muted: true` để không xung đột luồng âm thanh bit-perfect từ MPV daemon), phân giải URL video trực tiếp qua `ytmusic_helper.py get_url <videoId>`.
-        - Khối thông tin: Tên bài hát (22px bold, text `#ffffff`), nghệ sĩ, nút Thích (`thumb-up-symbolic.svg`) và nút Thêm vào danh sách (`list-add-symbolic.svg`).
+        - Khối thông tin: Tên bài hát (22px bold, text `#ffffff`), nghệ sĩ, cụm 4 nút **Pure Frameless Icons** (`Like`, `Dislike`, `Download`, `Plus`) xóa bỏ hoàn toàn viền xám thô, khối capsule và dải phân cách 1px, hỗ trợ phản hồi micro-glow hover mềm mại (`Qt.rgba(1, 1, 1, 0.08)`) và scale 1.10x êm ái.
       - *Cột Phải (Right Area - 54%)*:
         - Thanh điều hướng 3 tab: `[ UP NEXT | LYRICS | RELATED ]` với vạch chỉ báo trượt mượt mà theo `accentColor`.
         - *Tab 1 - UP NEXT*: Hiển thị danh sách hàng đợi đang phát `win.currentTracks`, sóng âm Equalizer 3 thanh dao động cạnh bài đang chạy, chuột phải mở toàn diện `TrackContextMenu`.
@@ -587,9 +587,45 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - Tự động lấy mẫu 2 gam màu đại diện `songColorA` và `songColorB` từ bài hát đang phát (ví dụ: xanh biển sâu và trắng pha lê của FocusTunes) ngay trên GPU texture LOD 6.0.
       - Tích hợp trường sóng chất lỏng dẻo 3 tầng (`wave1`, `wave2`, `wave3`) giao thoa chậm rãi (chu kỳ ~14 giây) theo biến thời gian `u_time`.
       - 2 gam màu từ từ chảy qua nhau và lan tỏa nhẹ nhàng (`tintStrength: 0.22`) khắp bề mặt thanh keo, chuyển màu êm dịu khi bài hát thay đổi.
-    - **Tinh Giản Cụm Điều Hướng Header Thành Pure Borderless Icons**:
-      - Loại bỏ hoàn toàn viền ngoài, vòng tròn và background pill của các nút `Downloads`, `Home`, `Library`, `Settings` trên `TopHeaderBar.qml`.
-      - Chỉ để lại icon thanh lịch hiển thị phẳng với màu điểm nhấn trích xuất từ hình nền desktop (`headerRoot.accentColor`).
+31. **Kiến Trúc Mood Filter Chips Up Next, Download Toggle Delete & PlayerBar Cover Masking (Item 31)**:
+    - **Mood Filter Chips Động Trong UP NEXT (`YTMusicNowPlayingView.qml` & `backend/ytmusic_helper.py`)**:
+      - *Backend Innertube next endpoint*: Bóc tách `subHeaderChipCloud.chipCloudRenderer.chips` từ `v1/next` (`playlistId=f"RDAMVM{videoId}"`) trả về toàn bộ chip tâm trạng cá nhân hóa: `All`, `Deep cuts`, `Popular`, `Discover`, `Familiar`, `Romance`, `Party`, `Workout`, `2010s`, `2020s`, `Pop`, `Latin pop`, `Reggaeton`,...
+      - *Lọc hàng đợi theo Mood*: Hàm `get_filtered_radio_queue(videoId, playlistId, params)` gửi request `v1/next` với `playlistId` và `params` của chip, chuẩn hóa 25 bài hát qua `parse_watch_playlist` và `normalize_track` kèm tính toán thời lượng `durationMs`.
+      - *Thanh trượt ngang Flickable & WheelHandler*: Bo góc viên thuốc `radius: 15` (cao 30px, padding ngang 12px). Chip được chọn có nền trắng tinh khiết `#ffffff`, chữ đen đậm `#000000`; chip chưa chọn có nền kính mờ `0.08`, viền `0.12`, chữ trắng sáng. Tích hợp `WheelHandler` tự động chuyển đổi `angleDelta.y` của chuột dọc sang cuộn ngang trên Flickable.
+      - *Phản hồi UI êm ái*: Khi bấm chip tâm trạng, hàng đợi `queueListView` làm mờ nhẹ (opacity 0.45) với animation 150ms, bảo lưu bài hát đang phát ở vị trí đầu tiên (track index 0), nạp 24 bài hát mới vào `queueTracks` và đồng bộ vào `win.currentTracks`.
+    - **Cơ Chế Nút Download Đổi Chiều (Toggle Delete Khi Đã Tải Xong)**:
+      - *3 Trạng thái phản hồi*:
+        1. *Chưa tải*: Icon mũi tên tải xuống (`download-symbolic.svg`), click để bắt đầu tải qua `downloadManager.enqueue(trk)`.
+        2. *Đang tải*: Con quay `DownloadingSpinner` xoay tròn kèm % tiến trình.
+        3. *Đã tải xong hoặc là bài offline*: Dấu kiểm tra verify `emblem-ok-symbolic.svg` màu `root.accentColor`.
+      - *Xóa 0ms không tải trùng*: Khi click vào dấu verify, hàm `downloadManager.deleteDownloaded(videoId, track)` lập tức:
+        - Xóa vĩnh viễn file âm thanh và `.lrc` trên đĩa cứng qua `backend/library.py delete <path> "" <title>`.
+        - Gửi lệnh `remove <videoId>` đến socket daemon `backend/download_manager.py` để xóa task khỏi file trạng thái.
+        - Lập tức lọc bỏ bài hát khỏi `win.allTracks` và `downloadTasks` trong bộ nhớ QML, giúp reactive binding `isDone` chuyển thành `false` ngay tức thì (0ms).
+        - Icon lập tức đổi từ dấu verify trở lại mũi tên download và phát thông báo desktop qua `notify-send`.
+    - **Bo Góc Tròn MultiEffect Chuẩn 8px & Khử Dải Đen Cho PlayerBar (`PlayerBarBottom.qml`)**:
+      - *Khắc phục bẫy góc chữ nhật*: `Rectangle { radius: 8; clip: true }` trong Qt Quick không bo tròn được góc của con `Image`. Thay thế bằng cấu trúc mặt nạ `Rectangle { id: miniCoverMask; radius: 8; visible: false; layer.enabled: true }` kết hợp `Item { layer.enabled: true; layer.effect: MultiEffect { maskEnabled: true; maskSource: miniCoverMask } }`.
+      - *Khử letterbox 16:9 YouTube*: Tự động phóng đại `scale: (implicitWidth / implicitHeight > 1.3) ? 1.48 : 1.0; transformOrigin: Item.Center; fillMode: Image.PreserveAspectCrop` giúp thumbnail 38x38 luôn tràn khung đều đặn, không còn viền đen trên dưới.
+      - *Viền hairline 1px đồng bộ*: Lớp phủ `border.color: miniCoverMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.40) : Qt.rgba(1, 1, 1, 0.16)` mang lại độ hoàn thiện pixel-perfect như các card trong Home và Downloads.
+
+32. **Kiến Trúc Dynamic Play/Pause Palette Engine, Clean Edge-to-Edge Hover-to-Scroll Mood Bar & Unbroken Reactive Queue Continuity (Item 32)**:
+    - **Dynamic Play/Pause Palette Engine (Tách Biệt Màu Sắc Theo Bài Hát & Hình Nền)**:
+      - *Khi phát nhạc (`isPlaying === true`)*: Trích xuất màu sắc nghệ thuật (chromatic salience) trực tiếp từ ảnh bìa bài hát đang phát (`track.image`) qua `palette_extractor.py`, cập nhật động `root.accentColor`, sóng âm Equalizer, thanh tiến trình, nút Play/Pause và chip tab đang active.
+      - *Khi tạm dừng (`isPlaying === false`)*: Tự động khôi phục màu điểm nhấn gốc từ hình nền desktop hiện tại (`wallpaperPalette` trong `~/.config/noctalia/nutsty_palette.json`).
+      - *Chuyển đổi êm dịu*: Đồng bộ qua reactive binding giữa `shell.qml` và `YTMusicNowPlayingView.qml`, đảm bảo giao diện luôn phản ánh chính xác trạng thái phát nhạc mà không bị gián đoạn hay sai lệch màu sắc.
+    - **Clean Edge-to-Edge Hover-to-Scroll Mood Bar (Loại Bỏ Bóng Đen 2 Mép & Tự Cuộn Khi Rê Chuột)**:
+      - *Xóa bỏ hoàn toàn dải che đen*: Loại bỏ hai `Rectangle` nền gradient đen đục ở hai cạnh trái/phải của thanh Mood Chips, mang lại bề mặt trong suốt chuẩn dark glass đồng nhất với tổng thể giao diện.
+      - *Vùng cảm biến tự động cuộn (Zero-Interference Hover Sensor)*: Thiết lập hai dải cảm biến vô hình rộng 36px (`leftMoodScrim` và `rightMoodScrim`) ở mép trái và mép phải thanh Mood Chips.
+      - *Cuộn mượt mà*: Khi con trỏ chuột hover vào khoảng trống hai bên, timer `hoverScrollTimer` tự động cuộn `moodFlickable.contentX` êm dịu (tốc độ 4px/frame).
+      - *Không chặn click*: Thiết lập `MouseArea { propagateComposedEvents: true; onPressed: (mouse) => { mouse.accepted = false; } }` đảm bảo người dùng có thể click chọn trực tiếp các chip tâm trạng nằm dưới vùng cảm biến mà không hề bị cản trở.
+    - **Unbroken Reactive Queue Continuity & High-Res Cover Sync**:
+      - *Khắc phục lỗi avatar bị đứng ở bài cũ*:
+        - Bẫy lỗi trước đó: Trong `YTMusicNowPlayingView.qml`, sự kiện `onStatusChanged` gán thủ công `source = root.track.image` khi ảnh độ phân giải cao bị lỗi (404), khiến declarative property binding của QML bị đứt vĩnh viễn và không cập nhật được ảnh khi chuyển sang bài hát tiếp theo.
+        - Giải pháp triệt để: Sử dụng cờ phản ứng `property bool highResFailed: false`. Thuộc tính `source` của ảnh lớn được khai báo phụ thuộc phản ứng (`highResFailed ? (root.track ? root.track.image : "") : ...`). Khi đổi bài (`onTrackChanged`), reset cờ `root.highResFailed = false`, đảm bảo binding luôn toàn vẹn và ảnh bài hát mới lập tức hiển thị.
+      - *Khắc phục lỗi hàng đợi "All" chỉ hiện 1 bài*:
+        - Bẫy lỗi trước đó: Trong `onTrackChanged`, lệnh gán thủ công `root.queueTracks = [root.track]` làm đứt binding `queueTracks: win.currentTracks`. Khi `radioProc` hoặc `moodQueueProc` nạp xong danh sách bài hát trong background và cập nhật `win.currentTracks`, `root.queueTracks` không nhận được dữ liệu mới.
+        - Giải pháp triệt để: Loại bỏ hoàn toàn các lệnh gán đè thủ công lên `root.queueTracks`. Mọi cập nhật danh sách bài hát được chuyển tiếp qua signal phản ứng `root.queueUpdated(newQueue)` và gán tập trung vào `win.currentTracks`.
+        - Trong hàm `fetchMoodChips()`, bổ sung điều kiện kiểm tra `if (vid === lastMoodChipsVid && root.moodChips.length > 0 && root.queueTracks && root.queueTracks.length > 1) return;` và xóa cache `root.lastMoodChipsVid = ""` khi `!isAlreadyInQueue`, bảo đảm khi chọn bài hát mới từ ngoài vào luôn kích hoạt nạp mới đầy đủ hàng đợi (20+ bài) và bộ chip tâm trạng tương ứng.
 
 ---
 

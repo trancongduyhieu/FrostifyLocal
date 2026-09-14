@@ -642,6 +642,88 @@ def get_radio(video_id, limit=30):
         sys.stderr.write(f"[get_radio error for {video_id}]: {e}\n")
         return []
 
+def _parse_duration_seconds(dur_str):
+    if not dur_str or dur_str == "--:--":
+        return 0
+    parts = dur_str.split(":")
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except Exception:
+        return 0
+    return 0
+
+def get_watch_playlist_chips(video_id):
+    if video_id.startswith("ytdl://"):
+        video_id = video_id.replace("ytdl://", "")
+
+    yt = get_ytmusic_client()
+    try:
+        res = yt._send_request('next', {'videoId': video_id, 'playlistId': f'RDAMVM{video_id}'})
+        tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
+        if not tabs:
+            return []
+        queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
+        chips_raw = queue.get('subHeaderChipCloud', {}).get('chipCloudRenderer', {}).get('chips', [])
+
+        chips = []
+        for c in chips_raw:
+            cr = c.get('chipCloudChipRenderer', {})
+            title = ''.join(r.get('text', '') for r in cr.get('text', {}).get('runs', [])).strip()
+            ep = cr.get('navigationEndpoint', {}).get('queueUpdateCommand', {}).get('fetchContentsCommand', {}).get('watchEndpoint', {})
+            playlist_id = ep.get('playlistId', '')
+            params = ep.get('params', '')
+            is_selected = cr.get('isSelected', False)
+            if title:
+                chips.append({
+                    "title": title,
+                    "playlistId": playlist_id,
+                    "params": params,
+                    "selected": is_selected
+                })
+        return chips
+    except Exception as e:
+        sys.stderr.write(f"[get_watch_playlist_chips error for {video_id}]: {e}\n")
+        return []
+
+def get_filtered_radio_queue(video_id, playlist_id, params=None):
+    if video_id.startswith("ytdl://"):
+        video_id = video_id.replace("ytdl://", "")
+
+    yt = get_ytmusic_client()
+    try:
+        from ytmusicapi.parsers.watch import parse_watch_playlist
+        body = {'videoId': video_id, 'playlistId': playlist_id}
+        if params:
+            body['params'] = params
+        res = yt._send_request('next', body)
+        tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
+        if not tabs:
+            return []
+        queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
+        contents = queue.get('content', {}).get('playlistPanelRenderer', {}).get('contents', [])
+        parsed = parse_watch_playlist(contents)
+
+        tracks = []
+        for p in parsed:
+            if "length" in p and "duration" not in p:
+                p["duration"] = p["length"]
+            if "thumbnail" in p and "thumbnails" not in p:
+                p["thumbnails"] = p["thumbnail"]
+            norm = normalize_track(p)
+            if norm:
+                if (not norm.get("durationMs") or norm.get("durationMs") == 0) and norm.get("duration") and norm.get("duration") != "--:--":
+                    norm["durationMs"] = _parse_duration_seconds(norm["duration"]) * 1000
+                tracks.append(norm)
+        cache_online_tracks(tracks)
+        return tracks
+    except Exception as e:
+        sys.stderr.write(f"[get_filtered_radio_queue error for {video_id}, {playlist_id}]: {e}\n")
+        return []
+
+
 def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max_qp=30, max_fp=60):
     for it in items:
         if not isinstance(it, dict):
@@ -1824,6 +1906,18 @@ if __name__ == "__main__":
     elif cmd == "radio" and len(sys.argv) > 2:
         vid = sys.argv[2]
         res = get_radio(vid)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "next_chips" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        res = get_watch_playlist_chips(vid)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "filter_queue" and len(sys.argv) > 3:
+        vid = sys.argv[2]
+        pl_id = sys.argv[3]
+        params = sys.argv[4] if len(sys.argv) > 4 else None
+        res = get_filtered_radio_queue(vid, pl_id, params)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "mood" and len(sys.argv) > 2:

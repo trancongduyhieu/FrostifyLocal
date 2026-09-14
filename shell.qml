@@ -79,8 +79,48 @@ Scope {
     property var artistHistoryStack: []
     property bool isLoadingArtist: false
     property var followedArtists: []
-    property color accentColor: "#deb06c"
+    property color wallpaperAccentColor: "#f4afb3"
+    property color songAccentColor: "#f4afb3"
+    readonly property color effectiveAccentColor: (win.currentTrack && win.isPlaying) ? win.songAccentColor : win.wallpaperAccentColor
+    property color accentColor: effectiveAccentColor
+    Behavior on accentColor {
+        ColorAnimation {
+            duration: 450
+            easing.type: Easing.OutQuad
+        }
+    }
     property string currentWallpaperPath: ""
+
+    Process {
+        id: songPaletteProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var parsed = JSON.parse(data);
+                    if (parsed && parsed.highlightColor) {
+                        win.songAccentColor = parsed.highlightColor;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    function fetchSongPalette(imgUrl) {
+        if (!imgUrl || typeof imgUrl !== "string" || imgUrl.trim() === "") {
+            win.songAccentColor = win.wallpaperAccentColor;
+            return;
+        }
+        songPaletteProc.running = false;
+        songPaletteProc.command = [
+            "python3", "-u",
+            win.appDir + "/backend/palette_extractor.py",
+            "song_palette",
+            imgUrl
+        ];
+        songPaletteProc.running = true;
+    }
 
     Timer {
         id: ytSearchDebounce
@@ -567,8 +607,19 @@ Scope {
             win.trackPlayback(trk);
         }
 
-        if (!win.currentTracks || win.currentTracks.length === 0) {
+        if (startRadio || !win.currentTracks || win.currentTracks.length === 0) {
             win.currentTracks = [trk];
+        } else {
+            var foundIdx = -1;
+            for (var qi = 0; qi < win.currentTracks.length; qi++) {
+                if (win.isSameTrack(win.currentTracks[qi], trk)) {
+                    foundIdx = qi;
+                    break;
+                }
+            }
+            if (foundIdx === -1) {
+                win.currentTracks = [trk];
+            }
         }
 
         var streamPath = trk.path || ("ytdl://" + trk.videoId);
@@ -596,9 +647,10 @@ Scope {
             }
         }
 
-        if (startRadio && trk.videoId) {
+        var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (startRadio && rVid) {
             radioProc.running = false;
-            radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", trk.videoId];
+            radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", rVid];
             radioProc.running = true;
         }
         pollTimer.restart();
@@ -776,6 +828,13 @@ Scope {
     }
 
     property var currentTrack: null
+    onCurrentTrackChanged: {
+        if (win.currentTrack && win.currentTrack.image) {
+            win.fetchSongPalette(win.currentTrack.image);
+        } else {
+            win.songAccentColor = win.wallpaperAccentColor;
+        }
+    }
     property bool isPlaying: false
     property real currentTime: 0.0
     property real totalDuration: 0.0
@@ -835,10 +894,10 @@ Scope {
             anchors.fill: parent
             z: 0
             visible: opacity > 0.001
-            opacity: (win.currentTrack && (win.isPlaying || win.isNowPlayingOpen)) ? 1.0 : 0.0
+            opacity: (win.currentTrack && win.isPlaying) ? 0.92 : 0.0
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 900
+                    duration: 450
                     easing.type: Easing.InOutQuad
                 }
             }
@@ -1336,6 +1395,7 @@ Scope {
                     onRateSongRequested: (vid, r) => win.rateSong(vid, r)
                     onSongDisliked: trk => win.handleDislikedTrack(trk)
                     onDownloadRequested: trk => win.downloadTrack(trk)
+                    onQueueUpdated: newTracks => { win.currentTracks = newTracks; }
                 }
             }
         }
@@ -1533,8 +1593,8 @@ Scope {
             try {
                 var p = JSON.parse(raw);
                 if (p.wallpaper) win.currentWallpaperPath = p.wallpaper;
-                if (p.highlightColor) win.accentColor = p.highlightColor;
-                else if (p.accentColor) win.accentColor = p.accentColor;
+                var col = p.highlightColor || p.accentColor || "#deb06c";
+                win.wallpaperAccentColor = col;
             } catch(e) {}
         }
     }
@@ -2174,15 +2234,21 @@ Scope {
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
         function playTrackObj(title: string, artist: string, image: string, path: string) { frostifyIpc.playTrackObj(title, artist, image, path); }
         function switchNowPlayingTab(tab: string) { frostifyIpc.switchNowPlayingTab(tab); }
+        function selectNowPlayingMood(index: int) { frostifyIpc.selectNowPlayingMood(index); }
         function testSelectMode() { frostifyIpc.testSelectMode(); }
         function setDownloadsSubTab(tab: string) { frostifyIpc.setDownloadsSubTab(tab); }
         function setSortBy(s: string) { frostifyIpc.setSortBy(s); }
         function toggleMaximize() { frostifyIpc.toggleMaximize(); }
+        function togglePlay() { frostifyIpc.togglePlay(); }
+        function playNext() { frostifyIpc.playNext(); }
+        function playPrev() { frostifyIpc.playPrev(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function playNext() { win.playNext(); }
+        function playPrev() { win.playPrev(); }
         function toggleMaximize() {
             win.maximized = !win.maximized;
         }
@@ -2267,6 +2333,9 @@ Scope {
                 win.playTrack(win.allTracks[idx]);
             }
         }
+        function togglePlay() {
+            win.togglePlay();
+        }
         function playTrackObj(title: string, artist: string, image: string, path: string) {
             var trk = {
                 id: "yt_test",
@@ -2274,12 +2343,20 @@ Scope {
                 name: title,
                 artist: artist,
                 image: image,
-                path: path
+                path: path,
+                videoId: (path && path.startsWith("ytdl://")) ? path.replace("ytdl://", "") : ""
             };
-            win.playTrack(trk);
+            if (path && path.startsWith("ytdl://")) {
+                win.playOnlineTrack(trk, false);
+            } else {
+                win.playTrack(trk);
+            }
         }
         function switchNowPlayingTab(tab: string) {
             if (ytNowPlayingView) ytNowPlayingView.activeTab = tab;
+        }
+        function selectNowPlayingMood(index: int) {
+            if (ytNowPlayingView) ytNowPlayingView.selectMoodChip(index);
         }
         function testSelectMode() {
             win.isNowPlayingOpen = false;

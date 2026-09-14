@@ -92,36 +92,76 @@ Item {
             spacing: 10
 
             // Mini Cover Artwork (38x38)
-            Rectangle {
+            Item {
                 Layout.preferredWidth: 38
                 Layout.preferredHeight: 38
-                radius: 8
-                color: "#222222"
-                clip: true
-
-                Image {
-                    id: miniCover
-                    anchors.fill: parent
-                    source: (root.currentTrack && root.currentTrack.image) ? root.currentTrack.image : ""
-                    asynchronous: true
-                    fillMode: Image.PreserveAspectCrop
-                    visible: status === Image.Ready
-                }
 
                 Rectangle {
+                    id: miniCoverMask
                     anchors.fill: parent
-                    visible: !miniCover.visible
-                    color: "#282828"
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/folder-music-symbolic.svg"
-                        iconSize: 18
-                        color: Theme.textSecondary
+                    radius: 8
+                    color: "#ffffff"
+                    visible: false
+                    layer.enabled: true
+                }
+
+                Item {
+                    anchors.fill: parent
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: miniCoverMask
+                        autoPaddingEnabled: false
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#222222"
+                    }
+
+                    Image {
+                        id: miniCover
+                        anchors.fill: parent
+                        source: {
+                            if (!root.currentTrack || !root.currentTrack.image) return "";
+                            var s = root.currentTrack.image;
+                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                        }
+                        asynchronous: true
+                        fillMode: Image.PreserveAspectCrop
+                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                        transformOrigin: Item.Center
+                        visible: status === Image.Ready
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: !miniCover.visible
+                        color: "#282828"
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/folder-music-symbolic.svg"
+                            iconSize: 18
+                            color: Theme.textSecondary
+                        }
                     }
                 }
 
-                MouseArea {
+                // 1px Hairline Border
+                Rectangle {
                     anchors.fill: parent
+                    radius: 8
+                    color: "transparent"
+                    border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                    border.width: 1
+                    z: 1
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                }
+
+                MouseArea {
+                    id: miniCoverMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.openDetailsRequested()
                 }
