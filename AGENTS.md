@@ -638,6 +638,21 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *Kéo thả tự do (DragHandler)*: Tích hợp `DragHandler { target: null; cursorShape: Qt.OpenHandCursor; ... }` cho phép người dùng click giữ chuột và kéo lướt carousel như trên màn hình cảm ứng hoặc mobile.
       - *Cuộn chuột thông minh (WheelHandler)*: Tự động chuyển đổi con lăn chuột dọc (`angleDelta.y`) sang cuộn ngang (`contentX`), mang lại trải nghiệm mượt mà không cần phím Shift.
 
+34. **Kiến Trúc Bố Cục YouTube Music 3-Archetype & Cụm Nút Điều Hướng Liquid Glass Accent Năng Động (Item 34)**:
+    - **Thống Nhất 3 Archetype Bố Cục Chuẩn YouTube Music Toàn Bộ Mood Feeds (`components/HomeFeedView.qml`)**:
+      - *Video Music Carousel (Hình chữ nhật 16:9)*: Áp dụng cho các video âm nhạc, clip trình diễn trực tiếp và đĩa đơn video. Card tỷ lệ 16:9 (`width: 240px`, thumbnail 240x135), bo góc tròn mềm mại 10px, hiển thị badge thời lượng video và thông tin kênh/nghệ sĩ.
+      - *Quick Picks Grid (Lưới 4 dòng x N cột)*: Áp dụng cho danh sách tuyển chọn nhanh cá nhân hóa. Mỗi cột cao 4 dòng, mỗi item có thumbnail vuông nhỏ 48x48 px (bo góc 6px), tiêu đề bài hát, phụ đề nghệ sĩ và thời lượng, hỗ trợ click phát trực tiếp.
+      - *Playlists & Albums Carousel (Hình vuông 1:1)*: Áp dụng cho các album, đĩa đơn, EP và danh sách phát đề xuất. Card tỷ lệ 1:1 (`width: 160px`, thumbnail 160x160), bo góc tròn 8px, hiển thị tên album/playlist và loại phát hành.
+      - *Xóa bỏ toàn bộ nút "Play all" capsule*: Loại bỏ hoàn toàn các nút con nhộng "Play all" tại header của các section để giải phóng không gian thở và tôn trọng ngôn ngữ tối giản cao cấp.
+    - **Cụm Nút Điều Hướng `< >` Liquid Glass Đổi Màu Thích Ứng (Option 1)**:
+      - *Thiết kế Kính Liquid Glass Dark Tint & Glow*: Nền kính đen mờ phủ nhẹ 10% sắc màu chủ đạo (`Qt.rgba(accent.r, accent.g, accent.b, 0.10)`), viền hairline 1px điểm xuyết (`0.30`), icon mũi tên SVG (`go-previous-symbolic.svg`, `go-next-symbolic.svg`) nhuộm theo `accentColor`.
+      - *Tương tác Hover & Vô hiệu hóa*: Khi rê chuột (hover), nền kính sáng lên `0.28`, viền rực rỡ `0.75`, phóng to 1.06x êm dịu. Khi chạm giới hạn cuộn trang (mép trái/phải), nút tự động giảm độ đục xuống `0.25` và vô hiệu hóa click.
+      - *Chuyển đổi màu sắc 2 chiều (Dynamic 2-Way Accent Sync)*:
+        - Khi phát nhạc (`win.isPlaying === true`): Cụm nút đồng bộ tức thì với màu điểm nhấn trích xuất từ ảnh bìa bài hát (`win.songAccentColor`).
+        - Khi dừng / tạm dừng (`win.isPlaying === false`): Cụm nút tự động chuyển tiếp mềm mại (animation 300ms) trở về màu điểm nhấn của hình nền desktop (`win.wallpaperAccentColor`).
+    - **Khắc Phục Lỗi Dữ Liệu Mood Feeds Bị Trống (`backend/ytmusic_helper.py`)**:
+      - Khắc phục lỗi `UnboundLocalError: cannot access local variable 'creator'` trong hàm `_normalize_shelf_item` bằng cách khởi tạo mặc định `creator = artist_name or ""` trước các khối kiểm tra community badge. Giúp toàn bộ các tab tâm trạng (Sleep, Relax, Sad, Romance, Focus, Party, v.v.) hiển thị đầy đủ và phong phú các kệ nội dung mà không bị crash ngầm.
+
 ---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)

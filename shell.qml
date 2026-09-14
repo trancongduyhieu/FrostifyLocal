@@ -1223,7 +1223,11 @@ Scope {
                             onMoodSelected: (title, params) => win.selectMood(title, params)
                             onTrackPlayRequested: trk => {
                                 win.startRadioFromTrack(trk);
-                                win.isNowPlayingOpen = true;
+                            }
+                            onPlaySectionRequested: trks => {
+                                if (!trks || trks.length === 0) return;
+                                win.currentTracks = trks.slice();
+                                win.startRadioFromTrack(trks[0]);
                             }
                             onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)

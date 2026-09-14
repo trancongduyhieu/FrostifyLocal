@@ -307,6 +307,57 @@ def _normalize_shelf_item(it, shelf_title=""):
     if not isinstance(it, dict):
         return None
 
+PALETTE_CREATORS = [
+    "#00bcd4",  # cyan
+    "#ff7043",  # orange
+    "#ab47bc",  # purple
+    "#26a69a",  # teal
+    "#42a5f5",  # blue
+    "#ff5722",  # deep orange
+    "#ffa726",  # amber
+    "#ec407a",  # pink
+    "#7e57c2",  # deep purple
+    "#66bb6a",  # light green
+]
+
+def get_creator_color(name):
+    if not name:
+        return "#00bcd4"
+    h = 0
+    for ch in str(name):
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return PALETTE_CREATORS[h % len(PALETTE_CREATORS)]
+
+def classify_section(title, norm_items):
+    lower_t = str(title).lower()
+    track_count = sum(1 for x in norm_items if x.get("type") in ["track", "video"])
+    pl_count = sum(1 for x in norm_items if x.get("type") in ["playlist", "album"])
+    has_16_9 = any(x.get("aspectRatio") == "16:9" or x.get("isVideo") for x in norm_items)
+
+    # 1. Multi-row Track Grid (4 rows per column)
+    if any(k in lower_t for k in ["quick", "lựa chọn nhanh", "cover", "remix", "trending song", "bài hát thịnh hành", "long", "thư giãn", "shorts"]):
+        return "track_grid"
+
+    # 2. Video Carousel (16:9 Widescreen)
+    if any(k in lower_t for k in ["video", "listen again", "nghe lại", "forgotten", "giai điệu", "cùng nghe", "together"]):
+        return "video_carousel"
+
+    # 3. Large Square Album & Playlist Carousel
+    if pl_count >= len(norm_items) * 0.5 or any(k in lower_t for k in ["album", "playlist", "community", "cộng đồng", "release", "mới phát hành", "mix", "kết hợp", "bảng xếp hạng", "chart", "station", "danh sách"]):
+        return "album_carousel"
+
+    # 4. Aspect Ratio Heuristic
+    if has_16_9:
+        return "video_carousel"
+
+    # 5. Default fallback heuristics
+    if track_count > len(norm_items) * 0.7:
+        return "track_grid"
+    return "album_carousel"
+
+def _normalize_shelf_item(it, shelf_title):
+    if not isinstance(it, dict):
+        return None
     # 1. musicResponsiveListItemRenderer
     if "musicResponsiveListItemRenderer" in it:
         r = it["musicResponsiveListItemRenderer"]
@@ -317,11 +368,15 @@ def _normalize_shelf_item(it, shelf_title=""):
         title = "".join(x.get("text", "") for x in cols[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])) if cols else ""
         artist = ""
         channel_id = ""
+        views = ""
         if len(cols) > 1:
             artist_runs = cols[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
             for x in artist_runs:
                 txt = x.get("text", "").strip()
-                if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+                if not txt or txt == "•":
+                    continue
+                if any(w in txt.lower() for w in ["views", "plays", "lượt xem", "lượt phát"]):
+                    views = txt
                     continue
                 if not artist:
                     artist = txt
@@ -329,7 +384,7 @@ def _normalize_shelf_item(it, shelf_title=""):
                     if ep and ep.get("browseId"):
                         channel_id = ep.get("browseId")
             if not artist:
-                artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower()).strip(" • ")
+                artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower() and "lượt" not in x.get("text", "").lower()).strip(" • ")
         artist = clean_artist_name(artist)
         thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
         thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
@@ -342,13 +397,16 @@ def _normalize_shelf_item(it, shelf_title=""):
                 "title": title,
                 "name": title,
                 "artist": artist or "YouTube Music",
-                "subtitle": artist or "YouTube Music",
+                "subtitle": f"{artist} • {views}" if (artist and views) else (artist or "YouTube Music"),
+                "views": views,
                 "source": "YouTube Music",
                 "path": f"ytdl://{vid}",
                 "videoId": vid,
                 "duration": "--:--",
                 "durationMs": 0,
-                "image": thumb_url
+                "image": thumb_url,
+                "aspectRatio": "1:1",
+                "isVideo": False
             }
             if channel_id:
                 item_res["channelId"] = channel_id
@@ -362,11 +420,14 @@ def _normalize_shelf_item(it, shelf_title=""):
         sub_runs = r.get("subtitle", {}).get("runs", [])
         artist_name = ""
         channel_id = ""
+        views = ""
         for x in sub_runs:
             txt = x.get("text", "").strip()
-            if not txt or txt == "•" or "views" in txt.lower() or "plays" in txt.lower() or "lượt xem" in txt.lower():
+            if not txt or txt == "•":
                 continue
-            if not artist_name:
+            if any(w in txt.lower() for w in ["views", "plays", "lượt xem", "lượt phát"]):
+                views = txt
+            elif not artist_name and not any(w in txt.lower() for w in ["playlist", "danh sách phát", "album", "ep", "single"]):
                 artist_name = txt
                 ep = x.get("navigationEndpoint", {}).get("browseEndpoint", {})
                 if ep and ep.get("browseId"):
@@ -374,10 +435,19 @@ def _normalize_shelf_item(it, shelf_title=""):
         if not artist_name:
             artist_name = clean_artist_name(sub)
 
+        r_aspect = str(r.get("aspectRatio", ""))
+        is_16_9 = ("16_9" in r_aspect) or ("RECTANGLE" in r_aspect)
+        if not is_16_9 and any(k in shelf_title.lower() for k in ["video", "listen again", "nghe lại", "forgotten", "giai điệu", "cùng nghe"]):
+            is_16_9 = True
+
         thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
         thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-        if "w120" in thumb_url or "w226" in thumb_url:
-            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        if is_16_9:
+            if "=w" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w640-h360-l90-rj', thumb_url)
+        else:
+            if "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
 
         nav_ep = r.get("navigationEndpoint", {})
         watch_ep = nav_ep.get("watchEndpoint", {})
@@ -388,32 +458,51 @@ def _normalize_shelf_item(it, shelf_title=""):
             return None
         pl_id = watch_ep.get("playlistId") or browse_ep.get("browseId")
 
-        if vid and (not pl_id or "listen" in shelf_title.lower() or "favorite" in shelf_title.lower()):
+        if vid and (not pl_id or is_16_9 or "listen" in shelf_title.lower() or "favorite" in shelf_title.lower() or "video" in shelf_title.lower()):
             item_res = {
                 "id": f"yt_{vid}",
-                "type": "track",
+                "type": "video" if is_16_9 else "track",
                 "title": title,
                 "name": title,
                 "artist": artist_name or "YouTube Music",
-                "subtitle": artist_name or "YouTube Music",
+                "subtitle": f"{artist_name} • {views}" if (artist_name and views) else (artist_name or "YouTube Music"),
+                "views": views,
                 "source": "YouTube Music",
                 "path": f"ytdl://{vid}",
                 "videoId": vid,
                 "duration": "--:--",
                 "durationMs": 0,
-                "image": thumb_url
+                "image": thumb_url,
+                "aspectRatio": "16:9" if is_16_9 else "1:1",
+                "isVideo": is_16_9
             }
             if channel_id:
                 item_res["channelId"] = channel_id
             return item_res
         elif pl_id and title:
+            is_album = str(pl_id).startswith("MPREb_") or any(w in sub.lower() for w in ["album", "ep", "single"]) or "album" in shelf_title.lower()
+            creator = artist_name or ""
+            not_community_shelf = any(w in shelf_title.lower() for w in ["mixed for you", "dành riêng", "nghe lại", "listen again", "quick", "album", "mới phát hành", "release", "radio", "for you", "cho bạn"])
+            is_community = not not_community_shelf and (("community" in shelf_title.lower()) or ("cộng đồng" in shelf_title.lower()) or (bool(views) and not is_album))
+            if is_community and creator and not any(w in creator.lower() for w in ["youtube music", "supermix"]):
+                creator_initial = creator.strip()[:1].upper()
+                creator_color = get_creator_color(creator)
+            else:
+                creator_initial = ""
+                creator_color = ""
             return {
                 "id": pl_id,
-                "type": "playlist",
+                "type": "album" if is_album else "playlist",
                 "playlistId": pl_id,
                 "title": title,
-                "subtitle": sub or shelf_title or "Playlist",
-                "image": thumb_url
+                "subtitle": (f"Album • {artist_name}" if artist_name else "Album") if is_album else (f"Playlist • {creator}" + (f" • {views}" if views else "") if creator else "Playlist"),
+                "creator": creator,
+                "creatorInitial": creator_initial,
+                "creatorColor": creator_color,
+                "views": views,
+                "image": thumb_url,
+                "aspectRatio": "1:1",
+                "isVideo": False
             }
 
     # 3. Parsed item (from parse_mixed_content)
@@ -421,56 +510,96 @@ def _normalize_shelf_item(it, shelf_title=""):
         vid = it.get("videoId")
         pl_id = it.get("playlistId") or it.get("browseId") or it.get("audioPlaylistId")
         title = it.get("title", "")
+        r_aspect = str(it.get("aspectRatio", ""))
+        is_16_9 = ("16_9" in r_aspect) or ("RECTANGLE" in r_aspect)
+        if not is_16_9 and any(k in shelf_title.lower() for k in ["video", "listen again", "nghe lại", "forgotten", "giai điệu", "cùng nghe", "together"]):
+            is_16_9 = True
+
         thumbs = it.get("thumbnails", [])
         thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
-        if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        if is_16_9:
+            if "=w" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w640-h360-l90-rj', thumb_url)
+        else:
+            if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
 
         artist = ""
         channel_id = ""
+        views = ""
+        desc = it.get("description") or ""
+        if desc:
+            parts = [p.strip() for p in desc.split("•")]
+            for p in parts:
+                if any(w in p.lower() for w in ["views", "plays", "lượt xem", "lượt phát"]):
+                    views = p
+                elif not artist and not any(w in p.lower() for w in ["playlist", "album", "ep", "single"]):
+                    artist = p
+
         if it.get("artists"):
             artist = ", ".join(a.get("name", "") for a in it.get("artists", []) if isinstance(a, dict))
             for a in it.get("artists", []):
                 if isinstance(a, dict) and a.get("id"):
                     channel_id = a.get("id")
                     break
-        elif it.get("description"):
-            artist = it.get("description")
+        elif not artist and desc:
+            artist = desc
         artist = clean_artist_name(artist)
 
-        if vid and (not pl_id or "song" in str(it.get("videoType", "")).lower() or "atv" in str(it.get("videoType", "")).lower() or "listen" in shelf_title.lower() or "quick" in shelf_title.lower() or "cover" in shelf_title.lower() or "video" in shelf_title.lower() or "trending" in shelf_title.lower() or "favorite" in shelf_title.lower() or "long" in shelf_title.lower()):
+        if vid and (not pl_id or is_16_9 or "song" in str(it.get("videoType", "")).lower() or "atv" in str(it.get("videoType", "")).lower() or "listen" in shelf_title.lower() or "quick" in shelf_title.lower() or "cover" in shelf_title.lower() or "video" in shelf_title.lower() or "trending" in shelf_title.lower() or "favorite" in shelf_title.lower() or "long" in shelf_title.lower()):
             item_res = {
                 "id": f"yt_{vid}",
-                "type": "track",
+                "type": "video" if is_16_9 else "track",
                 "title": title,
                 "name": title,
                 "artist": artist or "YouTube Music",
-                "subtitle": artist or "YouTube Music",
+                "subtitle": f"{artist} • {views}" if (artist and views) else (artist or "YouTube Music"),
+                "views": views,
                 "source": "YouTube Music",
                 "path": f"ytdl://{vid}",
                 "videoId": vid,
                 "duration": it.get("duration", "--:--"),
                 "durationMs": (it.get("duration_seconds") or 0) * 1000,
-                "image": thumb_url
+                "image": thumb_url,
+                "aspectRatio": "16:9" if is_16_9 else "1:1",
+                "isVideo": is_16_9
             }
             if channel_id:
                 item_res["channelId"] = channel_id
             return item_res
         elif pl_id and title:
+            is_album = str(it.get("type", "")).lower() == "album" or str(pl_id).startswith("MPREb_") or "album" in desc.lower() or "album" in shelf_title.lower()
+            creator = artist or ""
+            not_community_shelf = any(w in shelf_title.lower() for w in ["mixed for you", "dành riêng", "nghe lại", "listen again", "quick", "album", "mới phát hành", "release", "radio", "for you", "cho bạn"])
+            is_community = not not_community_shelf and (("community" in shelf_title.lower()) or ("cộng đồng" in shelf_title.lower()) or (bool(views) and not is_album))
+            if is_community and creator and not any(w in creator.lower() for w in ["youtube music", "supermix"]):
+                creator_initial = creator.strip()[:1].upper()
+                creator_color = get_creator_color(creator)
+            else:
+                creator_initial = ""
+                creator_color = ""
             return {
                 "id": pl_id,
-                "type": "playlist",
+                "type": "album" if is_album else "playlist",
                 "playlistId": pl_id,
                 "title": title,
-                "subtitle": artist or shelf_title or "Playlist",
-                "image": thumb_url
+                "subtitle": (f"Album • {artist}" if artist else "Album") if is_album else (f"Playlist • {creator}" + (f" • {views}" if views else "") if creator else "Playlist"),
+                "creator": creator,
+                "creatorInitial": creator_initial,
+                "creatorColor": creator_color,
+                "views": views,
+                "image": thumb_url,
+                "aspectRatio": "1:1",
+                "isVideo": False
             }
     return None
 
 def get_personalized_home():
     cached = load_json(HOME_CACHE_FILE, None)
     if cached and (time.time() - cached.get("timestamp", 0)) < 1800:
-        if cached.get("sections") and (cached.get("quick_picks") or cached.get("featured_playlists")):
+        sections = cached.get("sections", [])
+        has_legacy = any(s.get("type") == "card_carousel" for s in sections)
+        if not has_legacy and sections and (cached.get("quick_picks") or cached.get("featured_playlists")):
             return cached
 
     yt = get_ytmusic_client()
@@ -546,19 +675,10 @@ def get_personalized_home():
             if not norm_items:
                 continue
 
-            is_grid = False
-            lower_t = title.lower()
-            if "quick" in lower_t or "cover" in lower_t or "trending" in lower_t or "long" in lower_t:
-                is_grid = True
-            elif "listen again" in lower_t or "video" in lower_t or "favorite" in lower_t or "release" in lower_t or "playlist" in lower_t:
-                is_grid = False
-            elif track_count > len(norm_items) * 0.7:
-                is_grid = True
-
             final_sections.append({
                 "title": title,
                 "subtitle": subtitle,
-                "type": "track_grid" if is_grid else "card_carousel",
+                "type": classify_section(title, norm_items),
                 "items": norm_items
             })
 
@@ -947,19 +1067,10 @@ def get_mood_feed(params, title=""):
             if not norm_items:
                 continue
 
-            is_grid = False
-            lower_t = s_title.lower()
-            if "quick" in lower_t or "cover" in lower_t or "trending" in lower_t or "long" in lower_t:
-                is_grid = True
-            elif "listen again" in lower_t or "video" in lower_t or "favorite" in lower_t or "release" in lower_t or "playlist" in lower_t or "mix" in lower_t:
-                is_grid = False
-            elif track_count > len(norm_items) * 0.7:
-                is_grid = True
-
             final_sections.append({
                 "title": s_title,
                 "subtitle": s_sub,
-                "type": "track_grid" if is_grid else "card_carousel",
+                "type": classify_section(s_title, norm_items),
                 "items": norm_items
             })
 

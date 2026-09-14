@@ -20,9 +20,12 @@ Rectangle {
     property bool isPlaying: false
     property Item backgroundSourceItem: null
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    property int arrowStylePreset: 1
+    readonly property real accentLum: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
+    signal playSectionRequested(var trackList)
     signal playlistSelected(var pl)
     signal trackContextMenuRequested(var trk, real globalX, real globalY)
 
@@ -311,12 +314,37 @@ Rectangle {
         }
 
         // ---------------------------------------------------------------------
-        // 3. Delegate: Virtualized Section Renderer
+        // 3. Delegate: Virtualized Section Renderer (3-Archetype Architecture)
         // ---------------------------------------------------------------------
         delegate: Item {
             id: secDelegate
             width: feedListView.width
             height: sectionCol.implicitHeight
+
+            property var activeFlickable: {
+                if (modelData.type === "video_carousel") return videoFlick;
+                if (modelData.type === "track_grid") return trackGridFlick;
+                if (modelData.type === "album_carousel" || modelData.type === "card_carousel") return albumFlick;
+                return null;
+            }
+
+            NumberAnimation {
+                id: scrollAnim
+                target: null
+                property: "contentX"
+                duration: 320
+                easing.type: Easing.OutCubic
+            }
+
+            function scrollBy(delta) {
+                if (!activeFlickable) return;
+                var maxX = Math.max(0, activeFlickable.contentWidth - activeFlickable.width);
+                var targetX = Math.max(0, Math.min(maxX, activeFlickable.contentX + delta));
+                scrollAnim.stop();
+                scrollAnim.target = activeFlickable;
+                scrollAnim.to = targetX;
+                scrollAnim.restart();
+            }
 
             ColumnLayout {
                 id: sectionCol
@@ -353,49 +381,73 @@ Rectangle {
                         }
                     }
 
-                    // Carousel Navigation Buttons (< and >)
+                    // Right Controls: Carousel Navigation (< and >) - Liquid Glass Dynamic Accent
                     RowLayout {
+                        id: arrowNavControls
                         spacing: 8
-                        visible: modelData.type === "card_carousel" && modelData.items && modelData.items.length > 4
+                        visible: secDelegate.activeFlickable && secDelegate.activeFlickable.contentWidth > secDelegate.activeFlickable.width
 
                         // Prev Button (<)
                         Rectangle {
+                            id: prevBtn
                             width: 32
                             height: 32
                             radius: 16
-                            color: prevMouse.containsMouse ? "#383838" : "#242424"
-                            opacity: carouselFlick.contentX > 2 ? 1.0 : 0.35
-                            Behavior on color { ColorAnimation { duration: 100 } }
+                            opacity: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX > 2) ? 1.0 : 0.25
+                            enabled: opacity > 0.5
+                            scale: (prevMouse.containsMouse && enabled) ? 1.06 : 1.0
+
+                            color: (prevMouse.containsMouse && enabled)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                                   : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                            border.width: 1
+                            border.color: (prevMouse.containsMouse && enabled)
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.75)
+                                          : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+
+                            Behavior on color { ColorAnimation { duration: 300 } }
+                            Behavior on border.color { ColorAnimation { duration: 300 } }
+                            Behavior on scale { NumberAnimation { duration: 120 } }
                             Behavior on opacity { NumberAnimation { duration: 150 } }
 
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/go-previous-symbolic.svg"
                                 iconSize: 14
-                                color: "#ffffff"
+                                color: root.accentColor
+                                Behavior on color { ColorAnimation { duration: 300 } }
                             }
 
                             MouseArea {
                                 id: prevMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var targetX = Math.max(0, carouselFlick.contentX - 520);
-                                    scrollAnim.to = targetX;
-                                    scrollAnim.restart();
-                                }
+                                cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: secDelegate.scrollBy(-540)
                             }
                         }
 
                         // Next Button (>)
                         Rectangle {
+                            id: nextBtn
                             width: 32
                             height: 32
                             radius: 16
-                            color: nextMouse.containsMouse ? "#383838" : "#242424"
-                            opacity: (carouselFlick.contentX < (carouselFlick.contentWidth - carouselFlick.width - 10)) ? 1.0 : 0.35
-                            Behavior on color { ColorAnimation { duration: 100 } }
+                            opacity: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX < (secDelegate.activeFlickable.contentWidth - secDelegate.activeFlickable.width - 10)) ? 1.0 : 0.25
+                            enabled: opacity > 0.5
+                            scale: (nextMouse.containsMouse && enabled) ? 1.06 : 1.0
+
+                            color: (nextMouse.containsMouse && enabled)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                                   : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                            border.width: 1
+                            border.color: (nextMouse.containsMouse && enabled)
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.75)
+                                          : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+
+                            Behavior on color { ColorAnimation { duration: 300 } }
+                            Behavior on border.color { ColorAnimation { duration: 300 } }
+                            Behavior on scale { NumberAnimation { duration: 120 } }
                             Behavior on opacity { NumberAnimation { duration: 150 } }
 
                             AppIcon {
@@ -403,229 +455,67 @@ Rectangle {
                                 source: "../assets/icons/go-previous-symbolic.svg"
                                 rotation: 180
                                 iconSize: 14
-                                color: "#ffffff"
+                                color: root.accentColor
+                                Behavior on color { ColorAnimation { duration: 300 } }
                             }
 
                             MouseArea {
                                 id: nextMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var maxX = Math.max(0, carouselFlick.contentWidth - carouselFlick.width);
-                                    var targetX = Math.min(maxX, carouselFlick.contentX + 520);
-                                    scrollAnim.to = targetX;
-                                    scrollAnim.restart();
-                                }
+                                cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: secDelegate.scrollBy(540)
                             }
                         }
                     }
                 }
 
                 // =============================================================
-                // Case A: Track Grid Layout (2-3 Columns of Compact Rows)
-                // =============================================================
-                GridLayout {
-                    Layout.fillWidth: true
-                    visible: modelData.type === "track_grid"
-                    columns: root.width > 900 ? 3 : 2
-                    rowSpacing: 8
-                    columnSpacing: 12
-
-                    Repeater {
-                        model: modelData.type === "track_grid" ? modelData.items.slice(0, 18) : []
-
-                        Rectangle {
-                            id: gridItem
-                            Layout.fillWidth: true
-                            height: 56
-                            radius: 6
-                            clip: true
-                            color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                                   : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
-                            border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                          : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 100 } }
-                            Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 6
-                                spacing: 12
-
-                                Item {
-                                    width: 44
-                                    height: 44
-
-                                    Rectangle {
-                                        id: rowImgMask
-                                        anchors.fill: parent
-                                        radius: 6
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
-                                    }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: rowImgMask
-                                            autoPaddingEnabled: false
-                                        }
-
-                                        Image {
-                                            id: rowImg
-                                            anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            sourceSize: Qt.size(64, 64)
-                                            asynchronous: true
-                                            visible: status === Image.Ready
-                                        }
-
-                                        // Skeleton Pulsing Shimmer Placeholder
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#2c2c34"
-                                            visible: rowImg.status !== Image.Ready
-                                            SequentialAnimation on opacity {
-                                                running: parent.visible
-                                                loops: Animation.Infinite
-                                                NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                                NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                            }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 6
-                                        color: Qt.rgba(0, 0, 0, 0.45)
-                                        visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
-                                                    ? "../assets/icons/media-playback-pause-symbolic.svg"
-                                                    : "../assets/icons/media-playback-start-symbolic.svg"
-                                            iconSize: 18
-                                            color: root.accentColor
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 6
-                                        color: "transparent"
-                                        border.color: Qt.rgba(1, 1, 1, 0.12)
-                                        border.width: 1
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (modelData.artist || "Cloud Stream").split("\n")[0]
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
-                                }
-                            }
-
-                            MouseArea {
-                                id: rowMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                preventStealing: true
-                                cursorShape: Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: mouse => {
-                                    if (mouse.button === Qt.RightButton) {
-                                        var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
-                                        root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                    } else {
-                                        root.trackPlayRequested(modelData);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // =============================================================
-                // Case B: Card Carousel Layout (Horizontal Scroll)
+                // Archetype 1: Video Carousel (16:9 Landscape Video Cards - Image 1 & 2)
                 // =============================================================
                 Flickable {
-                    id: carouselFlick
+                    id: videoFlick
                     Layout.fillWidth: true
-                    height: 236
-                    visible: modelData.type === "card_carousel"
-                    contentWidth: cardRow.implicitWidth
+                    height: 245
+                    visible: modelData.type === "video_carousel"
+                    contentWidth: videoRow.implicitWidth
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     clip: true
 
-                    NumberAnimation on contentX {
-                        id: scrollAnim
-                        running: false
-                        duration: 280
-                        easing.type: Easing.OutCubic
-                    }
-
                     RowLayout {
-                        id: cardRow
+                        id: videoRow
                         spacing: 16
 
                         Repeater {
-                            model: modelData.type === "card_carousel" ? modelData.items : []
+                            model: modelData.type === "video_carousel" ? modelData.items : []
 
                             Rectangle {
-                                id: cCard
-                                width: 160
-                                height: 230
-                                radius: Theme.radiusCard
-                                color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
-                                border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                                id: vCard
+                                width: 260
+                                height: 238
+                                radius: 10
+                                color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+                                border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
+                                    anchors.margins: 4
                                     spacing: 8
 
+                                    // 16:9 Widescreen Artwork Container
                                     Item {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: width
+                                        Layout.preferredHeight: Math.round(width * 9 / 16) // ~142px
 
                                         Rectangle {
-                                            id: cCoverMask
+                                            id: vCoverMask
                                             anchors.fill: parent
-                                            radius: 8
+                                            radius: 10
                                             color: "#ffffff"
                                             visible: false
                                             layer.enabled: true
@@ -636,25 +526,24 @@ Rectangle {
                                             layer.enabled: true
                                             layer.effect: MultiEffect {
                                                 maskEnabled: true
-                                                maskSource: cCoverMask
+                                                maskSource: vCoverMask
                                                 autoPaddingEnabled: false
                                             }
 
                                             Image {
-                                                id: cCoverImg
+                                                id: vCoverImg
                                                 anchors.fill: parent
                                                 source: modelData.image || ""
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(220, 220)
+                                                sourceSize: Qt.size(360, 202)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
                                             }
 
-                                            // Skeleton Pulsing Shimmer Placeholder
                                             Rectangle {
                                                 anchors.fill: parent
-                                                color: "#2c2c34"
-                                                visible: cCoverImg.status !== Image.Ready
+                                                color: "#242428"
+                                                visible: vCoverImg.status !== Image.Ready
                                                 SequentialAnimation on opacity {
                                                     running: parent.visible
                                                     loops: Animation.Infinite
@@ -664,17 +553,381 @@ Rectangle {
                                             }
                                         }
 
-                                        // 1px Hairline Border Overlay on top of image
+                                        // 1px Subtle Border Overlay
                                         Rectangle {
                                             anchors.fill: parent
-                                            radius: 8
+                                            radius: 10
                                             color: "transparent"
-                                            border.color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
+                                            border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.30) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
                                             border.width: 1
                                             z: 1
                                             Behavior on border.color { ColorAnimation { duration: 120 } }
                                         }
 
+                                        // Centered Play Button (Image 1 & 2)
+                                        Rectangle {
+                                            width: 44
+                                            height: 44
+                                            radius: 22
+                                            anchors.centerIn: parent
+                                            color: Qt.rgba(0, 0, 0, 0.55)
+                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                            border.width: 1
+                                            opacity: vCardMouse.containsMouse ? 1.0 : 0.85
+                                            scale: vCardMouse.containsMouse ? 1.08 : 1.0
+                                            z: 2
+                                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                                            Behavior on scale { NumberAnimation { duration: 120 } }
+
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                anchors.horizontalCenterOffset: 1
+                                                source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
+                                                        ? "../assets/icons/media-playback-pause-symbolic.svg"
+                                                        : "../assets/icons/media-playback-start-symbolic.svg"
+                                                iconSize: 20
+                                                color: "#ffffff"
+                                            }
+                                        }
+                                    }
+
+                                    // Metadata Text
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        spacing: 3
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || modelData.name || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 2
+                                            wrapMode: Text.Wrap
+                                            lineHeight: 1.15
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.subtitle || ((modelData.artist || "") + (modelData.views ? " • " + modelData.views : "")) || "YouTube Music"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
+
+                                        Item { Layout.fillHeight: true }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: vCardMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    preventStealing: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            var pt = vCard.mapToItem(null, mouse.x, mouse.y);
+                                            root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                        } else {
+                                            root.trackPlayRequested(modelData);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Archetype 2: Multi-row Track Grid (4 Rows per Column - Image 2)
+                // =============================================================
+                Flickable {
+                    id: trackGridFlick
+                    Layout.fillWidth: true
+                    height: 248
+                    visible: modelData.type === "track_grid"
+                    contentWidth: trackGridFlow.implicitWidth
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    pixelAligned: true
+                    clip: true
+
+                    Grid {
+                        id: trackGridFlow
+                        rows: 4
+                        flow: Grid.TopToBottom
+                        rowSpacing: 8
+                        columnSpacing: 14
+
+                        Repeater {
+                            model: modelData.type === "track_grid" ? modelData.items : []
+
+                            Rectangle {
+                                id: gridItem
+                                width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
+                                height: 54
+                                radius: 6
+                                clip: true
+                                color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
+                                       : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+                                border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                              : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                                Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 5
+                                    spacing: 10
+
+                                    Item {
+                                        width: 44
+                                        height: 44
+
+                                        Rectangle {
+                                            id: rowImgMask
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: rowImgMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Image {
+                                                id: rowImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                sourceSize: Qt.size(64, 64)
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#2c2c34"
+                                                visible: rowImg.status !== Image.Ready
+                                                SequentialAnimation on opacity {
+                                                    running: parent.visible
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: Qt.rgba(0, 0, 0, 0.45)
+                                            visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
+
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
+                                                        ? "../assets/icons/media-playback-pause-symbolic.svg"
+                                                        : "../assets/icons/media-playback-start-symbolic.svg"
+                                                iconSize: 18
+                                                color: root.accentColor
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: "transparent"
+                                            border.color: Qt.rgba(1, 1, 1, 0.12)
+                                            border.width: 1
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || modelData.name || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (modelData.subtitle || modelData.artist || "Cloud Stream").split("\n")[0]
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: rowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    preventStealing: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
+                                            root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                        } else {
+                                            root.trackPlayRequested(modelData);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Archetype 3: Large Square Album & Playlist Carousel (Image 3)
+                // =============================================================
+                Flickable {
+                    id: albumFlick
+                    Layout.fillWidth: true
+                    height: 265
+                    visible: modelData.type === "album_carousel" || modelData.type === "card_carousel"
+                    contentWidth: albumRow.implicitWidth
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    pixelAligned: true
+                    clip: true
+
+                    RowLayout {
+                        id: albumRow
+                        spacing: 16
+
+                        Repeater {
+                            model: (modelData.type === "album_carousel" || modelData.type === "card_carousel") ? modelData.items : []
+
+                            Rectangle {
+                                id: aCard
+                                width: 175
+                                height: 255
+                                radius: 10
+                                color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+                                border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    spacing: 8
+
+                                    // 1:1 Large Square Artwork
+                                    Item {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: width // 1:1 square! (~167px)
+
+                                        Rectangle {
+                                            id: aCoverMask
+                                            anchors.fill: parent
+                                            radius: 10
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: aCoverMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Image {
+                                                id: aCoverImg
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                sourceSize: Qt.size(260, 260)
+                                                asynchronous: true
+                                                visible: status === Image.Ready
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#242428"
+                                                visible: aCoverImg.status !== Image.Ready
+                                                SequentialAnimation on opacity {
+                                                    running: parent.visible
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
+                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
+                                                }
+                                            }
+                                        }
+
+                                        // 1px Subtle Border Overlay
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 10
+                                            color: "transparent"
+                                            border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                            border.width: 1
+                                            z: 1
+                                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                                        }
+
+                                        // Creator Avatar Badge for Community Playlists (Image 3)
+                                        Rectangle {
+                                            id: creatorBadge
+                                            width: 26
+                                            height: 26
+                                            radius: 13
+                                            anchors.left: parent.left
+                                            anchors.bottom: parent.bottom
+                                            anchors.margins: 8
+                                            z: 2
+                                            visible: Boolean(modelData && modelData.creatorInitial && modelData.creatorInitial.length > 0)
+                                            color: modelData.creatorColor || "#00bcd4"
+                                            border.color: "#121214"
+                                            border.width: 2
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.creatorInitial || ""
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                color: "#ffffff"
+                                            }
+                                        }
+
+                                        // Bottom-Right Hover Play Circle
                                         Rectangle {
                                             width: 38
                                             height: 38
@@ -682,9 +935,11 @@ Rectangle {
                                             color: root.accentColor
                                             anchors.right: parent.right
                                             anchors.bottom: parent.bottom
-                                            anchors.margins: 6
-                                            visible: cardMouse.containsMouse
-                                            z: 2
+                                            anchors.margins: 8
+                                            visible: aCardMouse.containsMouse
+                                            scale: aCardMouse.containsMouse ? 1.0 : 0.8
+                                            z: 3
+                                            Behavior on scale { NumberAnimation { duration: 120 } }
 
                                             AppIcon {
                                                 anchors.centerIn: parent
@@ -696,33 +951,40 @@ Rectangle {
                                         }
                                     }
 
-                                    Text {
+                                    // Text Metadata
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Theme.textPrimary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
+                                        Layout.fillHeight: true
+                                        spacing: 3
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.subtitle || modelData.artist || "Cloud Stream"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 2
-                                        wrapMode: Text.Wrap
-                                    }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || modelData.name || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
 
-                                    Item { Layout.fillHeight: true }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.subtitle || modelData.artist || "Playlist"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 2
+                                            wrapMode: Text.Wrap
+                                        }
+
+                                        Item { Layout.fillHeight: true }
+                                    }
                                 }
 
                                 MouseArea {
-                                    id: cardMouse
+                                    id: aCardMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     preventStealing: true
@@ -730,7 +992,7 @@ Rectangle {
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     onClicked: mouse => {
                                         if (mouse.button === Qt.RightButton) {
-                                            var pt = cCard.mapToItem(null, mouse.x, mouse.y);
+                                            var pt = aCard.mapToItem(null, mouse.x, mouse.y);
                                             root.trackContextMenuRequested(modelData, pt.x, pt.y);
                                         } else {
                                             if (modelData.type === "album" || (modelData.browseId && String(modelData.browseId).startsWith("MPREb_")) || (modelData.playlistId && String(modelData.playlistId).startsWith("MPREb_"))) {

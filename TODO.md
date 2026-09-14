@@ -278,6 +278,20 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
       - Khi bài hát đang tải: Hiển thị con quay tiến trình `DownloadingSpinner` xoay tròn kèm % tiến trình.
       - Khi bài hát đã tải xong hoặc là tệp cục bộ (`isDone === true`): Hiển thị dấu kiểm tra verify `emblem-ok-symbolic.svg` màu `root.accentColor`.
       - Khi người dùng click vào dấu verify: Gọi `downloadManager.deleteDownloaded(videoId, track)`, xóa vĩnh viễn file âm thanh và `.lrc` trên đĩa (`backend/library.py delete`), xóa task khỏi `download_manager.py`, loại bài hát khỏi `win.allTracks` và `downloadTasks` trong bộ nhớ QML với độ trễ 0ms, icon verify lập tức chuyển ngược về mũi tên download, phát thông báo desktop qua `notify-send`.
+
+- [x] **32. YouTube Music 3-Archetype Sections & Dynamic Liquid Glass Navigation Buttons (ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Kiến trúc 3 Card Archetypes Phân Loại Chuẩn YouTube Music**:
+      - Phân chia section trên Trang chủ và toàn bộ các Mood tags (Relax, Sleep, Sad, Romance, Energize, Focus, Party, Workout, Commute...) thành 3 nhóm cấu trúc trực quan:
+        1. `video_carousel`: Thẻ ngang tỷ lệ 16:9 cho Video âm nhạc và "Nghe lại" (Listen again), center play button badge, tiêu đề 2 dòng wrap gọn gàng.
+        2. `track_grid`: Lưới 4 hàng thu nhỏ cho Quick picks, Covers and remixes, Trending songs, Long listens.
+        3. `album_carousel`: Thẻ vuông 1:1 cho Albums, Mixes (Mixed for you), Playlists. Avatar tròn creator chỉ xuất hiện duy nhất ở Community Playlists (`Trending community playlists`, `From the community`), không xuất hiện trên các mix chính thức.
+    - **Cụm Nút Điều Hướng `<` `>` Chuẩn Kính Lỏng (Liquid Glass Dark Tint & Dynamic Glow)**:
+      - Xóa bỏ hoàn toàn nút "Play all" ở tất cả các section headers.
+      - Nền kính tối mờ pha 10% màu accent, viền hairline 1px pha 30% accent, icon mũi tên mang chính màu `root.accentColor`, phản hồi hover phóng to nhẹ `scale: 1.06` cùng độ sáng viền 75%.
+      - Tự động đồng bộ màu sắc 2 chiều mượt mà (300-400ms): Khi dừng/tạm dừng nhạc chuyển về màu hình nền desktop (`win.wallpaperAccentColor`), khi phát nhạc chuyển sang màu bìa bài hát (`win.songAccentColor`).
+    - **Sửa Lỗi Mood Feeds Bị Rỗng**:
+      - Khắc phục lỗi biến `creator` bị thiếu khai báo trong `_normalize_shelf_item` (`backend/ytmusic_helper.py`), đảm bảo toàn bộ mood tags đều nạp đầy đủ dữ liệu sections mượt mà.
     - **Bo Góc Tròn MultiEffect Chuẩn 8px & Khử Dải Đen Cho PlayerBar (`PlayerBarBottom.qml`)**:
       - Khắc phục lỗi hình chữ nhật sắc lẹm do `clip: true` trên `Rectangle` không cắt được ảnh con `Image` trong Qt Quick.
       - Sử dụng mặt nạ `Rectangle { id: miniCoverMask; radius: 8 }` kết hợp `MultiEffect { maskEnabled: true; maskSource: miniCoverMask }`.

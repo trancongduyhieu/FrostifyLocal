@@ -1,11 +1,11 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/Ice_Age_winter-10.png",
-  "meanLuminance": 0.049,
+  "wallpaper": "/home/apple/Pictures/Wallpapers/Catppuccin_Mocha_cat_leaves.png",
+  "meanLuminance": 0.108,
   "brightRatio": 0.0,
   "isLightArea": false,
-  "theme": "warm_classic",
+  "theme": "amethyst",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#deb06c",
+  "highlightColor": "#c0bdf6",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"

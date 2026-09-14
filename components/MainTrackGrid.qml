@@ -370,11 +370,15 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 radius: 14
-                                color: root.downloadsSubTab === "tracks" ? Qt.rgba(1, 1, 1, 0.14) : (trksH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "tracks" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                                color: root.downloadsSubTab === "tracks" 
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                       : (trksH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                                border.color: root.downloadsSubTab === "tracks" 
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                              : "transparent"
                                 border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on border.color { ColorAnimation { duration: 150 } }
                                 HoverHandler { id: trksH }
 
                                 Text {
@@ -383,7 +387,8 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: root.downloadsSubTab === "tracks"
-                                    color: root.downloadsSubTab === "tracks" ? "#ffffff" : (trksH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    color: root.downloadsSubTab === "tracks" ? root.accentColor : (trksH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
 
                                 MouseArea {
@@ -398,11 +403,15 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 radius: 14
-                                color: root.downloadsSubTab === "albums" ? Qt.rgba(1, 1, 1, 0.14) : (albsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "albums" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                                color: root.downloadsSubTab === "albums" 
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                       : (albsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                                border.color: root.downloadsSubTab === "albums" 
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                              : "transparent"
                                 border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on border.color { ColorAnimation { duration: 150 } }
                                 HoverHandler { id: albsH }
 
                                 Text {
@@ -411,7 +420,8 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: root.downloadsSubTab === "albums"
-                                    color: root.downloadsSubTab === "albums" ? "#ffffff" : (albsH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    color: root.downloadsSubTab === "albums" ? root.accentColor : (albsH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
 
                                 MouseArea {

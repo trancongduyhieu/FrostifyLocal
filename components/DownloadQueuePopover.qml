@@ -95,6 +95,17 @@ Item {
             backgroundSourceItem: root.backgroundSourceItem
             z: 2
 
+            // 1px Hairline Accent Border for Liquid Glass Popover
+            Rectangle {
+                anchors.fill: parent
+                radius: 16
+                color: "transparent"
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                border.width: 1
+                z: 20
+                Behavior on border.color { ColorAnimation { duration: 250 } }
+            }
+
             ColumnLayout {
                 id: cardContent
                 anchors.fill: parent

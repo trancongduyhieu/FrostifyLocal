@@ -78,6 +78,17 @@ Item {
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
 
+        // 1px Hairline Accent Border for Liquid Glass Dock
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            color: "transparent"
+            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+            border.width: 1
+            z: 20
+            Behavior on border.color { ColorAnimation { duration: 250 } }
+        }
+
         // =====================================================================
         // 1. LEFT SECTION (Mini cover + Track title & artist)
         // =====================================================================
@@ -353,7 +364,7 @@ Item {
                 }
             }
 
-            // --- Play / Pause Button (Clean Circle) ---
+            // --- Play / Pause Button (Dynamic Keo 502 Accent Circle) ---
             Rectangle {
                 id: playPauseBtn
                 width: 36
@@ -362,16 +373,33 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 opacity: root.currentTrack ? 1.0 : 0.65
                 Behavior on opacity { NumberAnimation { duration: 150 } }
-                color: (playHover.hovered && root.currentTrack) ? "#ffffff" : "#f0f0f0"
+
+                readonly property bool isLightAccent: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.55
+                readonly property color contrastColor: isLightAccent ? "#0c0d10" : "#ffffff"
+
+                color: (playHover.hovered && root.currentTrack) ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                 scale: (playHover.hovered && root.currentTrack) ? 1.06 : 1.0
                 Behavior on scale { NumberAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: 250 } }
                 HoverHandler { id: playHover; enabled: !!root.currentTrack }
+
+                // Playback Glow Ring
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -2
+                    radius: parent.radius + 2
+                    color: "transparent"
+                    border.width: 1.5
+                    border.color: root.isPlaying ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : "transparent"
+                    visible: root.isPlaying && !!root.currentTrack
+                    Behavior on border.color { ColorAnimation { duration: 250 } }
+                }
 
                 CircularSpinner {
                     anchors.centerIn: parent
                     size: 18
                     strokeWidth: 2.2
-                    color: "#111111"
+                    color: playPauseBtn.contrastColor
                     visible: root.isLoadingAudio
                 }
 
@@ -380,8 +408,9 @@ Item {
                     anchors.horizontalCenterOffset: (!root.isPlaying && !root.isLoadingAudio) ? 1.5 : 0
                     source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                     iconSize: 17
-                    color: "#111111"
+                    color: playPauseBtn.contrastColor
                     visible: !root.isLoadingAudio
+                    Behavior on color { ColorAnimation { duration: 200 } }
                 }
 
                 MouseArea {
@@ -513,13 +542,15 @@ Item {
                             anchors.bottom: parent.bottom
                             width: Math.max(0, parent.width * (root.volume / 100.0))
                             radius: parent.radius
-                            color: volMouse.containsMouse || root.isScrubbingVolume ? root.accentColor : Qt.rgba(1, 1, 1, 0.85)
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            color: volMouse.containsMouse || root.isScrubbingVolume ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
+                            Behavior on color { ColorAnimation { duration: 150 } }
                         }
 
                         Rectangle {
                             width: 7; height: 7; radius: 3.5
-                            color: "#ffffff"
+                            color: root.accentColor
+                            border.color: "#ffffff"
+                            border.width: 1
                             anchors.verticalCenter: parent.verticalCenter
                             x: Math.min(parent.width - width, Math.max(0, parent.width * (root.volume / 100.0) - width / 2))
                             opacity: volMouse.containsMouse || root.isScrubbingVolume ? 1.0 : 0.0
@@ -648,20 +679,23 @@ Item {
                 color: "transparent"
                 Behavior on height { NumberAnimation { duration: 120 } }
 
-                // Clean White Elapsed Fill (SimpMusic Style)
+                // Dynamic Accent Elapsed Fill
                 Rectangle {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: Math.max(0, parent.width * progressBarContainer.progressFraction)
                     radius: parent.radius
-                    color: "#ffffff"
+                    color: root.accentColor
+                    Behavior on color { ColorAnimation { duration: 250 } }
                 }
 
                 // Scrub Handle Dot
                 Rectangle {
-                    width: 6; height: 6; radius: 3
-                    color: "#ffffff"
+                    width: 7; height: 7; radius: 3.5
+                    color: root.accentColor
+                    border.color: "#ffffff"
+                    border.width: 1
                     anchors.verticalCenter: parent.verticalCenter
                     x: Math.min(parent.width - width, Math.max(0, parent.width * progressBarContainer.progressFraction - width / 2))
                     opacity: progressMouse.containsMouse || root.isScrubbingProgress ? 1.0 : 0.0
