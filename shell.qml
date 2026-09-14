@@ -1209,7 +1209,7 @@ Scope {
                             id: homeView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            backgroundSourceItem: mainContentBackdrop
+                            backgroundSourceItem: glassCompositeBackdrop
                             moods: win.homeMoods
                             selectedMood: win.selectedMood
                             sections: win.homeSections
@@ -1370,7 +1370,7 @@ Scope {
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.mainSectionTitle || "Queue"
                     accentColor: win.accentColor
-                    backgroundSourceItem: mainContentBackdrop
+                    backgroundSourceItem: glassCompositeBackdrop
 
                     onSeekRequested: sec => win.seekAudio(sec)
                     onPlayTrackRequested: (trk, index) => {

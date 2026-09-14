@@ -308,3 +308,10 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
       - Tích hợp vùng cảm biến rê chuột tự động cuộn (Edge Hover Scrims 36px) ở hai mép trái/phải của hai carousel "Recommended playlists" và "Similar artists" trong tab RELATED.
       - Tự động cuộn mượt mà khi rê chuột vào khoảng trống hai bên mà không chặn click của người dùng (`propagateComposedEvents: true`).
       - Hỗ trợ đầy đủ kéo rê chuột (`DragHandler` với `Qt.OpenHandCursor`) và lăn bánh xe chuột (`WheelHandler` vertical-to-horizontal mapping) trên cả hai kệ.
+
+- [x] **34. Tách Rời Từng Mood Pill & Viên Nang Keo 502 Căng Bóng Không Lóe Sáng (Separated Mood Capsules & High-Contrast Glossy Gel - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Tách Rời Hoàn Toàn Từng Mood Pill (Separated Capsules)**: Xóa bỏ hoàn toàn khung viền dock bao bọc bên ngoài cả hàng mood ở cả 2 màn hình (`components/HomeFeedView.qml` và `components/YTMusicNowPlayingView.qml`). Mỗi mood là một capsule độc lập với khoảng cách `spacing: 8` đều đặn, chuẩn YouTube Music / Spotify.
+    - **Triệt Tiêu Hoàn Toàn Lóe Sáng Tiêu Cự & Vệt Sáng Dọc (Zero Caustics Flare)**: Khắc phục triệt để lỗi shader quang học diện tích lớn hội tụ tiêu cự trên pill nhỏ (cao 30px) tạo 3 vệt sáng chói lóa đè lên chữ. Thay thế bằng cấu trúc Viên nang Keo 502 Căng Bóng (Glossy Gel Capsule).
+    - **Tự Động Tính Toán Tương Phản Màu Chữ (`accentLuminance`)**: Chữ tự động chuyển màu đen tuyền `#0f0f11` đậm nét khi màu nền accent sáng (hồng phấn, vàng, xanh mint) và màu trắng tinh khiết `#ffffff` khi màu nền tối, đảm bảo độ rõ nét 100% trong mọi điều kiện ánh sáng.
+    - **Bề Mặt Keo 502 Căng Mịn**: Viền kép tinh tế (Inner 1px specular tension rim + Outer accent border), đổ bóng điện ảnh `MultiEffect` (`#50000000`), trượt mượt mà `Easing.OutCubic` 240ms khi click chuyển đổi giữa các mood.

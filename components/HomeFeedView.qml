@@ -108,73 +108,194 @@ Rectangle {
                     color: Theme.textPrimary
                 }
 
-                // Mood Pills Horizontal Scroll
-                Flickable {
+                // Separated Mood Filter Pills with Sliding Liquid Glass Lens (True Keo 502 Refraction)
+                Item {
+                    id: moodDockContainer
                     Layout.fillWidth: true
-                    height: 36
-                    contentWidth: moodRow.implicitWidth
-                    boundsBehavior: Flickable.StopAtBounds
-                    flickableDirection: Flickable.HorizontalFlick
-                    pixelAligned: true
-                    clip: true
+                    height: 38
 
-                    RowLayout {
-                        id: moodRow
-                        spacing: 8
+                    // Horizontal Scrollable Mood Items
+                    Flickable {
+                        id: homeMoodFlickable
+                        anchors.fill: parent
+                        anchors.leftMargin: 24
+                        anchors.rightMargin: 24
+                        contentWidth: moodRow.width + 16
+                        contentHeight: height
+                        boundsBehavior: Flickable.StopAtBounds
+                        flickableDirection: Flickable.HorizontalFlick
+                        pixelAligned: true
+                        clip: false
 
-                        Repeater {
-                            model: root.moods.length > 0 ? root.moods : [
-                                { "title": "All", "params": "" },
-                                { "title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB" },
-                                { "title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB" },
-                                { "title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB" },
-                                { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
-                            ]
+                        DragHandler {
+                            target: null
+                            xAxis.enabled: true
+                            yAxis.enabled: false
+                            cursorShape: Qt.OpenHandCursor
+                            onTranslationChanged: {
+                                var newX = homeMoodFlickable.contentX - translation.x;
+                                homeMoodFlickable.contentX = Math.max(0, Math.min(homeMoodFlickable.contentWidth - homeMoodFlickable.width, newX));
+                            }
+                        }
 
+                        WheelHandler {
+                            target: homeMoodFlickable
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: event => {
+                                var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
+                                homeMoodFlickable.contentX = Math.max(0, Math.min(homeMoodFlickable.contentWidth - homeMoodFlickable.width, homeMoodFlickable.contentX - delta));
+                            }
+                        }
+
+                        readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
+
+                        // Ambient drop shadow for the sliding active Keo 502 gel capsule
+                        MultiEffect {
+                            anchors.fill: activeMoodIndicator
+                            source: activeMoodIndicator
+                            shadowEnabled: true
+                            shadowColor: "#50000000"
+                            shadowVerticalOffset: 2
+                            shadowBlur: 0.45
+                            visible: activeMoodIndicator.width > 0
+                            z: 1
+                        }
+
+                        // Sliding Keo 502 Glossy Gel Capsule (Fluid Meniscus, Rich Solid-Glass Contrast, ZERO glare streaks!)
+                        Rectangle {
+                            id: activeMoodIndicator
+                            height: 30
+                            radius: 15
+                            y: (homeMoodFlickable.height - height) / 2
+                            z: 2
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.90)
+                            border.color: Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
+                            border.width: 1
+                            visible: width > 0
+
+                            // Inner Meniscus Specular Rim (Tension highlight without bleaching text)
                             Rectangle {
-                                id: moodPill
-                                height: 32
-                                width: pillTxt.implicitWidth + 24
-                                radius: 8
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                radius: 14
+                                color: "transparent"
+                                border.color: Qt.rgba(1.0, 1.0, 1.0, homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22)
+                                border.width: 1
+                            }
 
-                                readonly property bool isSelected: root.selectedMood === modelData.title
-                                readonly property bool isHovered: pillMouse.containsMouse
+                            Behavior on x { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                        }
 
-                                color: isSelected ? "#ffffff" : (isHovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08))
-                                border.width: isSelected ? 0 : 1
-                                border.color: isSelected ? "transparent" : (isHovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10))
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                        // Separated Mood Pills Row
+                        Row {
+                            id: moodRow
+                            spacing: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            z: 5
 
-                                Text {
-                                    id: pillTxt
-                                    anchors.centerIn: parent
-                                    text: modelData.title
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.weight: moodPill.isSelected ? Font.Bold : Font.DemiBold
-                                    color: moodPill.isSelected ? "#0c0d10" : (moodPill.isHovered ? "#ffffff" : Theme.textSecondary)
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
+                            Repeater {
+                                id: moodRepeater
+                                model: root.moods.length > 0 ? root.moods : [
+                                    { "title": "All", "params": "" },
+                                    { "title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB" },
+                                    { "title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB" },
+                                    { "title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB" },
+                                    { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
+                                ]
 
-                                MouseArea {
-                                    id: pillMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    preventStealing: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.selectedMood = modelData.title;
-                                        root.moodSelected(modelData.title, modelData.params || "");
+                                delegate: Item {
+                                    id: pillItem
+                                    height: 30
+                                    width: pillTxt.implicitWidth + 24
+                                    readonly property bool isSelected: root.selectedMood === modelData.title
+                                    readonly property bool isHovered: pillMouse.containsMouse
+
+                                    onIsSelectedChanged: {
+                                        if (isSelected) {
+                                            activeMoodIndicator.x = pillItem.x;
+                                            activeMoodIndicator.width = pillItem.width;
+                                        }
+                                    }
+                                    Component.onCompleted: {
+                                        if (isSelected) {
+                                            activeMoodIndicator.x = pillItem.x;
+                                            activeMoodIndicator.width = pillItem.width;
+                                        }
+                                    }
+
+                                    // Standalone Inactive Dark Glass Capsule (Zero white glare streaks, clean optical glass)
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 15
+                                        color: pillItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                                        border.width: 1
+                                        border.color: pillItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
+                                        opacity: pillItem.isSelected ? 0.0 : 1.0
+                                        scale: (pillItem.isHovered && !pillItem.isSelected) ? 1.03 : 1.0
+
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Behavior on border.color { ColorAnimation { duration: 150 } }
+                                        Behavior on scale { NumberAnimation { duration: 120 } }
+                                    }
+
+                                    Text {
+                                        id: pillTxt
+                                        anchors.centerIn: parent
+                                        text: modelData.title
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
+                                        color: pillItem.isSelected 
+                                               ? (homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
+                                               : (pillItem.isHovered ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.70))
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
+
+                                    MouseArea {
+                                        id: pillMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectedMood = modelData.title;
+                                            root.moodSelected(modelData.title, modelData.params || "");
+                                        }
                                     }
                                 }
                             }
+                        }
+
+                        function updateActiveIndicator() {
+                            for (var i = 0; i < moodRepeater.count; ++i) {
+                                var itm = moodRepeater.itemAt(i);
+                                if (itm && itm.isSelected) {
+                                    activeMoodIndicator.x = itm.x;
+                                    activeMoodIndicator.width = itm.width;
+                                    return;
+                                }
+                            }
+                        }
+
+                        Component.onCompleted: Qt.callLater(updateActiveIndicator)
+                    }
+
+                    Connections {
+                        target: root
+                        function onSelectedMoodChanged() {
+                            homeMoodFlickable.updateActiveIndicator();
+                        }
+                        function onMoodsChanged() {
+                            Qt.callLater(homeMoodFlickable.updateActiveIndicator);
                         }
                     }
                 }

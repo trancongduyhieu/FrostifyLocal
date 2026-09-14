@@ -15,6 +15,7 @@ Item {
     property real bevelWidth: 12.0
     property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
     property bool interactive: false
+    property real extraDependency: 0.0
 
     default property alias contentData: contentContainer.data
 
@@ -37,6 +38,7 @@ Item {
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem
     readonly property point globalOffset: {
         if (!backgroundSourceItem) return Qt.point(0, 0);
+        var _dep = root.extraDependency;
         // Explicitly create reactive binding dependencies on geometry of self, parent and source
         var _rx = root.x, _ry = root.y, _rw = root.width, _rh = root.height;
         var _px = root.parent ? (root.parent.x + root.parent.y + root.parent.width + root.parent.height) : 0;

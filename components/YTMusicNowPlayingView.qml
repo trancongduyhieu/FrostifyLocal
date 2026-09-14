@@ -947,13 +947,12 @@ Item {
                             }
                         }
 
-                        // Mood Filter Chips (YouTube Music Up Next Pills)
+                        // Mood Filter Chips (YouTube Music Up Next Pills - Separated Capsules with Sliding Liquid Glass Lens)
                         Item {
                             id: moodChipsContainer
                             Layout.fillWidth: true
-                            implicitHeight: (root.moodChips.length > 0 || root.isLoadingMoodChips) ? 36 : 0
+                            implicitHeight: (root.moodChips.length > 0 || root.isLoadingMoodChips) ? 38 : 0
                             visible: implicitHeight > 0
-                            clip: true
 
                             // Auto-scroll continuous timers
                             Timer {
@@ -979,53 +978,16 @@ Item {
                                 }
                             }
 
-                            // Left Edge Hover-to-scroll Zone (Clean, Invisible, No Dark Scrim)
-                            Item {
-                                id: leftMoodScrim
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 36
-                                z: 10
-                                visible: moodFlickable.contentX > 4
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    propagateComposedEvents: true
-                                    onEntered: leftScrollTimer.running = true
-                                    onExited: leftScrollTimer.running = false
-                                    onPressed: (mouse) => { mouse.accepted = false; }
-                                }
-                            }
-
-                            // Right Edge Hover-to-scroll Zone (Clean, Invisible, No Dark Scrim)
-                            Item {
-                                id: rightMoodScrim
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 36
-                                z: 10
-                                visible: moodFlickable.contentWidth > moodFlickable.width && moodFlickable.contentX < moodFlickable.contentWidth - moodFlickable.width - 4
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    propagateComposedEvents: true
-                                    onEntered: rightScrollTimer.running = true
-                                    onExited: rightScrollTimer.running = false
-                                    onPressed: (mouse) => { mouse.accepted = false; }
-                                }
-                            }
-
+                            // Horizontal Scrollable Chips
                             Flickable {
                                 id: moodFlickable
                                 anchors.fill: parent
                                 contentWidth: moodChipsRow.width + 16
                                 contentHeight: height
-                                flickableDirection: Flickable.HorizontalFlick
                                 boundsBehavior: Flickable.StopAtBounds
+                                flickableDirection: Flickable.HorizontalFlick
+                                pixelAligned: true
+                                clip: false
 
                                 DragHandler {
                                     target: null
@@ -1047,28 +1009,93 @@ Item {
                                     }
                                 }
 
+                                readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
+
+                                // Ambient drop shadow for the sliding active Keo 502 gel capsule
+                                MultiEffect {
+                                    anchors.fill: activeChipIndicator
+                                    source: activeChipIndicator
+                                    shadowEnabled: true
+                                    shadowColor: "#50000000"
+                                    shadowVerticalOffset: 2
+                                    shadowBlur: 0.45
+                                    visible: activeChipIndicator.width > 0
+                                    z: 1
+                                }
+
+                                // Sliding Keo 502 Glossy Gel Capsule (Fluid Meniscus, Rich Solid-Glass Contrast, ZERO glare streaks!)
+                                Rectangle {
+                                    id: activeChipIndicator
+                                    height: 28
+                                    radius: 14
+                                    y: (moodFlickable.height - height) / 2
+                                    z: 2
+                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.90)
+                                    border.color: Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
+                                    border.width: 1
+                                    visible: width > 0
+
+                                    // Inner Meniscus Specular Rim (Tension highlight without bleaching text)
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        radius: 13
+                                        color: "transparent"
+                                        border.color: Qt.rgba(1.0, 1.0, 1.0, moodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22)
+                                        border.width: 1
+                                    }
+
+                                    Behavior on x { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                    Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                }
+
+                                // Separated Mood Chips Row
                                 Row {
                                     id: moodChipsRow
                                     spacing: 8
                                     anchors.verticalCenter: parent.verticalCenter
+                                    z: 5
 
-                                    // Real Mood Chips
                                     Repeater {
+                                        id: chipRepeater
                                         model: root.moodChips
-                                        delegate: Rectangle {
-                                            id: chipRect
-                                            height: 30
-                                            radius: 15
-                                            readonly property bool isSelected: index === root.selectedMoodIndex
+                                        delegate: Item {
+                                            id: chipItem
+                                            height: 28
                                             width: chipLabel.implicitWidth + 24
-                                            color: isSelected 
-                                                   ? "#ffffff" 
-                                                   : (chipMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.08))
-                                            border.color: isSelected ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                                            border.width: 1
+                                            readonly property bool isSelected: index === root.selectedMoodIndex
+                                            readonly property bool isHovered: chipMouse.containsMouse
 
-                                            Behavior on color { ColorAnimation { duration: 120 } }
-                                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                                            onIsSelectedChanged: {
+                                                if (isSelected) {
+                                                    activeChipIndicator.x = chipItem.x;
+                                                    activeChipIndicator.width = chipItem.width;
+                                                }
+                                            }
+                                            Component.onCompleted: {
+                                                if (isSelected) {
+                                                    activeChipIndicator.x = chipItem.x;
+                                                    activeChipIndicator.width = chipItem.width;
+                                                }
+                                            }
+
+                                            // Standalone Inactive Dark Glass Capsule (Zero white glare streaks, clean optical glass)
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 14
+                                                color: chipItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                                                border.width: 1
+                                                border.color: chipItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
+                                                opacity: chipItem.isSelected ? 0.0 : 1.0
+                                                scale: (chipItem.isHovered && !chipItem.isSelected) ? 1.03 : 1.0
+
+                                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                                Behavior on border.color { ColorAnimation { duration: 150 } }
+                                                Behavior on scale { NumberAnimation { duration: 120 } }
+                                            }
 
                                             Text {
                                                 id: chipLabel
@@ -1076,8 +1103,11 @@ Item {
                                                 text: modelData.title || ""
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
-                                                font.weight: chipRect.isSelected ? Font.DemiBold : Font.Normal
-                                                color: chipRect.isSelected ? "#000000" : "#ffffff"
+                                                font.weight: chipItem.isSelected ? Font.Bold : Font.DemiBold
+                                                color: chipItem.isSelected 
+                                                       ? (moodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
+                                                       : (chipItem.isHovered ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.70))
+                                                Behavior on color { ColorAnimation { duration: 120 } }
                                             }
 
                                             MouseArea {
@@ -1094,9 +1124,9 @@ Item {
                                     Repeater {
                                         model: (root.isLoadingMoodChips && root.moodChips.length === 0) ? [50, 75, 65, 80] : 0
                                         delegate: Rectangle {
-                                            height: 30
+                                            height: 28
                                             width: modelData + 20
-                                            radius: 15
+                                            radius: 14
                                             color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
                                             border.color: Qt.rgba(1.0, 1.0, 1.0, 0.06)
                                             border.width: 1
@@ -1109,6 +1139,66 @@ Item {
                                             }
                                         }
                                     }
+                                }
+
+                                function updateActiveIndicator() {
+                                    var itm = chipRepeater.itemAt(root.selectedMoodIndex);
+                                    if (itm) {
+                                        activeChipIndicator.x = itm.x;
+                                        activeChipIndicator.width = itm.width;
+                                    }
+                                }
+
+                                Component.onCompleted: Qt.callLater(updateActiveIndicator)
+                            }
+
+                            Connections {
+                                target: root
+                                function onSelectedMoodIndexChanged() {
+                                    moodFlickable.updateActiveIndicator();
+                                }
+                                function onMoodChipsChanged() {
+                                    Qt.callLater(moodFlickable.updateActiveIndicator);
+                                }
+                            }
+
+                            // Left Edge Hover-to-scroll Zone (Clean, Invisible)
+                            Item {
+                                id: leftMoodScrim
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 28
+                                z: 30
+                                visible: moodFlickable.contentX > 4
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    propagateComposedEvents: true
+                                    onEntered: leftScrollTimer.running = true
+                                    onExited: leftScrollTimer.running = false
+                                    onPressed: (mouse) => { mouse.accepted = false; }
+                                }
+                            }
+
+                            // Right Edge Hover-to-scroll Zone (Clean, Invisible)
+                            Item {
+                                id: rightMoodScrim
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 28
+                                z: 30
+                                visible: moodFlickable.contentWidth > moodFlickable.width && moodFlickable.contentX < moodFlickable.contentWidth - moodFlickable.width - 4
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    propagateComposedEvents: true
+                                    onEntered: rightScrollTimer.running = true
+                                    onExited: rightScrollTimer.running = false
+                                    onPressed: (mouse) => { mouse.accepted = false; }
                                 }
                             }
                         }
