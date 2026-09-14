@@ -35,6 +35,9 @@ Rectangle {
     onCurrentViewChanged: {
         searchMode = (currentView === "library" ? "offline" : "online");
         suggestions = [];
+        if (currentView !== "search" && (!searchInput.text || searchInput.text.trim() === "")) {
+            isSearching = false;
+        }
     }
 
     RowLayout {
@@ -101,40 +104,84 @@ Rectangle {
             }
         }
 
-        // Search Bar Container
+        // Search Bar Container (Collapsible: Pure Borderless Icon when idle, smooth expandable glass input on click)
         Item {
             id: searchContainer
-            Layout.preferredWidth: 400
-            Layout.preferredHeight: 40
+            Layout.preferredWidth: headerRoot.isSearching ? 340 : 32
+            Layout.preferredHeight: 34
+            Layout.alignment: Qt.AlignVCenter
             z: 200
+
+            Behavior on Layout.preferredWidth {
+                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+            }
 
             Rectangle {
                 id: searchBarBox
                 anchors.fill: parent
-                radius: 20
-                color: "#242424"
-                border.color: searchInput.activeFocus ? "#535353" : "transparent"
+                radius: 17
+                color: headerRoot.isSearching ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                border.color: headerRoot.isSearching ? (searchInput.activeFocus ? headerRoot.accentColor : Qt.rgba(1, 1, 1, 0.15)) : "transparent"
                 border.width: 1
+                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on border.color { ColorAnimation { duration: 150 } }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 14
-                    spacing: 10
+                    anchors.leftMargin: headerRoot.isSearching ? 10 : 0
+                    anchors.rightMargin: headerRoot.isSearching ? 10 : 0
+                    spacing: 8
 
-                    AppIcon {
-                        source: "../assets/icons/system-search-symbolic.svg"
-                        iconSize: 16
-                        color: searchInput.activeFocus ? "#ffffff" : Theme.textSecondary
+                    // Search Icon Button (Pure borderless icon matching Home, Downloads, Library, Settings)
+                    Item {
+                        id: searchIconBtn
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        Layout.alignment: Qt.AlignVCenter
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/system-search-symbolic.svg"
+                            iconSize: 17
+                            color: headerRoot.accentColor
+                            opacity: (headerRoot.isSearching || searchIconMouse.containsMouse) ? 1.0 : 0.70
+                            scale: searchIconMouse.containsMouse ? 1.12 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                        }
+
+                        MouseArea {
+                            id: searchIconMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!headerRoot.isSearching) {
+                                    headerRoot.isSearching = true;
+                                    searchInput.forceActiveFocus();
+                                } else {
+                                    if (searchInput.text && searchInput.text.trim().length > 0) {
+                                        headerRoot.suggestions = [];
+                                        headerRoot.searchSubmitted(searchInput.text.trim(), headerRoot.searchMode);
+                                    } else {
+                                        headerRoot.isSearching = false;
+                                    }
+                                }
+                            }
+                        }
                     }
 
+                    // Text Input Field (Visible when expanded)
                     TextInput {
                         id: searchInput
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         color: Theme.textPrimary
                         selectByMouse: true
+                        visible: headerRoot.isSearching
+                        clip: true
 
                         onTextChanged: {
                             headerRoot.searchRequested(text, headerRoot.searchMode);
@@ -145,20 +192,32 @@ Rectangle {
                             headerRoot.searchSubmitted(text, headerRoot.searchMode);
                         }
 
+                        Keys.onEscapePressed: {
+                            if (text.length > 0) {
+                                text = "";
+                                headerRoot.suggestions = [];
+                                headerRoot.searchRequested("", headerRoot.searchMode);
+                            } else {
+                                headerRoot.isSearching = false;
+                            }
+                        }
+
                         Text {
-                            text: headerRoot.currentView === "library" ? "Search downloads & local library..." : "Search songs, albums, artists..."
+                            text: headerRoot.currentView === "library" ? "Search downloads..." : "Search songs, albums..."
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             color: Theme.textSecondary
                             visible: !searchInput.text && !searchInput.activeFocus
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
-                    // Clear search icon
+                    // Clear search icon / Close button
                     Item {
-                        width: 20
-                        height: 20
-                        visible: searchInput.text.length > 0
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: headerRoot.isSearching
 
                         AppIcon {
                             anchors.centerIn: parent
@@ -173,9 +232,14 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                searchInput.text = "";
-                                headerRoot.suggestions = [];
-                                headerRoot.searchRequested("", headerRoot.searchMode);
+                                if (searchInput.text.length > 0) {
+                                    searchInput.text = "";
+                                    headerRoot.suggestions = [];
+                                    headerRoot.searchRequested("", headerRoot.searchMode);
+                                    searchInput.forceActiveFocus();
+                                } else {
+                                    headerRoot.isSearching = false;
+                                }
                             }
                         }
                     }
@@ -190,7 +254,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: Math.min(suggestionsList.contentHeight + 12, 280)
-                visible: searchInput.activeFocus && headerRoot.suggestions && headerRoot.suggestions.length > 0
+                visible: headerRoot.isSearching && searchInput.activeFocus && headerRoot.suggestions && headerRoot.suggestions.length > 0
                 color: "#18181c"
                 radius: 12
                 border.color: "#323238"

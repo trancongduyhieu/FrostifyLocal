@@ -1510,74 +1510,167 @@ Item {
                                 color: "#ffffff"
                             }
 
-                            Flickable {
+                            Item {
+                                id: recPlContainer
                                 Layout.fillWidth: true
                                 height: 180
-                                contentWidth: recPlRow.implicitWidth
                                 clip: true
-                                boundsBehavior: Flickable.StopAtBounds
 
-                                RowLayout {
-                                    id: recPlRow
-                                    spacing: 14
+                                // Auto-scroll continuous timers
+                                Timer {
+                                    id: leftRecPlScrollTimer
+                                    interval: 16
+                                    repeat: true
+                                    running: false
+                                    onTriggered: {
+                                        recPlFlickable.contentX = Math.max(0, recPlFlickable.contentX - 8);
+                                        if (recPlFlickable.contentX <= 0) running = false;
+                                    }
+                                }
 
-                                    Repeater {
-                                        model: (root.relatedData && root.relatedData.recommended_playlists) ? root.relatedData.recommended_playlists : []
+                                Timer {
+                                    id: rightRecPlScrollTimer
+                                    interval: 16
+                                    repeat: true
+                                    running: false
+                                    onTriggered: {
+                                        var maxScroll = recPlFlickable.contentWidth - recPlFlickable.width;
+                                        recPlFlickable.contentX = Math.min(maxScroll, recPlFlickable.contentX + 8);
+                                        if (recPlFlickable.contentX >= maxScroll) running = false;
+                                    }
+                                }
 
-                                        Rectangle {
-                                            Layout.preferredWidth: 130
-                                            Layout.preferredHeight: 175
-                                            radius: 10
-                                            color: recPlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                                            border.color: Qt.rgba(1, 1, 1, 0.08)
-                                            border.width: 1
+                                // Left Edge Hover-to-scroll Zone (Clean, Invisible)
+                                Item {
+                                    id: leftRecPlScrim
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 36
+                                    z: 10
+                                    visible: recPlFlickable.contentX > 4
 
-                                            ColumnLayout {
-                                                anchors.fill: parent
-                                                anchors.margins: 8
-                                                spacing: 6
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onEntered: leftRecPlScrollTimer.running = true
+                                        onExited: leftRecPlScrollTimer.running = false
+                                        onPressed: (mouse) => { mouse.accepted = false; }
+                                    }
+                                }
 
-                                                Rectangle {
-                                                    Layout.preferredWidth: 114
-                                                    Layout.preferredHeight: 114
-                                                    radius: 8
-                                                    color: "#222"
-                                                    clip: true
+                                // Right Edge Hover-to-scroll Zone (Clean, Invisible)
+                                Item {
+                                    id: rightRecPlScrim
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 36
+                                    z: 10
+                                    visible: recPlFlickable.contentWidth > recPlFlickable.width && recPlFlickable.contentX < recPlFlickable.contentWidth - recPlFlickable.width - 4
 
-                                                    Image {
-                                                        anchors.fill: parent
-                                                        source: modelData.image || ""
-                                                        fillMode: Image.PreserveAspectCrop
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onEntered: rightRecPlScrollTimer.running = true
+                                        onExited: rightRecPlScrollTimer.running = false
+                                        onPressed: (mouse) => { mouse.accepted = false; }
+                                    }
+                                }
+
+                                Flickable {
+                                    id: recPlFlickable
+                                    anchors.fill: parent
+                                    contentWidth: recPlRow.implicitWidth + 24
+                                    contentHeight: height
+                                    flickableDirection: Flickable.HorizontalFlick
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    DragHandler {
+                                        target: null
+                                        xAxis.enabled: true
+                                        yAxis.enabled: false
+                                        cursorShape: Qt.OpenHandCursor
+                                        onTranslationChanged: {
+                                            var newX = recPlFlickable.contentX - translation.x;
+                                            recPlFlickable.contentX = Math.max(0, Math.min(recPlFlickable.contentWidth - recPlFlickable.width, newX));
+                                        }
+                                    }
+
+                                    WheelHandler {
+                                        target: recPlFlickable
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: event => {
+                                            var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
+                                            recPlFlickable.contentX = Math.max(0, Math.min(recPlFlickable.contentWidth - recPlFlickable.width, recPlFlickable.contentX - delta));
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        id: recPlRow
+                                        spacing: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+
+                                        Repeater {
+                                            model: (root.relatedData && root.relatedData.recommended_playlists) ? root.relatedData.recommended_playlists : []
+
+                                            Rectangle {
+                                                Layout.preferredWidth: 130
+                                                Layout.preferredHeight: 175
+                                                radius: 10
+                                                color: recPlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
+                                                border.color: Qt.rgba(1, 1, 1, 0.08)
+                                                border.width: 1
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 8
+                                                    spacing: 6
+
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 114
+                                                        Layout.preferredHeight: 114
+                                                        radius: 8
+                                                        color: "#222"
+                                                        clip: true
+
+                                                        Image {
+                                                            anchors.fill: parent
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.title || ""
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 12
+                                                        font.bold: true
+                                                        color: "#ffffff"
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 2
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.description || "Playlist"
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 10
+                                                        color: Theme.textMuted
+                                                        elide: Text.ElideRight
                                                     }
                                                 }
 
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.title || ""
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    color: "#ffffff"
-                                                    elide: Text.ElideRight
-                                                    maximumLineCount: 2
+                                                MouseArea {
+                                                    id: recPlMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.playlistSelected(modelData)
                                                 }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.description || "Playlist"
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 10
-                                                    color: Theme.textMuted
-                                                    elide: Text.ElideRight
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: recPlMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.playlistSelected(modelData)
                                             }
                                         }
                                     }
@@ -1599,104 +1692,197 @@ Item {
                                 color: "#ffffff"
                             }
 
-                            Flickable {
+                            Item {
+                                id: simArtContainer
                                 Layout.fillWidth: true
                                 height: 130
-                                contentWidth: artRow.implicitWidth
                                 clip: true
-                                boundsBehavior: Flickable.StopAtBounds
 
-                                RowLayout {
-                                    id: artRow
-                                    spacing: 16
+                                // Auto-scroll continuous timers
+                                Timer {
+                                    id: leftArtScrollTimer
+                                    interval: 16
+                                    repeat: true
+                                    running: false
+                                    onTriggered: {
+                                        artFlickable.contentX = Math.max(0, artFlickable.contentX - 8);
+                                        if (artFlickable.contentX <= 0) running = false;
+                                    }
+                                }
 
-                                    Repeater {
-                                        model: (root.relatedData && root.relatedData.similar_artists) ? root.relatedData.similar_artists : []
+                                Timer {
+                                    id: rightArtScrollTimer
+                                    interval: 16
+                                    repeat: true
+                                    running: false
+                                    onTriggered: {
+                                        var maxScroll = artFlickable.contentWidth - artFlickable.width;
+                                        artFlickable.contentX = Math.min(maxScroll, artFlickable.contentX + 8);
+                                        if (artFlickable.contentX >= maxScroll) running = false;
+                                    }
+                                }
 
-                                        Item {
-                                            width: 90
-                                            height: 120
+                                // Left Edge Hover-to-scroll Zone (Clean, Invisible)
+                                Item {
+                                    id: leftArtScrim
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 36
+                                    z: 10
+                                    visible: artFlickable.contentX > 4
 
-                                            ColumnLayout {
-                                                anchors.fill: parent
-                                                spacing: 6
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onEntered: leftArtScrollTimer.running = true
+                                        onExited: leftArtScrollTimer.running = false
+                                        onPressed: (mouse) => { mouse.accepted = false; }
+                                    }
+                                }
 
-                                                Item {
-                                                    Layout.preferredWidth: 76
-                                                    Layout.preferredHeight: 76
-                                                    Layout.alignment: Qt.AlignHCenter
+                                // Right Edge Hover-to-scroll Zone (Clean, Invisible)
+                                Item {
+                                    id: rightArtScrim
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 36
+                                    z: 10
+                                    visible: artFlickable.contentWidth > artFlickable.width && artFlickable.contentX < artFlickable.contentWidth - artFlickable.width - 4
 
-                                                    Rectangle {
-                                                        id: simArtMask
-                                                        anchors.fill: parent
-                                                        radius: 38
-                                                        color: "#ffffff"
-                                                        visible: false
-                                                        layer.enabled: true
-                                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onEntered: rightArtScrollTimer.running = true
+                                        onExited: rightArtScrollTimer.running = false
+                                        onPressed: (mouse) => { mouse.accepted = false; }
+                                    }
+                                }
+
+                                Flickable {
+                                    id: artFlickable
+                                    anchors.fill: parent
+                                    contentWidth: artRow.implicitWidth + 24
+                                    contentHeight: height
+                                    flickableDirection: Flickable.HorizontalFlick
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    DragHandler {
+                                        target: null
+                                        xAxis.enabled: true
+                                        yAxis.enabled: false
+                                        cursorShape: Qt.OpenHandCursor
+                                        onTranslationChanged: {
+                                            var newX = artFlickable.contentX - translation.x;
+                                            artFlickable.contentX = Math.max(0, Math.min(artFlickable.contentWidth - artFlickable.width, newX));
+                                        }
+                                    }
+
+                                    WheelHandler {
+                                        target: artFlickable
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: event => {
+                                            var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
+                                            artFlickable.contentX = Math.max(0, Math.min(artFlickable.contentWidth - artFlickable.width, artFlickable.contentX - delta));
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        id: artRow
+                                        spacing: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+
+                                        Repeater {
+                                            model: (root.relatedData && root.relatedData.similar_artists) ? root.relatedData.similar_artists : []
+
+                                            Item {
+                                                width: 90
+                                                height: 120
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    spacing: 6
 
                                                     Item {
-                                                        anchors.fill: parent
-                                                        layer.enabled: true
-                                                        layer.effect: MultiEffect {
-                                                            maskEnabled: true
-                                                            maskSource: simArtMask
-                                                            autoPaddingEnabled: false
+                                                        Layout.preferredWidth: 76
+                                                        Layout.preferredHeight: 76
+                                                        Layout.alignment: Qt.AlignHCenter
+
+                                                        Rectangle {
+                                                            id: simArtMask
+                                                            anchors.fill: parent
+                                                            radius: 38
+                                                            color: "#ffffff"
+                                                            visible: false
+                                                            layer.enabled: true
                                                         }
 
-                                                        Image {
-                                                            id: simArtImg
+                                                        Item {
                                                             anchors.fill: parent
-                                                            source: modelData.image || ""
-                                                            fillMode: Image.PreserveAspectCrop
-                                                            asynchronous: true
-                                                            visible: status === Image.Ready
+                                                            layer.enabled: true
+                                                            layer.effect: MultiEffect {
+                                                                maskEnabled: true
+                                                                maskSource: simArtMask
+                                                                autoPaddingEnabled: false
+                                                            }
+
+                                                            Image {
+                                                                id: simArtImg
+                                                                anchors.fill: parent
+                                                                source: modelData.image || ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                asynchronous: true
+                                                                visible: status === Image.Ready
+                                                            }
+
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                color: "#222226"
+                                                                visible: simArtImg.status !== Image.Ready
+                                                            }
                                                         }
 
                                                         Rectangle {
                                                             anchors.fill: parent
-                                                            color: "#222226"
-                                                            visible: simArtImg.status !== Image.Ready
+                                                            radius: 38
+                                                            color: "transparent"
+                                                            border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
+                                                            border.width: 1.5
                                                         }
                                                     }
 
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        radius: 38
-                                                        color: "transparent"
-                                                        border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
-                                                        border.width: 1.5
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.name || ""
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 11
+                                                        font.bold: true
+                                                        color: simArtMouse.containsMouse ? root.accentColor : "#ffffff"
+                                                        elide: Text.ElideRight
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.subscribers || "Nghệ sĩ"
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 10
+                                                        color: Theme.textMuted
+                                                        elide: Text.ElideRight
+                                                        horizontalAlignment: Text.AlignHCenter
                                                     }
                                                 }
 
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.name || ""
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 11
-                                                    font.bold: true
-                                                    color: simArtMouse.containsMouse ? root.accentColor : "#ffffff"
-                                                    elide: Text.ElideRight
-                                                    horizontalAlignment: Text.AlignHCenter
+                                                MouseArea {
+                                                    id: simArtMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.artistSelected(modelData.name, modelData.channelId || "")
                                                 }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.subscribers || "Nghệ sĩ"
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 10
-                                                    color: Theme.textMuted
-                                                    elide: Text.ElideRight
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: simArtMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.artistSelected(modelData.name, modelData.channelId || "")
                                             }
                                         }
                                     }

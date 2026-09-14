@@ -626,6 +626,17 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
         - Bẫy lỗi trước đó: Trong `onTrackChanged`, lệnh gán thủ công `root.queueTracks = [root.track]` làm đứt binding `queueTracks: win.currentTracks`. Khi `radioProc` hoặc `moodQueueProc` nạp xong danh sách bài hát trong background và cập nhật `win.currentTracks`, `root.queueTracks` không nhận được dữ liệu mới.
         - Giải pháp triệt để: Loại bỏ hoàn toàn các lệnh gán đè thủ công lên `root.queueTracks`. Mọi cập nhật danh sách bài hát được chuyển tiếp qua signal phản ứng `root.queueUpdated(newQueue)` và gán tập trung vào `win.currentTracks`.
         - Trong hàm `fetchMoodChips()`, bổ sung điều kiện kiểm tra `if (vid === lastMoodChipsVid && root.moodChips.length > 0 && root.queueTracks && root.queueTracks.length > 1) return;` và xóa cache `root.lastMoodChipsVid = ""` khi `!isAlreadyInQueue`, bảo đảm khi chọn bài hát mới từ ngoài vào luôn kích hoạt nạp mới đầy đủ hàng đợi (20+ bài) và bộ chip tâm trạng tương ứng.
+33. **Thanh Tìm Kiếm Không Viền Thu Gọn (Collapsible Borderless Search Icon) & Cơ Chế Cuộn Hover/Drag/Wheel Cho Carousels Related (Item 33)**:
+    - **Thanh Tìm Kiếm Thu Gọn Tối Giản Không Nền Đen (`components/TopHeaderBar.qml`)**:
+      - Xóa bỏ hoàn toàn khối nền đen đục chữ nhật (`#242424`) và border cố định phía dưới thanh tìm kiếm.
+      - Trạng thái nghỉ (Idle): Thu gọn thành icon kính lúp borderless thuần túy (`search-symbolic.svg`), kích thước 32x32 px, nền `transparent`, đồng bộ 100% ngôn ngữ thiết kế tối giản với các nút điều hướng khác (Downloads, Home, Library, Settings). Hover phóng nhẹ 1.12x kèm đổi màu theo `accentColor`.
+      - Trạng thái mở rộng (Expanded): Khi người dùng click vào icon hoặc khi đang có từ khóa tìm kiếm (`searchExpanded || searchText.length > 0`), thanh tìm kiếm bung rộng mượt mà (`width: 340px`, `NumberAnimation` 250ms cubic easing), áp dụng nền kính trong suốt siêu nhẹ `Qt.rgba(1, 1, 1, 0.08)` và viền hairline `0.15` (sáng theo `accentColor` khi focus), tự động focus con trỏ vào ô nhập liệu (`searchInput.forceActiveFocus()`).
+      - Nút dọn / thu gọn (✕) và phím `Escape`: Tự động xóa nội dung tìm kiếm hoặc thu gọn trở lại icon khi để trống. Khi rời khỏi view tìm kiếm, thanh tìm kiếm tự động thu gọn nếu không còn từ khóa.
+    - **Cơ Chế Cuộn 3 Chế Độ Cho Carousels Related (`components/YTMusicNowPlayingView.qml`)**:
+      - Áp dụng cho cả hai kệ carousels trong tab `RELATED`: "Recommended playlists" (`recPlFlickable`) và "Similar artists" (`artFlickable`).
+      - *Cảm biến tự động cuộn khi rê chuột (Zero-Interference Edge Hover Scrims)*: Bố trí hai dải cảm biến vô hình rộng 36px ở mép trái (`leftRecPlScrim`, `leftArtScrim`) và mép phải (`rightRecPlScrim`, `rightArtScrim`). Rê chuột vào khoảng không hai mép sẽ kích hoạt timer cuộn mượt mà (interval 16ms, bước 8px), loại bỏ hoàn toàn các nút mũi tên bấm thô cứng. Thiết lập `propagateComposedEvents: true` và `onPressed: mouse.accepted = false` để không cản trở thao tác click vào card hoặc nghệ sĩ nằm dưới vùng cảm biến.
+      - *Kéo thả tự do (DragHandler)*: Tích hợp `DragHandler { target: null; cursorShape: Qt.OpenHandCursor; ... }` cho phép người dùng click giữ chuột và kéo lướt carousel như trên màn hình cảm ứng hoặc mobile.
+      - *Cuộn chuột thông minh (WheelHandler)*: Tự động chuyển đổi con lăn chuột dọc (`angleDelta.y`) sang cuộn ngang (`contentX`), mang lại trải nghiệm mượt mà không cần phím Shift.
 
 ---
 

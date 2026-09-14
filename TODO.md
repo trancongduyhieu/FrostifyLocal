@@ -298,3 +298,13 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
       - Khắc phục lỗi hàng đợi "All" chỉ hiện 1 bài khi chọn bài mới từ Home/ngoài: Loại bỏ các lệnh gán đè thủ công lên `queueTracks`, chuyển sang cơ chế reactive signal `queueUpdated` và cập nhật tập trung vào `win.currentTracks`.
       - Hoàn thiện cơ chế nạp lại hàng đợi và Mood Chips mỗi khi chuyển bài mới, đảm bảo danh sách bài hát kế tiếp luôn đầy đủ 20+ bài.
 
+- [x] **33. Collapsible Borderless Search Icon & Related Carousels Hover/Drag/Wheel Scroll (ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Thanh Tìm Kiếm Thu Gọn Tối Giản Không Nền Đen (`components/TopHeaderBar.qml`)**:
+      - Xóa sạch nền đen đục `#242424` và viền thô bên dưới ô tìm kiếm trên Top Header.
+      - Ở trạng thái bình thường, thanh tìm kiếm thu gọn hoàn toàn thành một icon kính lúp borderless phẳng (32x32 px) đồng bộ với Home, Downloads, Settings.
+      - Khi click vào icon hoặc khi có query tìm kiếm, thanh bung ra mượt mà thành ô kính mờ 340px với auto-focus; hỗ trợ bấm Escape hoặc nút ✕ để xóa text và tự thu gọn khi rời tab tìm kiếm.
+    - **Cơ Chế Cuộn Cảm Biến Hover, Drag & Wheel Cho Carousels Related (`components/YTMusicNowPlayingView.qml`)**:
+      - Tích hợp vùng cảm biến rê chuột tự động cuộn (Edge Hover Scrims 36px) ở hai mép trái/phải của hai carousel "Recommended playlists" và "Similar artists" trong tab RELATED.
+      - Tự động cuộn mượt mà khi rê chuột vào khoảng trống hai bên mà không chặn click của người dùng (`propagateComposedEvents: true`).
+      - Hỗ trợ đầy đủ kéo rê chuột (`DragHandler` với `Qt.OpenHandCursor`) và lăn bánh xe chuột (`WheelHandler` vertical-to-horizontal mapping) trên cả hai kệ.
