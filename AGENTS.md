@@ -608,6 +608,45 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       - *Khử letterbox 16:9 YouTube*: Tự động phóng đại `scale: (implicitWidth / implicitHeight > 1.3) ? 1.48 : 1.0; transformOrigin: Item.Center; fillMode: Image.PreserveAspectCrop` giúp thumbnail 38x38 luôn tràn khung đều đặn, không còn viền đen trên dưới.
       - *Viền hairline 1px đồng bộ*: Lớp phủ `border.color: miniCoverMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.40) : Qt.rgba(1, 1, 1, 0.16)` mang lại độ hoàn thiện pixel-perfect như các card trong Home và Downloads.
 
+36. **Hệ Thống Gợi Ý Tìm Kiếm Thời Gian Thực Kèm Avatar Chuẩn SimpMusic, Pinned Search Bar & Non-Intrusive Search Playback (Item 36)**:
+    - **Trải Nghiệm Gợi Ý Tìm Kiếm Thời Gian Thực Từng Ký Tự (< 90ms)**:
+      - Cấu trúc `Timer` debounce 90ms lắng nghe đồng thời `onDisplayTextChanged` và `onTextEdited` trong `components/CategorizedSearchView.qml`.
+      - Gõ bất kỳ ký tự nào (ví dụ `k` $\rightarrow$ `kh` $\rightarrow$ "Không Buông", "Khuôn Mặt Đáng Thương") là lập tức cập nhật gợi ý theo thời gian thực mà không bắt buộc phải nhấn phím Space hay Tab.
+    - **Bố Cục Gợi Ý 2 Tầng Chuẩn SimpMusic (Artwork + Text Queries)**:
+      - **Tầng 1 (Bài hát đề xuất)**: Hiển thị các bài hát đề xuất với ảnh cover/avatar vuông bo góc tròn (40x40 px, radius 6px), tên bài hát in đậm, nghệ sĩ và số lượt phát phân giải sạch sẽ từ Innertube. Click phát trực tiếp ở background player bar.
+      - **Tầng 2 (Từ khóa tìm kiếm)**: Danh sách các từ khóa text với icon kính lúp bên trái và nút mũi tên ↗ bên phải để điền nhanh vào thanh tìm kiếm.
+    - **Tối Ưu Hóa Header Bar Chill & Tinh Gọn (Zero Redundant Buttons)**:
+      - Xóa bỏ hoàn toàn 2 nút tròn `<` và `>` (Back/Forward) ở góc trái trên cùng `components/TopHeaderBar.qml`.
+      - Tích hợp nút Search icon borderless (`system-search-symbolic.svg`) vào cụm điều hướng chính (Home, Search, Downloads/Library, Queue, Settings).
+      - Pinned Top Search Bar chuyên dụng cố định ở đầu trang tìm kiếm với nút `<` quay lại, ô input bo góc 19px, kính lúp, nút `✕` xóa nhanh.
+    - **Trải Nghiệm Phát Nhạc Không Gián Đoạn (Non-intrusive Search Playback)**:
+      - Khi đang ở tab Search, việc chuyển bài hát (click bài gợi ý, next/prev, auto-advance) giữ nguyên màn hình tìm kiếm, chỉ cập nhật âm thanh và thông tin ở Player Bar bên dưới, tuyệt đối không tự động bung màn hình Now Playing / Lyrics (`AmberolDetailView`).
+    - **Xóa Bỏ Viền Lạc Màu Hero Top Result Card**:
+      - Chuyển `topResultCard` và nút Đài phát sang dạng borderless glass (`border.width: 0`, `color: Qt.rgba(1, 1, 1, 0.04)`), hòa quyện hoàn hảo với phông nền anime và màu chủ đạo hình nền.
+    - **Backend Innertube & Resident Daemon Hiệu Năng Cao**:
+      - `backend/ytmusic_helper.py`: Phân giải đồng thời Section 0 (`queries`) và Section 1 (`recommended`) từ endpoint Innertube `music/get_search_suggestions`.
+    - **Cơ Chế Khắc Phục Lỗi IME Tiếng Việt (Fcitx5 / IBus / Bamboo Pre-edit Composition)**:
+      - *Hiện tượng & Nguyên nhân gốc (Root Cause)*:
+        - Khi người dùng gõ tiếng Việt trên Linux Wayland bằng bộ gõ (Fcitx5 / Bamboo / Unikey), các ký tự đang soạn thảo (như `e` $\rightarrow$ `em`) được hệ thống IME lưu dưới dạng chuỗi tiền cam kết (*pre-edit text*) và hiển thị trên `displayText` hoặc `preeditText`.
+        - Thuộc tính `text` của `TextInput` trong Qt Quick chỉ chứa văn bản *đã cam kết* (*committed text*). Trong suốt quá trình đang gõ nguyên âm hoặc từ chưa hoàn tất, `searchTextInput.text` vẫn là rỗng `""`.
+        - Nếu mã nguồn chỉ đọc `searchTextInput.text`:
+          1. Timer gợi ý đọc phải chuỗi rỗng `""` và dọn sạch danh sách gợi ý.
+          2. Khi phản hồi API từ `auth_server` trả về, điều kiện kiểm tra `searchTextInput.text.trim().toLowerCase() === cleanQ.toLowerCase()` so sánh `"" === "em"` (kết quả `false`), làm dữ liệu gợi ý bị vứt bỏ hoàn toàn cho đến khi người dùng nhấn Space hoặc Tab để cam kết từ.
+          3. Khi nhấn phím Backspace (`kh` $\rightarrow$ `k`), IME lập tức cam kết phần còn lại vào `text`, nên thao tác xóa từ lại chạy mượt mà tức thì.
+      - *Giải pháp Kiến trúc Đa tầng Triệt để (Universal Solution Protocol)*:
+        1. **Hàm Phân Giải Chuỗi Tìm Kiếm Thực Tế (`getCurrentSearchQuery()`)**:
+           - Kiểm tra đa tầng: `displayText` (chuỗi thực sự hiển thị trên mắt người dùng) $\rightarrow$ `text + preeditText` (kết hợp văn bản đã cam kết và văn bản đang gõ) $\rightarrow$ `preeditText` $\rightarrow$ `text`.
+           - Bảo đảm chuỗi tìm kiếm luôn phản ánh chính xác 100% từng phím bấm của người dùng theo thời gian thực dù IME đang ở trạng thái pre-edit hay committed.
+        2. **Đón Đầu Toàn Bộ Sự Kiện Vòng Đời IME Của Qt Quick `TextInput`**:
+           - Lắng nghe đồng thời 5 tín hiệu: `onDisplayTextChanged`, `onTextEdited`, `onTextChanged`, `onPreeditTextChanged`, `onInputMethodComposingChanged` với bộ đệm `realtimeSuggestTimer` (interval 60ms).
+        3. **So Sánh Đồng Bộ Trong Callback `fetchSuggestions`**:
+           - Sử dụng `getCurrentSearchQuery()` để đối chiếu kết quả trả về từ `auth_server`, cho phép nạp dữ liệu mượt mà ngay cả khi từ khóa vẫn đang nằm trong bộ đệm IME.
+        4. **Đồng Bộ Placeholder & Nút Clear `✕`**:
+           - Chuyển `visible` của placeholder và nút clear sang phụ thuộc `getCurrentSearchQuery().length`, loại bỏ hiện tượng placeholder đè chữ khi đang gõ tiếng Việt.
+    - **Bẫy Lỗi Tránh Lặp Lại (Crucial Gotchas)**:
+      - *Vỡ Binding Thuộc Tính QML (Broken Property Binding)*: Khi `CategorizedSearchView` nhận `suggestions` qua binding từ cha, nếu trong code con tự ý gán `suggestions = []` thì binding của QML sẽ bị hủy vĩnh viễn. Giải pháp: để `CategorizedSearchView` tự quản lý dữ liệu gợi ý cục bộ thông qua `fetchSuggestions(q)` trực tiếp đến `auth_server`, bảo đảm tính tự đóng gói (self-contained) và tốc độ cập nhật 0ms.
+      - *Không Dùng `TextInput.text` Độc Lập Cho Tìm Kiếm Thời Gian Thực*: Tuyệt đối không chỉ đọc `TextInput.text` trên Linux Wayland khi hỗ trợ gõ tiếng Việt / CJK. Luôn đọc qua `getCurrentSearchQuery()` để thu thập cả `displayText` và `preeditText`.
+
 32. **Kiến Trúc Dynamic Play/Pause Palette Engine, Clean Edge-to-Edge Hover-to-Scroll Mood Bar & Unbroken Reactive Queue Continuity (Item 32)**:
     - **Dynamic Play/Pause Palette Engine (Tách Biệt Màu Sắc Theo Bài Hát & Hình Nền)**:
       - *Khi phát nhạc (`isPlaying === true`)*: Trích xuất màu sắc nghệ thuật (chromatic salience) trực tiếp từ ảnh bìa bài hát đang phát (`track.image`) qua `palette_extractor.py`, cập nhật động `root.accentColor`, sóng âm Equalizer, thanh tiến trình, nút Play/Pause và chip tab đang active.

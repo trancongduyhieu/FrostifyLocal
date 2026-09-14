@@ -1442,6 +1442,138 @@ def search_ytmusic(query, limit=20):
         sys.stderr.write(f"[ytmusic search error]: {e}\n")
         return []
 
+def search_categorized(query):
+    if not query or not query.strip():
+        query = "Trending"
+
+    q = query.strip()
+    try:
+        ytm = get_ytmusic_client()
+        raw = ytm.search(q)
+        top_result = None
+        songs = []
+        albums = []
+        artists = []
+        playlists = []
+
+        for i, r in enumerate(raw):
+            rtype = r.get("resultType")
+            cat = r.get("category")
+            is_top = (cat == "Top result" or (i == 0 and rtype in ("artist", "album", "song")))
+
+            if is_top and not top_result:
+                if rtype == "artist":
+                    arts = r.get("artists", [])
+                    a_name = r.get("artist") or (arts[0].get("name") if arts else q)
+                    a_id = (arts[0].get("id") if arts else "") or r.get("browseId", "")
+                    thumbs = r.get("thumbnails", [])
+                    turl = thumbs[-1].get("url", "") if thumbs else ""
+                    turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                    top_result = {
+                        "type": "artist",
+                        "browseId": a_id,
+                        "name": a_name,
+                        "artist": a_name,
+                        "subscribers": r.get("subscribers", ""),
+                        "image": turl
+                    }
+                elif rtype in ("song", "video"):
+                    norm = normalize_track(r)
+                    if norm:
+                        norm["type"] = "song"
+                        top_result = norm
+                elif rtype == "album":
+                    thumbs = r.get("thumbnails", [])
+                    turl = thumbs[-1].get("url", "") if thumbs else ""
+                    turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                    arts = r.get("artists", [])
+                    aname = ", ".join(a.get("name", "") for a in arts if isinstance(a, dict)) if arts else ""
+                    bid = r.get("browseId", "")
+                    top_result = {
+                        "type": "album",
+                        "browseId": bid,
+                        "playlistId": r.get("playlistId", "") or bid,
+                        "title": r.get("title", ""),
+                        "name": r.get("title", ""),
+                        "artist": aname,
+                        "year": str(r.get("year", "") or ""),
+                        "image": turl
+                    }
+
+            if rtype in ("song", "video"):
+                norm = normalize_track(r)
+                if norm and not is_song_disliked(norm.get("videoId")):
+                    songs.append(norm)
+            elif rtype == "album":
+                thumbs = r.get("thumbnails", [])
+                turl = thumbs[-1].get("url", "") if thumbs else ""
+                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                arts = r.get("artists", [])
+                aname = ", ".join(a.get("name", "") for a in arts if isinstance(a, dict)) if arts else ""
+                bid = r.get("browseId", "")
+                albums.append({
+                    "type": "album",
+                    "browseId": bid,
+                    "playlistId": r.get("playlistId", "") or bid,
+                    "title": r.get("title", ""),
+                    "name": r.get("title", ""),
+                    "artist": aname,
+                    "year": str(r.get("year", "") or ""),
+                    "image": turl
+                })
+            elif rtype == "artist":
+                arts = r.get("artists", [])
+                a_name = r.get("artist") or (arts[0].get("name") if arts else "")
+                a_id = (arts[0].get("id") if arts else "") or r.get("browseId", "")
+                thumbs = r.get("thumbnails", [])
+                turl = thumbs[-1].get("url", "") if thumbs else ""
+                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                artists.append({
+                    "type": "artist",
+                    "browseId": a_id,
+                    "name": a_name,
+                    "artist": a_name,
+                    "subscribers": r.get("subscribers", ""),
+                    "image": turl
+                })
+            elif rtype == "playlist":
+                thumbs = r.get("thumbnails", [])
+                turl = thumbs[-1].get("url", "") if thumbs else ""
+                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                bid = r.get("browseId", "")
+                playlists.append({
+                    "type": "playlist",
+                    "id": bid,
+                    "browseId": bid,
+                    "title": r.get("title", ""),
+                    "name": r.get("title", ""),
+                    "author": r.get("author", ""),
+                    "artist": r.get("author", ""),
+                    "itemCount": r.get("itemCount", ""),
+                    "image": turl
+                })
+
+        cache_online_tracks(songs)
+        return {
+            "query": q,
+            "top_result": top_result,
+            "songs": songs,
+            "albums": albums,
+            "artists": artists,
+            "playlists": playlists
+        }
+    except Exception as e:
+        sys.stderr.write(f"[categorized_search error]: {e}\n")
+        return {
+            "query": q,
+            "top_result": None,
+            "songs": [],
+            "albums": [],
+            "artists": [],
+            "playlists": []
+        }
+
+
 def search_albums(query, limit=10):
     if not query or not query.strip():
         return []
@@ -1473,14 +1605,107 @@ def search_albums(query, limit=10):
         return []
 
 def get_search_suggestions(query):
-    if not query or not query.strip():
-        return []
+    if not query or not str(query).strip():
+        return {"queries": [], "recommended": []}
+    q = str(query).strip()
+
+    # Method 1: Direct YouTube Music Innertube API (< 0.2s, music-specific + rich recommended songs with avatar)
+    try:
+        import urllib.request
+        req_data = json.dumps({
+            "context": {
+                "client": {
+                    "clientName": "WEB_REMIX",
+                    "clientVersion": "1.20240101.01.00",
+                    "hl": "vi",
+                    "gl": "VN"
+                }
+            },
+            "input": q
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://music.youtube.com/youtubei/v1/music/get_search_suggestions",
+            data=req_data,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0",
+                "Origin": "https://music.youtube.com"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            queries = []
+            recommended = []
+            for content in data.get("contents", []):
+                sec = content.get("searchSuggestionsSectionRenderer", {})
+                for it in sec.get("contents", []):
+                    # Query suggestion
+                    if "searchSuggestionRenderer" in it:
+                        runs = it["searchSuggestionRenderer"].get("suggestion", {}).get("runs", [])
+                        text = "".join(r.get("text", "") for r in runs).strip()
+                        if text and text not in queries:
+                            queries.append(text)
+                    # Recommended song item with thumbnail/avatar
+                    elif "musicResponsiveListItemRenderer" in it:
+                        r = it["musicResponsiveListItemRenderer"]
+                        flex = r.get("flexColumns", [])
+                        title = ""
+                        subtitle = ""
+                        if flex:
+                            title_runs = flex[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                            title = "".join(x.get("text", "") for x in title_runs).strip()
+                        if len(flex) > 1:
+                            sub_runs = flex[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                            subtitle = "".join(x.get("text", "") for x in sub_runs).strip()
+                        thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                        thumb = thumbs[-1].get("url", "") if thumbs else ""
+                        nav = r.get("navigationEndpoint", {})
+                        vid = nav.get("watchEndpoint", {}).get("videoId", "")
+                        if not vid:
+                            overlay = r.get("overlay", {}).get("musicItemThumbnailOverlayRenderer", {})
+                            vid = overlay.get("content", {}).get("musicPlayButtonRenderer", {}).get("playNavigationEndpoint", {}).get("watchEndpoint", {}).get("videoId", "")
+
+                        if title and vid:
+                            # Clean artist name (SimpMusic pattern)
+                            parts = subtitle.split(" • ")
+                            artist_name = parts[1].strip() if len(parts) > 1 else subtitle
+                            recommended.append({
+                                "id": vid,
+                                "videoId": vid,
+                                "title": title,
+                                "name": title,
+                                "artist": artist_name,
+                                "subtitle": subtitle,
+                                "image": thumb,
+                                "path": "ytdl://" + vid
+                            })
+            if queries or recommended:
+                return {"queries": queries, "recommended": recommended}
+    except Exception as e:
+        sys.stderr.write(f"[innertube suggestions fallback]: {e}\n")
+
+    # Method 2: Google Suggest Queries API (Instant < 0.1s fallback)
+    try:
+        import urllib.request
+        import urllib.parse
+        encoded_q = urllib.parse.quote(q)
+        url = f"https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q={encoded_q}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=1.2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+                return {"queries": data[1], "recommended": []}
+    except Exception as e:
+        sys.stderr.write(f"[google suggest fallback]: {e}\n")
+
+    # Method 3: ytmusicapi fallback
     try:
         yt = get_ytmusic_client()
-        return yt.get_search_suggestions(query.strip())
+        raw_sug = yt.get_search_suggestions(q)
+        return {"queries": raw_sug if isinstance(raw_sug, list) else [], "recommended": []}
     except Exception as e:
         sys.stderr.write(f"[get_search_suggestions error]: {e}\n")
-        return []
+        return {"queries": [], "recommended": []}
 
 def resolve_stream_url(video_id):
     if not video_id:
@@ -2050,6 +2275,11 @@ if __name__ == "__main__":
     elif cmd == "search_albums" and len(sys.argv) > 2:
         q = sys.argv[2]
         res = search_albums(q)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "categorized_search":
+        q = sys.argv[2] if len(sys.argv) > 2 else "Trending"
+        res = search_categorized(q)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "search":

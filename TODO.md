@@ -110,13 +110,26 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - **Cơ chế chịu lỗi & Tự phục hồi (Fault-tolerant Pending Queue)**: Lưu bài hát vào `~/.cache/frostify/pending_history.json` khi rớt mạng và tự động flush gửi bù khi kết nối internet hoạt động trở lại.
   - *Cấu hình người dùng*: Bổ sung switch bật/tắt đồng bộ (`Sync Playback to Google / sendBackToGoogle`) trong Settings Dark Glass.
 
-- [ ] **15. Mở Rộng Tìm Kiếm Đa Phân Loại: Kệ Album, Nghệ Sĩ & Bài Hát Liên Quan (Categorized Search)**
-  - *Hiện trạng*: Tìm kiếm YouTube Music hiện tại chỉ trả về danh sách các bài hát đơn lẻ.
-  - *Nâng cấp*: Phân loại kết quả tìm kiếm theo `resultType` (hoặc truy vấn kết hợp Songs, Albums, Artists):
-    - **Top Result**: Kết quả trùng khớp nhất dạng Banner/Card lớn.
-    - **Songs**: Lưới danh sách bài hát có thể click nghe ngay.
-    - **Albums**: Kệ ngang các Album liên quan trực tiếp đến từ khóa tìm kiếm (bấm vào mở danh sách bài trong album).
-    - **Artists & Playlists**: Kệ các Playlist tổng hợp và kênh nghệ sĩ chính thức.
+- [x] **15. Mở Rộng Tìm Kiếm Đa Phân Loại, Gợi Ý Thời Gian Thực Kèm Avatar Chuẩn SimpMusic & Tối Ưu Giao Diện Chill (Categorized Search & Real-time Suggestions Suite - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Gợi Ý Tìm Kiếm Thời Gian Thực Từng Ký Tự Kể Cả Bộ Gõ Tiếng Việt (< 60ms)**:
+      - Xây dựng hàm `getCurrentSearchQuery()` kết hợp đa tầng giữa `displayText`, `preeditText` và `text`, giải quyết triệt để vấn đề bộ gõ tiếng Việt (Fcitx5 / IBus / Bamboo) lưu trữ từ khóa trong pre-edit buffer mà chưa cam kết vào `text`.
+      - Lắng nghe đồng thời 5 tín hiệu IME của Qt Quick `TextInput`: `onDisplayTextChanged`, `onTextEdited`, `onTextChanged`, `onPreeditTextChanged`, `onInputMethodComposingChanged` với timer debounce 60ms.
+      - Gõ bất kỳ ký tự nào (ví dụ `k` $\rightarrow$ `kh`, hoặc `e` $\rightarrow$ `em` $\rightarrow$ "Em Của Ngày Hôm Qua", "Em (cùng với SOOBIN)") là lập tức cập nhật gợi ý ngay theo thời gian thực mà không bắt buộc phải nhấn phím Space hay Tab. Thao tác xóa lùi (Backspace) hay gõ tiếp đều cập nhật tức thì.
+    - **Bố Cục Gợi Ý 2 Tầng Chuẩn SimpMusic (Artwork + Text Queries)**:
+      - **Tầng 1 (Bài hát đề xuất)**: Hiển thị các bài hát đề xuất với ảnh cover/avatar vuông bo góc tròn (40x40 px, radius 6px), tên bài hát in đậm, nghệ sĩ và số lượt phát phân giải sạch sẽ từ Innertube. Click phát trực tiếp ở background player bar.
+      - **Tầng 2 (Từ khóa tìm kiếm)**: Danh sách các từ khóa text với icon kính lúp bên trái và nút mũi tên ↗ bên phải để điền nhanh vào thanh tìm kiếm.
+    - **Tối Ưu Hóa Header Bar Chill & Tinh Gọn (Zero Redundant Buttons)**:
+      - Xóa bỏ hoàn toàn 2 nút tròn `<` và `>` (Back/Forward) ở góc trái trên cùng `components/TopHeaderBar.qml`.
+      - Tích hợp nút Search icon borderless (`system-search-symbolic.svg`) vào cụm điều hướng chính (Home, Search, Downloads/Library, Queue, Settings).
+      - Xóa bỏ ô input search co giãn cũ trên header; chuyển toàn bộ trải nghiệm tìm kiếm sang Pinned Top Search Bar chuyên dụng.
+    - **Trải Nghiệm Phát Nhạc Không Gián Đoạn (Non-intrusive Search Playback)**:
+      - Khi đang ở tab Search, việc chuyển bài hát (click bài gợi ý, next/prev, auto-advance) giữ nguyên màn hình tìm kiếm, chỉ cập nhật âm thanh và thông tin ở Player Bar bên dưới, tuyệt đối không tự động bung màn hình Now Playing / Lyrics (`AmberolDetailView`).
+    - **Xóa Bỏ Viền Lạc Màu Hero Top Result Card**:
+      - Chuyển `topResultCard` và nút Đài phát sang dạng borderless glass (`border.width: 0`, `color: Qt.rgba(1, 1, 1, 0.04)`), hòa quyện hoàn hảo với phông nền anime và màu chủ đạo hình nền.
+    - **Backend Innertube & Resident Daemon Hiệu Năng Cao**:
+      - `backend/ytmusic_helper.py`: Phân giải đồng thời Section 0 (`queries`) và Section 1 (`recommended`) từ endpoint Innertube `music/get_search_suggestions`.
+      - `backend/auth_server.py`: Resident HTTP daemon cung cấp endpoint `/api/suggestions?q=` phản hồi tức thì (< 150ms) kết hợp bộ nhớ đệm client 0ms.
 
 - [x] **16. Tab Artwork: Bố Cục Thẻ Biểu Cảm Nutsty, Mô Tả Bài Hát & Hệ Thống Blacklist Like/Dislike (Nutsty Expressive Cards, Description & Dislike Blacklist - ĐÃ HOÀN THÀNH)**
   - *Đã hoàn thành*:

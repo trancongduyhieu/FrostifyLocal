@@ -90,6 +90,10 @@ Scope {
         }
     }
     property string currentWallpaperPath: ""
+    property var categorizedSearchData: null
+    property string searchViewMode: "results" // "results", "suggestions"
+    property var searchSuggestions: []
+    property var searchRecommendedSuggestions: []
 
     Process {
         id: songPaletteProc
@@ -135,7 +139,7 @@ Scope {
 
     Timer {
         id: suggestionsDebounce
-        interval: 200
+        interval: 120
         repeat: false
         onTriggered: {
             if (win.pendingSearchMode === "online") {
@@ -146,15 +150,24 @@ Scope {
         }
     }
 
+    property var suggestionsCache: ({})
+
     Process {
         id: searchSuggestionsProc
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: data => {
                 try {
-                    var arr = JSON.parse(data);
-                    if (Array.isArray(arr)) {
-                        topHeader.suggestions = arr;
+                    var res = JSON.parse(data);
+                    if (Array.isArray(res)) {
+                        topHeader.suggestions = res;
+                        if (searchView) searchView.suggestions = res;
+                    } else if (res && typeof res === "object") {
+                        topHeader.suggestions = res.queries || [];
+                        if (searchView) {
+                            searchView.suggestions = res.queries || [];
+                            searchView.recommendedSuggestions = res.recommended || [];
+                        }
                     }
                 } catch(e) {}
             }
@@ -162,13 +175,72 @@ Scope {
     }
 
     function fetchSearchSuggestions(q) {
+        console.log("[DEBUG] fetchSearchSuggestions called with q=" + q);
         if (!q || q.trim() === "") {
+            win.searchSuggestions = [];
+            win.searchRecommendedSuggestions = [];
             topHeader.suggestions = [];
             return;
         }
-        searchSuggestionsProc.running = false;
-        searchSuggestionsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "suggestions", q.trim()];
-        searchSuggestionsProc.running = true;
+        var cleanQ = q.trim();
+        if (win.suggestionsCache && win.suggestionsCache[cleanQ]) {
+            var cached = win.suggestionsCache[cleanQ];
+            console.log("[DEBUG] fetchSearchSuggestions cache hit: " + JSON.stringify(cached));
+            win.searchSuggestions = cached.queries || [];
+            win.searchRecommendedSuggestions = cached.recommended || [];
+            topHeader.suggestions = cached.queries || [];
+            return;
+        }
+
+        try {
+            var xhr = new XMLHttpRequest();
+            var url = "http://127.0.0.1:17890/api/suggestions?q=" + encodeURIComponent(cleanQ);
+            console.log("[DEBUG] Sending XHR to " + url);
+            xhr.open("GET", url, true);
+            xhr.onreadystatechange = function() {
+                console.log("[DEBUG] XHR readyState=" + xhr.readyState + " status=" + xhr.status);
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        try {
+                            var res = JSON.parse(xhr.responseText);
+                            var queries = [];
+                            var recs = [];
+                            if (Array.isArray(res)) {
+                                queries = res;
+                            } else if (res && typeof res === "object") {
+                                queries = res.queries || [];
+                                recs = res.recommended || [];
+                            }
+                            if (!win.suggestionsCache) win.suggestionsCache = {};
+                            win.suggestionsCache[cleanQ] = { queries: queries, recommended: recs };
+                            win.searchSuggestions = queries;
+                            win.searchRecommendedSuggestions = recs;
+                            topHeader.suggestions = queries;
+                            console.log("[DEBUG] Got " + queries.length + " queries and " + recs.length + " recs");
+                        } catch(e) {
+                            console.error("Parse suggestions error: " + e);
+                        }
+                    } else {
+                        console.log("[DEBUG] XHR status not 200, fallback to python CLI");
+                        searchSuggestionsProc.running = false;
+                        searchSuggestionsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "suggestions", cleanQ];
+                        searchSuggestionsProc.running = true;
+                    }
+                }
+            };
+            xhr.onerror = function(err) {
+                console.log("[DEBUG] XHR error: " + err);
+                searchSuggestionsProc.running = false;
+                searchSuggestionsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "suggestions", cleanQ];
+                searchSuggestionsProc.running = true;
+            };
+            xhr.send();
+        } catch(xhrErr) {
+            console.log("[DEBUG] XHR exception: " + xhrErr + ", fallback to CLI");
+            searchSuggestionsProc.running = false;
+            searchSuggestionsProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "suggestions", cleanQ];
+            searchSuggestionsProc.running = true;
+        }
     }
 
     function filterLocalSuggestions(q) {
@@ -195,11 +267,14 @@ Scope {
             splitMarker: "\n"
             onRead: data => {
                 try {
-                    var arr = JSON.parse(data);
-                    if (Array.isArray(arr)) {
-                        win.ytMusicTracks = arr;
-                        win.browsingTracks = arr;
+                    var obj = JSON.parse(data);
+                    if (obj && typeof obj === "object") {
+                        win.categorizedSearchData = obj;
+                        var songs = obj.songs || [];
+                        win.ytMusicTracks = songs;
+                        win.browsingTracks = songs;
                         win.currentView = "search";
+                        win.searchViewMode = "results";
                         mainGrid.sectionTitle = 'Results for "' + (win.lastYTQuery || "Search") + '"';
                     }
                 } catch(e) {
@@ -216,6 +291,7 @@ Scope {
 
     function performYTSearch(q) {
         win.isSearchingYT = true;
+        win.searchViewMode = "results";
         if (win.currentView !== "search" && win.currentView !== "playlist") {
             win.previousView = win.currentView;
         }
@@ -223,7 +299,7 @@ Scope {
         win.lastYTQuery = q || "Trending";
         mainGrid.sectionTitle = 'Results for "' + win.lastYTQuery + '"';
         ytSearchProc.running = false;
-        ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "search", win.lastYTQuery];
+        ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "categorized_search", win.lastYTQuery];
         ytSearchProc.running = true;
     }
 
@@ -601,7 +677,11 @@ Scope {
         win.isLoadingAudio = true;
         win.totalDuration = 0.0;
         win.isPlaying = true;
-        win.showAmberolDetails = true;
+        if (win.currentView !== "search") {
+            win.showAmberolDetails = true;
+        } else {
+            win.showAmberolDetails = false;
+        }
 
         if (win.syncHistoryToGoogle) {
             win.trackPlayback(trk);
@@ -1108,6 +1188,15 @@ Scope {
                     win.currentView = "home";
                     win.mainSectionTitle = "Home";
                 }
+                onSearchClicked: {
+                    win.isNowPlayingOpen = false;
+                    if (win.currentView !== "search") win.previousView = win.currentView;
+                    win.currentView = "search";
+                    win.searchViewMode = "suggestions";
+                    Qt.callLater(function() {
+                        if (searchView) searchView.focusInput();
+                    });
+                }
                 onLibraryClicked: {
                     win.isNowPlayingOpen = false;
                     if (win.currentView !== "library") win.previousView = win.currentView;
@@ -1159,7 +1248,18 @@ Scope {
                         if (mode === "offline") {
                             win.browsingTracks = win.allTracks;
                         }
+                        if (win.currentView === "search" && (!win.categorizedSearchData || !win.categorizedSearchData.songs || win.categorizedSearchData.songs.length === 0)) {
+                            win.searchViewMode = "suggestions";
+                        }
                         return;
+                    }
+                    if (mode === "online" || win.currentView === "home" || win.currentView === "search") {
+                        if (win.currentView !== "search" && win.currentView !== "playlist") {
+                            win.previousView = win.currentView;
+                        }
+                        win.currentView = "search";
+                        win.searchViewMode = "suggestions";
+                        win.lastYTQuery = query;
                     }
                     suggestionsDebounce.restart();
                     if (mode === "offline") {
@@ -1169,6 +1269,7 @@ Scope {
 
                 onSearchSubmitted: (query, mode) => {
                     win.isNowPlayingOpen = false;
+                    win.searchViewMode = "results";
                     if (mode === "online" || win.currentView === "home" || win.currentView === "search" || win.currentView === "playlist") {
                         if (query && query.trim().length > 0) {
                             win.performYTSearch(query.trim());
@@ -1203,7 +1304,7 @@ Scope {
                     StackLayout {
                         id: centerStack
                         anchors.fill: parent
-                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : 1)
+                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : (win.currentView === "search" ? 3 : 1))
 
                         HomeFeedView {
                             id: homeView
@@ -1354,6 +1455,74 @@ Scope {
                             onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                             onToggleFollowRequested: (chId, aName, currFollowed) => win.toggleFollowArtist(chId, aName, currFollowed)
+                        }
+
+                        CategorizedSearchView {
+                            id: searchView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            searchData: win.categorizedSearchData
+                            isLoading: win.isSearchingYT
+                            currentQuery: win.lastYTQuery
+                            accentColor: win.accentColor
+                            currentTrack: win.currentTrack
+                            isPlaying: win.isPlaying
+                            viewMode: win.searchViewMode
+
+                            onTrackPlayRequested: trk => {
+                                if (win.isContextMenuActive) return;
+                                if (trk && (trk.type === "album" || (trk.browseId && String(trk.browseId).startsWith("MPREb_")))) {
+                                    win.loadAlbumDetails(trk);
+                                    return;
+                                }
+                                if (win.categorizedSearchData && win.categorizedSearchData.songs && win.categorizedSearchData.songs.length > 0) {
+                                    win.currentTracks = win.categorizedSearchData.songs;
+                                }
+                                win.playingPlaylistId = "";
+                                if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
+                                    win.playOnlineTrack(trk, false);
+                                } else {
+                                    win.playTrack(trk);
+                                }
+                                win.isNowPlayingOpen = false;
+                            }
+                            onStartRadioRequested: trk => {
+                                win.startRadioFromTrack(trk);
+                                win.isNowPlayingOpen = false;
+                            }
+                            onArtistSelected: (aName, bId) => {
+                                win.loadArtistDetails(bId || aName);
+                            }
+                            onAlbumSelected: alb => {
+                                win.loadAlbumDetails(alb);
+                            }
+                            onPlaylistSelected: pl => {
+                                win.loadPlaylistTracks(pl);
+                            }
+                            onTrackContextMenuRequested: (trk, gx, gy) => {
+                                trackContextMenu.openAt(trk, gx, gy, false);
+                            }
+                            onSearchRequested: q => {
+                                win.fetchSearchSuggestions(q);
+                            }
+                            onSearchSubmitted: q => {
+                                win.isNowPlayingOpen = false;
+                                win.searchViewMode = "results";
+                                win.lastYTQuery = q;
+                                win.performYTSearch(q);
+                            }
+                            onSuggestionClicked: q => {
+                                win.isNowPlayingOpen = false;
+                                win.searchViewMode = "results";
+                                win.lastYTQuery = q;
+                                win.performYTSearch(q);
+                            }
+                            onSuggestionFillRequested: q => {
+                                searchView.setSearchInput(q);
+                            }
+                            onBackRequested: {
+                                win.currentView = (win.previousView && win.previousView !== "search") ? win.previousView : "home";
+                            }
                         }
                     }
                 }
@@ -1803,7 +1972,11 @@ Scope {
         win.isLoadingAudio = false;
         win.totalDuration = (trk.durationMs || 0) / 1000.0;
         win.isPlaying = true;
-        win.isNowPlayingOpen = true;
+        if (win.currentView !== "search") {
+            win.isNowPlayingOpen = true;
+        } else {
+            win.isNowPlayingOpen = false;
+        }
 
         if (win.syncHistoryToGoogle) {
             win.trackPlayback(trk);
@@ -2246,6 +2419,9 @@ Scope {
         function togglePlay() { frostifyIpc.togglePlay(); }
         function playNext() { frostifyIpc.playNext(); }
         function playPrev() { frostifyIpc.playPrev(); }
+        function typeSearch(q: string) { frostifyIpc.typeSearch(q); }
+        function submitSearch(q: string) { frostifyIpc.submitSearch(q); }
+        function switchSearchTab(tab: string) { frostifyIpc.switchSearchTab(tab); }
     }
 
     IpcHandler {
@@ -2383,6 +2559,28 @@ Scope {
             win.currentView = "library";
             mainGrid.sectionTitle = "Downloads";
             mainGrid.sortBy = s;
+        }
+        function typeSearch(q: string) {
+            win.visible = true;
+            win.isNowPlayingOpen = false;
+            win.currentView = "search";
+            win.searchViewMode = "suggestions";
+            if (searchView) {
+                searchView.setSearchInput(q);
+                searchView.focusInput();
+            }
+            win.fetchSearchSuggestions(q);
+        }
+        function submitSearch(q: string) {
+            win.visible = true;
+            win.isNowPlayingOpen = false;
+            win.currentView = "search";
+            win.searchViewMode = "results";
+            if (searchView) searchView.setSearchInput(q);
+            win.performYTSearch(q);
+        }
+        function switchSearchTab(tab: string) {
+            if (searchView) searchView.activeTab = tab;
         }
     }
 
