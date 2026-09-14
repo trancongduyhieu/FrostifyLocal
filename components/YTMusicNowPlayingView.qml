@@ -972,7 +972,7 @@ Item {
                                 repeat: true
                                 running: false
                                 onTriggered: {
-                                    var maxScroll = moodFlickable.contentWidth - moodFlickable.width;
+                                    var maxScroll = Math.max(0, moodFlickable.contentWidth - moodFlickable.width);
                                     moodFlickable.contentX = Math.min(maxScroll, moodFlickable.contentX + 6);
                                     if (moodFlickable.contentX >= maxScroll) running = false;
                                 }
@@ -987,16 +987,24 @@ Item {
                                 boundsBehavior: Flickable.StopAtBounds
                                 flickableDirection: Flickable.HorizontalFlick
                                 pixelAligned: true
-                                clip: false
+                                clip: true
 
                                 DragHandler {
                                     target: null
                                     xAxis.enabled: true
                                     yAxis.enabled: false
                                     cursorShape: Qt.OpenHandCursor
+                                    property real startContentX: 0
+                                    onActiveChanged: {
+                                        if (active) {
+                                            startContentX = moodFlickable.contentX;
+                                        }
+                                    }
                                     onTranslationChanged: {
-                                        var newX = moodFlickable.contentX - translation.x;
-                                        moodFlickable.contentX = Math.max(0, Math.min(moodFlickable.contentWidth - moodFlickable.width, newX));
+                                        if (active) {
+                                            var maxScroll = Math.max(0, moodFlickable.contentWidth - moodFlickable.width);
+                                            moodFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
+                                        }
                                     }
                                 }
 
@@ -1677,15 +1685,24 @@ Item {
                                     contentHeight: height
                                     flickableDirection: Flickable.HorizontalFlick
                                     boundsBehavior: Flickable.StopAtBounds
+                                    clip: true
 
                                     DragHandler {
                                         target: null
                                         xAxis.enabled: true
                                         yAxis.enabled: false
                                         cursorShape: Qt.OpenHandCursor
+                                        property real startContentX: 0
+                                        onActiveChanged: {
+                                            if (active) {
+                                                startContentX = recPlFlickable.contentX;
+                                            }
+                                        }
                                         onTranslationChanged: {
-                                            var newX = recPlFlickable.contentX - translation.x;
-                                            recPlFlickable.contentX = Math.max(0, Math.min(recPlFlickable.contentWidth - recPlFlickable.width, newX));
+                                            if (active) {
+                                                var maxScroll = Math.max(0, recPlFlickable.contentWidth - recPlFlickable.width);
+                                                recPlFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
+                                            }
                                         }
                                     }
 
@@ -1859,15 +1876,24 @@ Item {
                                     contentHeight: height
                                     flickableDirection: Flickable.HorizontalFlick
                                     boundsBehavior: Flickable.StopAtBounds
+                                    clip: true
 
                                     DragHandler {
                                         target: null
                                         xAxis.enabled: true
                                         yAxis.enabled: false
                                         cursorShape: Qt.OpenHandCursor
+                                        property real startContentX: 0
+                                        onActiveChanged: {
+                                            if (active) {
+                                                startContentX = artFlickable.contentX;
+                                            }
+                                        }
                                         onTranslationChanged: {
-                                            var newX = artFlickable.contentX - translation.x;
-                                            artFlickable.contentX = Math.max(0, Math.min(artFlickable.contentWidth - artFlickable.width, newX));
+                                            if (active) {
+                                                var maxScroll = Math.max(0, artFlickable.contentWidth - artFlickable.width);
+                                                artFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
+                                            }
                                         }
                                     }
 

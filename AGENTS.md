@@ -653,6 +653,14 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Khắc Phục Lỗi Dữ Liệu Mood Feeds Bị Trống (`backend/ytmusic_helper.py`)**:
       - Khắc phục lỗi `UnboundLocalError: cannot access local variable 'creator'` trong hàm `_normalize_shelf_item` bằng cách khởi tạo mặc định `creator = artist_name or ""` trước các khối kiểm tra community badge. Giúp toàn bộ các tab tâm trạng (Sleep, Relax, Sad, Romance, Focus, Party, v.v.) hiển thị đầy đủ và phong phú các kệ nội dung mà không bị crash ngầm.
 
+35. **Khắc Phục Lỗi Tràn Biên Mood Chips Ra Vùng Ảnh Bìa & Chuẩn Hóa DragHandler (Item 35)**:
+    - **Cắt Biên Tuyệt Đối (`clip: true`) Cho Flickables Ngang**:
+      - *Bẫy lỗi trước đó*: Trong `YTMusicNowPlayingView.qml`, `moodFlickable` đặt `clip: false`. Trong bố cục chia đôi màn hình 50/50, khi người dùng cuộn hoặc kéo danh sách Mood Chips về phía phải, các chip ở đầu hàng (như "All", "Deep cuts", "Popular") bị dịch chuyển tọa độ sang âm và vẽ tràn qua ranh giới cột, đè trực tiếp lên vùng ảnh bìa bài hát và hình nền desktop.
+      - *Giải pháp triệt để*: Kích hoạt `clip: true` trên toàn bộ các Flickables trượt ngang (`moodFlickable`, `recPlFlickable`, `artFlickable` trong `YTMusicNowPlayingView.qml` và `homeMoodFlickable` trong `HomeFeedView.qml`), bảo đảm nội dung luôn bị giới hạn trong khung hiển thị của nó và cắt gọt sắc nét tại mép cột.
+    - **Chuẩn Hóa Cơ Chế Tọa Độ 1:1 Của `DragHandler`**:
+      - *Bẫy lỗi trước đó*: `DragHandler.translation` trong Qt Quick là độ dịch chuyển tích lũy từ mốc bắt đầu cử chỉ, không phải delta từng frame. Việc liên tục lấy `contentX - translation.x` mỗi frame tạo ra hiện tượng gia tốc ảo lũy tiến (exponential jumping), khiến danh sách bị văng mất kiểm soát khi rê chuột.
+      - *Giải pháp triệt để*: Khai báo thuộc tính `property real startContentX: 0`, lưu mốc tọa độ gốc khi `active` trở thành `true` (`startContentX = flickable.contentX`), và tính toán `flickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x))` khi cử chỉ đang diễn ra, mang lại trải nghiệm kéo rê trực tiếp 1:1 mượt mà và dừng lại chuẩn xác tại hai đầu biên.
+
 ---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)

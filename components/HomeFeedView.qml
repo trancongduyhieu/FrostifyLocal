@@ -128,16 +128,24 @@ Rectangle {
                         boundsBehavior: Flickable.StopAtBounds
                         flickableDirection: Flickable.HorizontalFlick
                         pixelAligned: true
-                        clip: false
+                        clip: true
 
                         DragHandler {
                             target: null
                             xAxis.enabled: true
                             yAxis.enabled: false
                             cursorShape: Qt.OpenHandCursor
+                            property real startContentX: 0
+                            onActiveChanged: {
+                                if (active) {
+                                    startContentX = homeMoodFlickable.contentX;
+                                }
+                            }
                             onTranslationChanged: {
-                                var newX = homeMoodFlickable.contentX - translation.x;
-                                homeMoodFlickable.contentX = Math.max(0, Math.min(homeMoodFlickable.contentWidth - homeMoodFlickable.width, newX));
+                                if (active) {
+                                    var maxScroll = Math.max(0, homeMoodFlickable.contentWidth - homeMoodFlickable.width);
+                                    homeMoodFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
+                                }
                             }
                         }
 
