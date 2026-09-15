@@ -18,6 +18,7 @@ Rectangle {
     property var currentTrack: null
     property bool isPlaying: false
     property alias searchInputText: searchTextInput.text
+    property Item backgroundSourceItem: null
 
     // State
     property string activeTab: "all" // "all", "songs", "albums", "community_playlists", "featured_playlists", "artists"
@@ -46,6 +47,20 @@ Rectangle {
 
     onActiveTabChanged: {
         if (activeTab !== "all") {
+            // Instant pre-population from searchData to prevent (0) display while fetching full 60 items
+            if (searchData) {
+                if (activeTab === "songs" && (!searchRoot.songsFilterItems || searchRoot.songsFilterItems.length === 0) && searchData.songs && searchData.songs.length > 0) {
+                    searchRoot.songsFilterItems = searchData.songs;
+                } else if (activeTab === "albums" && (!searchRoot.albumsFilterItems || searchRoot.albumsFilterItems.length === 0) && searchData.albums && searchData.albums.length > 0) {
+                    searchRoot.albumsFilterItems = searchData.albums;
+                } else if (activeTab === "community_playlists" && (!searchRoot.communityPlaylistsFilterItems || searchRoot.communityPlaylistsFilterItems.length === 0) && searchData.community_playlists && searchData.community_playlists.length > 0) {
+                    searchRoot.communityPlaylistsFilterItems = searchData.community_playlists;
+                } else if (activeTab === "featured_playlists" && (!searchRoot.featuredPlaylistsFilterItems || searchRoot.featuredPlaylistsFilterItems.length === 0) && searchData.featured_playlists && searchData.featured_playlists.length > 0) {
+                    searchRoot.featuredPlaylistsFilterItems = searchData.featured_playlists;
+                } else if (activeTab === "artists" && (!searchRoot.artistsFilterItems || searchRoot.artistsFilterItems.length === 0) && searchData.artists && searchData.artists.length > 0) {
+                    searchRoot.artistsFilterItems = searchData.artists;
+                }
+            }
             fetchTabCategory(activeTab);
         }
     }
@@ -53,6 +68,7 @@ Rectangle {
     // Signals
     signal trackPlayRequested(var trk)
     signal startRadioRequested(var trk)
+    signal artistShuffleRequested(var artistItem, var candidateTracks)
     signal artistSelected(string artistName, string browseId)
     signal albumSelected(var album)
     signal playlistSelected(var playlist)
@@ -887,6 +903,8 @@ Rectangle {
                                     accentColor: searchRoot.accentColor
                                     radius: 16
                                     borderWidth: 1.5
+                                    backgroundSourceItem: searchRoot.backgroundSourceItem
+                                    extraDependency: contentScroll.contentY
 
                                     readonly property var topItem: searchRoot.searchData ? searchRoot.searchData.top_result : null
                                     readonly property bool hasTopResult: !!topItem
@@ -908,9 +926,9 @@ Rectangle {
                                     // Unified Content: Responsive Layout (Side-by-side in wide view, stacked in narrow view)
                                     GridLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 14
-                                        columns: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? 3 : 1
-                                        columnSpacing: 14
+                                        anchors.margins: 16
+                                        columns: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? 2 : 1
+                                        columnSpacing: 20
                                         rowSpacing: 10
 
                                         // =================================================
@@ -918,7 +936,7 @@ Rectangle {
                                         // =================================================
                                         RowLayout {
                                             id: topHeroRow
-                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopTracks) ? 310 : -1
+                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopTracks) ? 318 : -1
                                             Layout.fillWidth: !heroCol.parent.isWide || !topResultUnifiedCard.hasTopTracks
                                             Layout.fillHeight: heroCol.parent.isWide
                                             spacing: 14
@@ -1081,14 +1099,12 @@ Rectangle {
                                                             cursorShape: Qt.PointingHandCursor
                                                             onClicked: {
                                                                 if (topResultUnifiedCard.isArtist) {
-                                                                    var trk = (topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks && topResultUnifiedCard.topItem.top_tracks.length > 0)
-                                                                              ? topResultUnifiedCard.topItem.top_tracks[0]
-                                                                              : ((searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0) ? searchRoot.searchData.songs[0] : null);
-                                                                    if (trk) {
-                                                                        searchRoot.startRadioRequested(trk);
-                                                                    } else {
-                                                                        searchRoot.artistSelected(topResultUnifiedCard.topItem.name, topResultUnifiedCard.topItem.browseId);
-                                                                    }
+                                                                    var allSongs = (searchRoot.songsFilterItems && searchRoot.songsFilterItems.length > 0)
+                                                                                  ? searchRoot.songsFilterItems
+                                                                                  : ((searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0)
+                                                                                     ? searchRoot.searchData.songs
+                                                                                     : ((topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks) ? topResultUnifiedCard.topItem.top_tracks : []));
+                                                                    searchRoot.artistShuffleRequested(topResultUnifiedCard.topItem, allSongs);
                                                                 } else if (topResultUnifiedCard.isAlbum) {
                                                                     searchRoot.albumSelected(topResultUnifiedCard.topItem);
                                                                 } else {
@@ -1152,18 +1168,6 @@ Rectangle {
                                             }
                                         }
 
-                                        // Subtle Divider (Vertical on wide, Horizontal on narrow)
-                                        Rectangle {
-                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? 1 : -1
-                                            Layout.preferredHeight: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? -1 : 1
-                                            Layout.fillWidth: !(heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks)
-                                            Layout.fillHeight: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks)
-                                            Layout.topMargin: 10
-                                            Layout.bottomMargin: 10
-                                            color: Qt.rgba(1, 1, 1, 0.08)
-                                            visible: topResultUnifiedCard.hasTopTracks && topResultUnifiedCard.hasTopResult
-                                        }
-
                                         // =================================================
                                         // RIGHT: TOP 3 SONGS LIST
                                         // =================================================
@@ -1184,8 +1188,15 @@ Rectangle {
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 50
                                                     radius: 8
-                                                    color: topTrackM.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
-                                                    Behavior on color { ColorAnimation { duration: 80 } }
+                                                    color: topTrackRow.isCurrent ?
+                                                        Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.14) :
+                                                        (topTrackM.containsMouse ? Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.08) : "transparent")
+                                                    border.color: topTrackRow.isCurrent ?
+                                                        Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.28) :
+                                                        (topTrackM.containsMouse ? Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.15) : "transparent")
+                                                    border.width: 1
+                                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                                     readonly property bool isCurrent: searchRoot.currentTrack && (searchRoot.currentTrack.videoId === modelData.videoId || (searchRoot.currentTrack.path && searchRoot.currentTrack.path === modelData.path))
 

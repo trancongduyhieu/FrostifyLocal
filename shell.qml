@@ -756,6 +756,87 @@ Scope {
         win.playOnlineTrack(trk, true);
     }
 
+    function playArtistShuffle(artistItem, candidateTracks) {
+        if (!artistItem) return;
+        var aName = artistItem.name || artistItem.title || artistItem.artist || "";
+        var bId = artistItem.browseId || artistItem.channelId || "";
+        win.mainSectionTitle = aName;
+
+        // 1. Immediate instant shuffle playback from candidate pool
+        var pool = [];
+        if (candidateTracks && Array.isArray(candidateTracks) && candidateTracks.length > 0) {
+            pool = candidateTracks.slice();
+        } else if (artistItem.top_tracks && Array.isArray(artistItem.top_tracks) && artistItem.top_tracks.length > 0) {
+            pool = artistItem.top_tracks.slice();
+        } else if (artistItem.popular && Array.isArray(artistItem.popular) && artistItem.popular.length > 0) {
+            pool = artistItem.popular.slice();
+        }
+
+        // Filter out disliked songs
+        pool = pool.filter(function(t) {
+            if (!t) return false;
+            var vid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+            return (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? !ytNowPlayingView.isTrackDisliked(vid) : true;
+        });
+
+        if (pool.length > 0) {
+            var randIdx = Math.floor(Math.random() * pool.length);
+            var chosen = pool[randIdx];
+            var rest = pool.filter(function(_, idx) { return idx !== randIdx; });
+            for (var i = rest.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var tmp = rest[i];
+                rest[i] = rest[j];
+                rest[j] = tmp;
+            }
+            win.currentTracks = [chosen].concat(rest);
+            win.playingPlaylistId = "";
+            win.playOnlineTrack(chosen, false);
+        }
+
+        // 2. Open Now Playing view and switch to UP NEXT tab (as in Image 5)
+        win.isNowPlayingOpen = true;
+        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+            ytNowPlayingView.activeTab = "up_next";
+        }
+
+        // 3. Fetch official full YouTube Music artist shuffle playlist in background
+        var xhr = new XMLHttpRequest();
+        var url = "http://127.0.0.1:17890/api/artist_shuffle?name=" + encodeURIComponent(aName) + "&browseId=" + encodeURIComponent(bId);
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    var fullTracks = (res && res.tracks) ? res.tracks : (Array.isArray(res) ? res : []);
+                    if (fullTracks && fullTracks.length > 0) {
+                        var cur = win.currentTrack;
+                        if (cur) {
+                            var curVid = cur.videoId || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+                            var filtered = fullTracks.filter(function(t) {
+                                if (!t) return false;
+                                var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+                                if (curVid && tVid && curVid === tVid) return false;
+                                return (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? !ytNowPlayingView.isTrackDisliked(tVid) : true;
+                            });
+                            win.currentTracks = [cur].concat(filtered);
+                        } else {
+                            var rIdx = Math.floor(Math.random() * fullTracks.length);
+                            var ch = fullTracks[rIdx];
+                            var rRest = fullTracks.filter(function(_, idx) { return idx !== rIdx; });
+                            win.currentTracks = [ch].concat(rRest);
+                            win.playingPlaylistId = "";
+                            win.playOnlineTrack(ch, false);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Nutsty: parse error in artist_shuffle", e);
+                }
+            }
+        };
+        xhr.send();
+    }
+
     property var currentAlbumMetadata: null
     property var localAlbums: []
 
@@ -1449,22 +1530,7 @@ Scope {
                                 }
                             }
                             onShuffleArtistRequested: artistObj => {
-                                if (artistObj && artistObj.popular && artistObj.popular.length > 0) {
-                                    var shuffled = artistObj.popular.slice();
-                                    for (var i = shuffled.length - 1; i > 0; i--) {
-                                        var j = Math.floor(Math.random() * (i + 1));
-                                        var temp = shuffled[i];
-                                        shuffled[i] = shuffled[j];
-                                        shuffled[j] = temp;
-                                    }
-                                    win.currentTracks = shuffled;
-                                    win.playingPlaylistId = "";
-                                    win.playOnlineTrack(shuffled[0], false);
-                                    win.isNowPlayingOpen = true;
-                                } else if (artistObj && artistObj.metadata && artistObj.metadata.shuffleId) {
-                                    win.startRadioFromTrack({ id: artistObj.metadata.shuffleId, name: artistObj.metadata.name });
-                                    win.isNowPlayingOpen = true;
-                                }
+                                win.playArtistShuffle(artistObj ? (artistObj.metadata || artistObj) : null, artistObj ? (artistObj.popular || []) : []);
                             }
                             onViewAlbumRequested: alb => win.loadAlbumDetails(alb)
                             onOpenArtistRequested: (name, chId) => win.loadArtistDetails(chId || name)
@@ -1483,6 +1549,7 @@ Scope {
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
                             viewMode: win.searchViewMode
+                            backgroundSourceItem: glassCompositeBackdrop
 
                             onTrackPlayRequested: trk => {
                                 if (win.isContextMenuActive) return;
@@ -1502,6 +1569,9 @@ Scope {
                                     win.playTrack(trk);
                                 }
                                 win.isNowPlayingOpen = false;
+                            }
+                            onArtistShuffleRequested: (artistItem, candidateTracks) => {
+                                win.playArtistShuffle(artistItem, candidateTracks);
                             }
                             onStartRadioRequested: trk => {
                                 win.startRadioFromTrack(trk);

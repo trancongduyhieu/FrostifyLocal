@@ -6,6 +6,8 @@ import "."
 Item {
     id: root
 
+    property Item backgroundSourceItem: null
+    property real extraDependency: 0.0
     property real radius: 16
     property real borderWidth: 1.5
     property color accentColor: Theme.accentColor
@@ -18,15 +20,29 @@ Item {
     implicitWidth: 760
     implicitHeight: 194
 
-    // 1. DYNAMIC BACKGROUND SURFACE (Option 2: Gradient Mesh blending with accentColor)
-    Rectangle {
-        id: cardSurface
+    // =========================================================================
+    // 1. DYNAMIC LIQUID GLASS BACKGROUND SURFACE (Option 1: Optical Liquid Glass)
+    // =========================================================================
+    LiquidGlass {
+        id: liquidSurface
         anchors.fill: parent
         radius: root.radius
-        color: Qt.rgba(0.06, 0.07, 0.10, 0.82)
-        clip: true
+        displacement: 18.0
+        aberration: 0.03
+        bevelWidth: 24.0
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+        backgroundSourceItem: root.backgroundSourceItem
+        extraDependency: root.extraDependency
+        isFlowActive: false
 
-        // Horizontal Soft Gradient from Left (Avatar) to Right
+        // A. Subtle Dark Scrim on Surface (Ensures contrast & legibility per smooth-scrim-gradient)
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            color: Qt.rgba(0.04, 0.05, 0.07, 0.52)
+        }
+
+        // B. Horizontal Ambient Soft Gradient (Melts smoothly without muddy dark drag)
         Rectangle {
             anchors.fill: parent
             radius: root.radius
@@ -34,45 +50,33 @@ Item {
                 orientation: Gradient.Horizontal
                 GradientStop {
                     position: 0.0
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isHovered ? 0.22 : 0.14)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isHovered ? 0.22 : 0.16)
                     Behavior on color { ColorAnimation { duration: 250 } }
                 }
                 GradientStop {
                     position: 0.50
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isHovered ? 0.06 : 0.02)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isHovered ? 0.11 : 0.07)
                     Behavior on color { ColorAnimation { duration: 250 } }
                 }
                 GradientStop {
                     position: 1.0
-                    color: "transparent"
+                    // Carry our own RGB with gentle alpha rather than black Color.Transparent (per smooth-scrim-gradient trap #2)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isHovered ? 0.06 : 0.03)
+                    Behavior on color { ColorAnimation { duration: 250 } }
                 }
             }
         }
 
-        // Soft Radial Glow behind Avatar on the left
-        Rectangle {
-            x: 10
-            anchors.verticalCenter: parent.verticalCenter
-            width: 150
-            height: 150
-            radius: 75
-            color: root.accentColor
-            opacity: root.isHovered ? 0.26 : 0.15
-            Behavior on opacity { NumberAnimation { duration: 300 } }
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 48
-                blur: 1.0
-            }
-        }
 
-        // Static subtle base border
+
+        // D. Static Uniform Hairline Accent Border (360° perimeter, zero cold/black edge per liquid-glass-backdrop trap #1)
         Rectangle {
             anchors.fill: parent
             radius: root.radius
             color: "transparent"
-            border.color: root.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : Qt.rgba(1, 1, 1, 0.08)
+            border.color: root.isHovered ?
+                Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) :
+                Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
             border.width: root.borderWidth
             Behavior on border.color { ColorAnimation { duration: 200 } }
         }
@@ -128,10 +132,11 @@ Item {
                         angle: 0
 
                         GradientStop { position: 0.00; color: "transparent" }
-                        GradientStop { position: 0.04; color: root.accentColor }
-                        GradientStop { position: 0.08; color: "#ffffff" }
-                        GradientStop { position: 0.12; color: root.subtleAccentColor }
-                        GradientStop { position: 0.18; color: "transparent" }
+                        GradientStop { position: 0.03; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) }
+                        GradientStop { position: 0.07; color: "#ffffff" }
+                        GradientStop { position: 0.11; color: root.subtleAccentColor }
+                        GradientStop { position: 0.16; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) }
+                        GradientStop { position: 0.20; color: "transparent" }
                         GradientStop { position: 1.00; color: "transparent" }
                     }
                     startX: 0; startY: 0

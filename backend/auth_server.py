@@ -95,6 +95,21 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif path == "/api/artist_shuffle":
+            name = query.get("name", [""])[0]
+            browse_id = query.get("browseId", [""])[0]
+            try:
+                data = ytmusic_helper.get_artist_shuffle(name, browse_id)
+            except Exception as e:
+                print(f"[artist_shuffle error]: {e}", flush=True)
+                data = {"artist": name, "tracks": []}
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         else:
             self.send_response(404)
             self._send_cors_headers()

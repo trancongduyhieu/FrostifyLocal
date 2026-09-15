@@ -149,6 +149,16 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
           - Mô phỏng hiện tượng tán sắc lăng kính khi ánh sáng đi qua rìa mép kính bị bẻ cong lệch pha màu sắc.
        4. *Khử gờ viền sắc và làm dịu biên (Edge Softening)*:
           - Tệp mẫu: `src/index.tsx` (sử dụng Gaussian blur làm mờ nhẹ viền tán sắc để hòa quyện vào phông nền).
+   - **kotlin-footguns (224 Battle-Tested Agent Skills by maxrave-dev)**: `references/kotlin-footguns/`
+     - Kho tri thức 224 agent skills dạng chuẩn `SKILL.md` đúc kết từ quá trình phát triển thực chiến của SimpMusic (tác giả Max Rave). Được lưu trong thư mục `references/` (đã thêm vào `.gitignore` để không commit lên git dự án).
+     - **Cách tra cứu siêu tốc cho AI**:
+       - Tra cứu mục lục 1 dòng/skill tại: [`references/kotlin-footguns/CATALOG.md`](file:///home/apple/Applications/FrostifyLocal/references/kotlin-footguns/CATALOG.md).
+       - Đọc file chi tiết tại: `references/kotlin-footguns/skills/<skill_name>/SKILL.md`.
+     - **Các nhóm kỹ năng trọng tâm trực tiếp cho Nutsty**:
+       1. *Group D (Media playback engine internals - 18 skills)*: Crossfade, DSP chain, player transitions, gapless queues, audio focus traps.
+       2. *Group F (Compose theming, palette extraction & scrims - 7 skills)*: Thuật toán trích xuất bảng màu động, xử lý độ tương phản màu chữ và gradient điện ảnh.
+       3. *Group Δ6 & Δ7 (Release sprint features - 84 skills)*: Word-timed lyrics (karaoke từng từ), Romanization (phiên âm Romaji/Pinyin), player styles, UI visual effects.
+     - **Quy tắc thực thi**: Bất cứ khi nào gặp bài toán khó hoặc bẫy lỗi về audio buffer, crossfade, lyrics syncing hay theme palette, AI **BẮT BUỘC** mở `CATALOG.md` tra cứu và đọc `SKILL.md` liên quan trước khi triển khai.
 9. **Con Quay Loading Trực Tuyến (Nutsty Circular Loader)**:
     - Component: `components/CircularSpinner.qml` vẽ bằng Canvas với cung tròn 270°, hai đầu bo tròn (round cap) và `RotationAnimation` vô hạn 360° (0% CPU overhead).
     - Tích hợp vào nút Play/Pause 36px trong `components/PlayerBarBottom.qml` qua thuộc tính `isLoadingAudio`. Khi chuyển bài hát online, icon Play/Pause tạm thời ẩn và con quay xoay mượt mà cho đến khi MPV bắt đầu đếm thời lượng phát nhạc thực tế (`time_pos > 0`).
@@ -709,18 +719,51 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Hợp Nhất Khối Kết Quả Hàng Đầu (Unified Top Result Card Container)**:
       - *Hiện trạng trước đó*: Thẻ nghệ sĩ (bên trái) nằm trong một ô chữ nhật tối màu bo góc, trong khi 3 bài hát tiêu biểu (bên phải) lại trôi nổi trơ trọi không có nền ngoài trang tìm kiếm, gây mất cân đối thị giác.
       - *Giải pháp triệt để*: Hợp nhất toàn bộ khối Hero nghệ sĩ và 3 bài hát tiêu biểu vào chung một khối card duy nhất (`components/ShinyCardContainer.qml`).
-      - *Bố cục đáp ứng*: Bên trái là Hero Artist / Album / Song (Avatar tròn 92px cắt mặt nạ chuẩn `MultiEffect`, tên nghệ sĩ 20px Bold, subtitle người đăng ký, cụm nút `[ 🔀 Phát ngẫu nhiên ]` và `[ 📻 Mix ]`); ở giữa là vạch phân cách mờ dọc 1px; bên phải là 3 dòng bài hát nổi bật (thumbnail 42px bo góc 8px, overlay icon Play/Pause, thời lượng và lượt xem/views).
+      - *Bố cục đáp ứng liền mạch (Seamless 2-Column Responsive Layout)*: Bên trái là Hero Artist / Album / Song (Avatar tròn 92px cắt mặt nạ chuẩn `MultiEffect`, tên nghệ sĩ 20px Bold, subtitle người đăng ký, cụm nút `[ 🔀 Phát ngẫu nhiên ]` và `[ 📻 Mix ]`); bên phải là 3 dòng bài hát nổi bật (thumbnail 42px bo góc 8px, overlay icon Play/Pause, thời lượng và lượt xem/views).
+      - *Loại bỏ vạch ngăn cách cứng*: Đã xóa bỏ hoàn toàn thanh chia dọc ở giữa theo đúng chuẩn Gestalt Law of Common Region, giúp toàn bộ không gian thẻ thở tự nhiên và thông thoáng.
     - **Chuyển Hóa Hiệu Ứng Ryan Mulligan CSS `@property` Shiny CTA Sang QML Hardware-Accelerated**:
       - *Tệp cốt lõi*: `components/ShinyCardContainer.qml`.
+      - *Hollow Border Mask (Triệt tiêu 100% tia sáng tâm)*: Dùng `Shape` với `PathRectangle` vẽ stroke `1.5px`, `fillColor: "transparent"` làm `maskSource` cho `MultiEffect`, đảm bảo ruột trong suốt tuyệt đối và chỉ có đúng đường viền mép là nhận ánh sáng quay.
       - *Cơ chế quét viền Conic (`border-box conic-gradient`)*: Sử dụng `Shape` với `fillGradient: ConicalGradient` xoay tròn liên tục $0^\circ \rightarrow 360^\circ$ quanh tâm card bằng `RotationAnimation` (chu kỳ 4s, 100% GPU matrix transform, 0% CPU overhead).
       - *Phổ màu chùm sáng điện ảnh*: Chùm sáng hẹp 18% chu vi: `transparent` $\rightarrow$ `accentColor` (4%) $\rightarrow$ `#ffffff` (8% specular core chói sáng) $\rightarrow$ `subtleAccentColor` (12%) $\rightarrow$ `transparent` (18%..100%).
-      - *Mặt nạ viền bo góc kép (`MultiEffect` mask)*: Mặt nạ ngoài bo tròn `radius: 16` kết hợp lớp bề mặt kính tối bên trong lùi vào `borderWidth: 1.5px`, tạo khe viền đúng 1.5px cho chùm sáng quét vòng quanh perimeter của thẻ.
-      - *Inner Ambient Shimmer Bloom*: Vùng ánh sáng khuếch tán bán nguyệt ở đáy thẻ mờ nhạt 48px (`MultiEffect` blur), phản chiếu sắc độ `accentColor` và tự động bừng sáng mượt mà từ `0.06` lên `0.16` khi rê chuột hover.
+    - **Kiến Trúc Bề Mặt Liquid Glass Quang Học & Hairline Accent Border (Phương án 1)**:
+      - *Đồng bộ 100% công nghệ Liquid Glass với PlayerBar*: `ShinyCardContainer` kế thừa trực tiếp engine `LiquidGlass` (`displacement: 18.0`, `aberration: 0.03`, `bevelWidth: 24.0`, `tintColor: rgba(accentColor, 0.16)`), nhận nguồn đệm tổng hợp `backgroundSourceItem: glassCompositeBackdrop` từ `shell.qml` xuyên qua `CategorizedSearchView`.
+      - *Phản xạ quang học & Tán sắc lăng kính*: Bề mặt thẻ có khúc xạ thấu kính uốn cong hình nền bên dưới, kết hợp tán sắc quang sai biên (chromatic aberration) và sức căng bề mặt chất lỏng (keo 502 resin meniscus) tương đồng hoàn hảo với PlayerBar.
+      - *Dark Scrim & Gradient Chống Bệt Màu (smooth-scrim-gradient & liquid-glass-backdrop)*: Áp dụng lớp scrim tối `rgba(0.04, 0.05, 0.07, 0.52)` bảo đảm độ tương phản chữ đọc; dải gradient ngang trải dài toàn phần sử dụng sắc độ `accentColor` ở cả 3 điểm dừng (tránh dùng `Color.Transparent` gây vết xám bẩn ở giữa); đã xóa bỏ hoàn toàn quầng sáng tròn mờ cũ phía sau avatar giúp chân dung nghệ sĩ nổi bật sắc nét trên nền kính lỏng.
+      - *Xóa bỏ vĩnh viễn viền đen lạnh (Hairline Accent Border)*: Viền tĩnh bao quanh 360 độ sử dụng `border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.22)` (hover `0.35`), xóa bỏ hiện tượng viền đen ở cạnh phải.
+      - *Chuẩn hóa tương tác dòng bài hát*: Dòng bài hát đang phát (`isCurrent`) hoặc rê chuột (`containsMouse`) nhận lớp nền và viền tóc mang sắc thái `accentColor` mượt mà, loại bỏ các mảng chữ nhật xám chắp vá.
     - **Tối Ưu Nền Acrylic & Tích Hợp Niri GPU Hardware Blur**:
       - *Cấu hình `window-rule` trong `~/.config/niri/cfg/rules.kdl`*: Khai báo `background-effect { blur true }` cho cả `match title=r#"^Nutsty.*$"#`, `match app-id="dev.noctalia.noctalia-qs"` và `match app-id="frostify-local"`.
       - *Hiệu ứng quang học*: Cửa sổ Nutsty khi nổi trên desktop Linux Wayland (Niri) làm mờ sâu toàn bộ hình nền anime và các cửa sổ bên dưới thành hiệu ứng bokeh mịn màng, giúp giao diện trong suốt acrylic cực kỳ dịu mắt và nội dung văn bản luôn nổi bật, sắc nét 100%.
 
+38. **Cơ Chế Artist Shuffle Mở Up Next Chuẩn YouTube Music & Khắc Phục Triệt Để Category Tabs (0) (Item 38)**:
+    - **Khắc Phục Triệt Để Lỗi Các Tab Thể Loại Trả Về `(0)` (`run.sh` & `CategorizedSearchView.qml`)**:
+      - *Nguyên nhân gốc (Root Cause)*:
+        - Trong `run.sh`, các tiến trình chạy ngầm (`auth_server.py`, `tray_indicator.py`) sử dụng đường dẫn tuyệt đối `/usr/bin/python3`.
+        - Trên hệ điều hành Linux của người dùng, `/usr/bin/python3` là Python mặc định của hệ thống và **không** có thư viện `ytmusicapi` (thư viện được cài trong môi trường Python người dùng / Miniconda `~/.local` hoặc `~/miniconda3/bin/python3`).
+        - Khi `run.sh` khởi chạy `backend/auth_server.py` bằng `/usr/bin/python3`, mọi request `/api/filter_search` đều gặp ngoại lệ `ModuleNotFoundError: No module named 'ytmusicapi'`, khiến server trả về mảng rỗng `[]` và toàn bộ các tab ("Bài hát", "Albums", "Danh sách phát cộng đồng") hiển thị `(0)`.
+      - *Giải pháp triệt để*:
+        1. Chuẩn hóa `run.sh` sử dụng `python3` từ biến môi trường `$PATH` thay vì hardcode `/usr/bin/python3`, tuân thủ nghiêm ngặt nguyên tắc Zero-Setup & Universal Portability.
+        2. Bổ sung cơ chế **Instant Pre-population (Độ trễ 0ms)** trong `CategorizedSearchView.qml`: Khi người dùng chuyển đổi giữa các tab filter chips (`songs`, `albums`, `community_playlists`, `featured_playlists`, `artists`), nếu `searchData` đã có sẵn dữ liệu từ lượt tìm kiếm tổng hợp ban đầu, giao diện lập tức gán và hiển thị ngay danh sách đó, tuyệt đối không để màn hình trắng hay hiện `(0)` trong khi request HTTP background đang tải đầy đủ 60 mục từ YouTube Music.
+    - **Cơ Chế Artist Shuffle Mở Up Next Chuẩn YouTube Music (Ảnh 5 - Item 38)**:
+      - *Hiện trạng trước đó*: Khi người dùng bấm nút `[ 🔀 Phát ngẫu nhiên ]` tại Hero Artist Card, hệ thống chỉ lấy bài hát đầu tiên trong 3 bài hát đang hiển thị trên card (`top_tracks[0]`), gọi `startRadioFromTrack` và đóng màn hình Now Playing (`isNowPlayingOpen = false`).
+      - *Kiến trúc nâng cấp toàn diện*:
+        1. **Thuật toán gom bài & chọn ngẫu nhiên tức thì (< 100ms)**:
+           - Khi click `[ 🔀 Phát ngẫu nhiên ]` trên thẻ nghệ sĩ, `CategorizedSearchView.qml` phát tín hiệu `artistShuffleRequested(topItem, allSongs)`.
+           - Hàm `playArtistShuffle(artistItem, candidateTracks)` trong `shell.qml` lập tức tổng hợp toàn bộ các bài hát hiện có của nghệ sĩ đó (từ `searchData.songs`, `songsFilterItems` hoặc `top_tracks`), lọc bỏ các bài đã dislike.
+           - Chọn ngẫu nhiên một bài hát bất kỳ bằng `Math.floor(Math.random() * pool.length)` để phát ngay lập tức (không bị đóng đinh ở bài 0), xáo trộn các bài còn lại bằng thuật toán Fisher-Yates shuffle và nạp vào hàng đợi `win.currentTracks`.
+        2. **Tự động mở bung màn hình Now Playing & chuyển tab `UP NEXT`**:
+           - Thiết lập `win.isNowPlayingOpen = true;` và chuyển đổi trực tiếp `ytNowPlayingView.activeTab = "up_next";`.
+           - Cập nhật tiêu đề hàng đợi `win.mainSectionTitle = aName;` để giao diện hiển thị dòng chữ đẳng cấp: `Playing from <Tên Nghệ Sĩ>` (ví dụ: `Playing from Sơn Tùng M-TP`, `Playing from 9Lana`).
+           - Kích hoạt engine bóc tách `fetchMoodChips()` trên bài hát vừa chọn, hiển thị trọn vẹn dãy viên thuốc tâm trạng: `[ All ] [ Deep cuts ] [ Popular ] [ Discover ] [ Familiar ] [ Pump-up ] [ Romance ]...` giống hệt YouTube Music Web trong Ảnh 5.
+        3. **Backend API chính thức `/api/artist_shuffle` (`backend/ytmusic_helper.py` & `auth_server.py`)**:
+           - Bổ sung hàm `get_artist_shuffle(name, browse_id)`: Bóc tách mã danh sách phát ngẫu nhiên chính thức của nghệ sĩ từ YouTube Music (`shuffleId` có tiền tố `RDAO...`, ví dụ `RDAOeyKnYmm7ScRhnRO9nwOSNA` của Sơn Tùng M-TP hoặc `RDAOKZCelfsluv5omwg3OslA4g` của 9Lana).
+           - Gọi `ytm.get_watch_playlist(playlistId=shuffleId)` để lấy 50 bài hát chính thức do YouTube Music biên tập riêng cho nghệ sĩ đó.
+           - Endpoint resident daemon `/api/artist_shuffle` trả về JSON nhanh chóng; `shell.qml` nhận kết quả ngầm và mở rộng hàng đợi `win.currentTracks` mượt mà, bảo lưu bài hát đang phát ở vị trí đầu tiên.
+           - Đồng bộ hoàn toàn cả nút Shuffle tại màn hình chi tiết nghệ sĩ (`ArtistDetailView.qml` - `onShuffleArtistRequested`).
+
 ---
+
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 

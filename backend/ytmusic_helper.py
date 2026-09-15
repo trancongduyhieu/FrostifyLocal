@@ -1684,6 +1684,74 @@ def filter_search(query, category="songs"):
         return []
 
 
+def get_artist_shuffle(name, browse_id=None):
+    """
+    Fetches the full official YouTube Music artist shuffle queue (up to 50 tracks)
+    using the artist's shuffleId (e.g. 'RDAO...'), with fallback to filter_search songs.
+    """
+    yt = get_ytmusic_client()
+    tracks = []
+    artist_name = (name or "").strip()
+    clean_id = (browse_id or "").strip()
+
+    # Strategy 1: Use official shuffleId from artist details
+    if clean_id:
+        try:
+            art = get_artist(clean_id)
+            if art and isinstance(art, dict):
+                meta = art.get("metadata", {})
+                if not artist_name:
+                    artist_name = meta.get("name", "")
+                shuf_id = meta.get("shuffleId")
+                if shuf_id:
+                    wp = yt.get_watch_playlist(playlistId=shuf_id)
+                    raw_tracks = wp.get("tracks", [])
+                    for t in raw_tracks:
+                        norm = normalize_track(t)
+                        if norm and not is_song_disliked(norm.get("videoId")):
+                            tracks.append(norm)
+                    if tracks:
+                        cache_online_tracks(tracks)
+                        return {"artist": artist_name, "playlistId": shuf_id, "tracks": tracks}
+        except Exception as e:
+            sys.stderr.write(f"[get_artist_shuffle strategy 1 error]: {e}\n")
+
+    # Strategy 2: If no browse_id, search artist first to get browseId & shuffleId
+    if not tracks and artist_name:
+        try:
+            sr = yt.search(artist_name, filter="artists")
+            if sr and len(sr) > 0:
+                first_aid = sr[0].get("browseId")
+                if first_aid:
+                    art = get_artist(first_aid)
+                    if art and isinstance(art, dict):
+                        shuf_id = art.get("metadata", {}).get("shuffleId")
+                        if shuf_id:
+                            wp = yt.get_watch_playlist(playlistId=shuf_id)
+                            raw_tracks = wp.get("tracks", [])
+                            for t in raw_tracks:
+                                norm = normalize_track(t)
+                                if norm and not is_song_disliked(norm.get("videoId")):
+                                    tracks.append(norm)
+                            if tracks:
+                                cache_online_tracks(tracks)
+                                return {"artist": artist_name, "playlistId": shuf_id, "tracks": tracks}
+        except Exception as e:
+            sys.stderr.write(f"[get_artist_shuffle strategy 2 error]: {e}\n")
+
+    # Strategy 3: Fallback search songs by artist
+    if not tracks and artist_name:
+        try:
+            songs = filter_search(artist_name, "songs")
+            if songs:
+                tracks = songs
+        except Exception as e:
+            sys.stderr.write(f"[get_artist_shuffle strategy 3 error]: {e}\n")
+
+    return {"artist": artist_name, "playlistId": "songs", "tracks": tracks}
+
+
+
 
 def search_albums(query, limit=10):
     if not query or not query.strip():
@@ -2485,5 +2553,12 @@ if __name__ == "__main__":
         flt = sys.argv[3] if len(sys.argv) > 3 else "songs"
         res = filter_search(q, flt)
         print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "artist_shuffle" and len(sys.argv) > 2:
+        name = sys.argv[2]
+        browse_id = sys.argv[3] if len(sys.argv) > 3 else None
+        res = get_artist_shuffle(name, browse_id)
+        print(json.dumps(res, ensure_ascii=False))
+
 
 
