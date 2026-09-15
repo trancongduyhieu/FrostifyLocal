@@ -389,91 +389,28 @@ Rectangle {
                         }
                     }
 
-                    // Right Controls: Carousel Navigation (< and >) - Liquid Glass Dynamic Accent
+                    // Right Controls: Carousel Navigation (< and >) - Standardized NavArrowButton
                     RowLayout {
                         id: arrowNavControls
                         spacing: 8
                         visible: secDelegate.activeFlickable && secDelegate.activeFlickable.contentWidth > secDelegate.activeFlickable.width
 
-                        // Prev Button (<)
-                        Rectangle {
-                            id: prevBtn
-                            width: 32
-                            height: 32
-                            radius: 16
-                            opacity: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX > 2) ? 1.0 : 0.25
-                            enabled: opacity > 0.5
-                            scale: (prevMouse.containsMouse && enabled) ? 1.06 : 1.0
-
-                            color: (prevMouse.containsMouse && enabled)
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                                   : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
-                            border.width: 1
-                            border.color: (prevMouse.containsMouse && enabled)
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.75)
-                                          : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-
-                            Behavior on color { ColorAnimation { duration: 300 } }
-                            Behavior on border.color { ColorAnimation { duration: 300 } }
-                            Behavior on scale { NumberAnimation { duration: 120 } }
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/go-previous-symbolic.svg"
-                                iconSize: 14
-                                color: root.accentColor
-                                Behavior on color { ColorAnimation { duration: 300 } }
-                            }
-
-                            MouseArea {
-                                id: prevMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: secDelegate.scrollBy(-540)
-                            }
+                        NavArrowButton {
+                            direction: "left"
+                            accentColor: root.accentColor
+                            btnSize: 32
+                            iconSize: 14
+                            canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX > 2)
+                            onClicked: secDelegate.scrollBy(-540)
                         }
 
-                        // Next Button (>)
-                        Rectangle {
-                            id: nextBtn
-                            width: 32
-                            height: 32
-                            radius: 16
-                            opacity: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX < (secDelegate.activeFlickable.contentWidth - secDelegate.activeFlickable.width - 10)) ? 1.0 : 0.25
-                            enabled: opacity > 0.5
-                            scale: (nextMouse.containsMouse && enabled) ? 1.06 : 1.0
-
-                            color: (nextMouse.containsMouse && enabled)
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                                   : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
-                            border.width: 1
-                            border.color: (nextMouse.containsMouse && enabled)
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.75)
-                                          : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-
-                            Behavior on color { ColorAnimation { duration: 300 } }
-                            Behavior on border.color { ColorAnimation { duration: 300 } }
-                            Behavior on scale { NumberAnimation { duration: 120 } }
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/go-previous-symbolic.svg"
-                                rotation: 180
-                                iconSize: 14
-                                color: root.accentColor
-                                Behavior on color { ColorAnimation { duration: 300 } }
-                            }
-
-                            MouseArea {
-                                id: nextMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: secDelegate.scrollBy(540)
-                            }
+                        NavArrowButton {
+                            direction: "right"
+                            accentColor: root.accentColor
+                            btnSize: 32
+                            iconSize: 14
+                            canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX < (secDelegate.activeFlickable.contentWidth - secDelegate.activeFlickable.width - 10))
+                            onClicked: secDelegate.scrollBy(540)
                         }
                     }
                 }

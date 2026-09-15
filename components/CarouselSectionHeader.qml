@@ -30,73 +30,42 @@ RowLayout {
         easing.type: Easing.OutCubic
     }
 
+    property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+
     // Prev Button (<)
-    Rectangle {
-        width: 32
-        height: 32
-        radius: 16
-        color: prevMouse.containsMouse ? "#38383c" : "#222226"
-        opacity: (root.targetFlickable && root.targetFlickable.contentX > 10) ? 1.0 : 0.35
+    NavArrowButton {
+        direction: "left"
+        accentColor: root.accentColor
+        btnSize: 32
+        iconSize: 14
+        canScroll: root.targetFlickable ? (root.targetFlickable.contentX > 10) : false
         visible: root.targetFlickable ? (root.targetFlickable.contentWidth > root.targetFlickable.width) : false
-        Behavior on color { ColorAnimation { duration: 100 } }
-        Behavior on opacity { NumberAnimation { duration: 150 } }
-
-        AppIcon {
-            anchors.centerIn: parent
-            source: "../assets/icons/go-previous-symbolic.svg"
-            iconSize: 14
-            color: "#ffffff"
-        }
-
-        MouseArea {
-            id: prevMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (!root.targetFlickable) return;
-                var targetX = Math.max(0, root.targetFlickable.contentX - root.stepSize);
-                scrollAnim.stop();
-                scrollAnim.target = root.targetFlickable;
-                scrollAnim.to = targetX;
-                scrollAnim.restart();
-            }
+        onClicked: {
+            if (!root.targetFlickable) return;
+            var targetX = Math.max(0, root.targetFlickable.contentX - root.stepSize);
+            scrollAnim.stop();
+            scrollAnim.target = root.targetFlickable;
+            scrollAnim.to = targetX;
+            scrollAnim.restart();
         }
     }
 
     // Next Button (>)
-    Rectangle {
-        width: 32
-        height: 32
-        radius: 16
-        color: nextMouse.containsMouse ? "#38383c" : "#222226"
-        opacity: (root.targetFlickable && (root.targetFlickable.contentX < (root.targetFlickable.contentWidth - root.targetFlickable.width - 10))) ? 1.0 : 0.35
+    NavArrowButton {
+        direction: "right"
+        accentColor: root.accentColor
+        btnSize: 32
+        iconSize: 14
+        canScroll: root.targetFlickable ? (root.targetFlickable.contentX < (root.targetFlickable.contentWidth - root.targetFlickable.width - 10)) : false
         visible: root.targetFlickable ? (root.targetFlickable.contentWidth > root.targetFlickable.width) : false
-        Behavior on color { ColorAnimation { duration: 100 } }
-        Behavior on opacity { NumberAnimation { duration: 150 } }
-
-        AppIcon {
-            anchors.centerIn: parent
-            source: "../assets/icons/go-previous-symbolic.svg"
-            rotation: 180
-            iconSize: 14
-            color: "#ffffff"
-        }
-
-        MouseArea {
-            id: nextMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (!root.targetFlickable) return;
-                var maxX = Math.max(0, root.targetFlickable.contentWidth - root.targetFlickable.width);
-                var targetX = Math.min(maxX, root.targetFlickable.contentX + root.stepSize);
-                scrollAnim.stop();
-                scrollAnim.target = root.targetFlickable;
-                scrollAnim.to = targetX;
-                scrollAnim.restart();
-            }
+        onClicked: {
+            if (!root.targetFlickable) return;
+            var maxX = Math.max(0, root.targetFlickable.contentWidth - root.targetFlickable.width);
+            var targetX = Math.min(maxX, root.targetFlickable.contentX + root.stepSize);
+            scrollAnim.stop();
+            scrollAnim.target = root.targetFlickable;
+            scrollAnim.to = targetX;
+            scrollAnim.restart();
         }
     }
 }

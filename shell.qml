@@ -275,6 +275,7 @@ Scope {
                         win.browsingTracks = songs;
                         win.currentView = "search";
                         win.searchViewMode = "results";
+                        searchView.viewMode = "results";
                         mainGrid.sectionTitle = 'Results for "' + (win.lastYTQuery || "Search") + '"';
                     }
                 } catch(e) {
@@ -670,6 +671,15 @@ Scope {
 
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
+        var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (!rVid) {
+            if (trk.path && !trk.path.startsWith("ytdl://")) {
+                win.playTrack(trk);
+                return;
+            }
+            console.warn("Nutsty: playOnlineTrack called without valid videoId or local path", JSON.stringify(trk));
+            return;
+        }
         if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
@@ -702,7 +712,7 @@ Scope {
             }
         }
 
-        var streamPath = trk.path || ("ytdl://" + trk.videoId);
+        var streamPath = "ytdl://" + rVid;
         var tTitle = trk.title || trk.name || "";
         var tArtist = trk.artist || "";
         var tImage = trk.image || "";
@@ -727,7 +737,6 @@ Scope {
             }
         }
 
-        var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         if (startRadio && rVid) {
             radioProc.running = false;
             radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", rVid];
@@ -738,6 +747,11 @@ Scope {
 
     function startRadioFromTrack(trk) {
         if (!trk) return;
+        var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (!rVid) {
+            console.warn("Nutsty: startRadioFromTrack called without valid videoId", JSON.stringify(trk));
+            return;
+        }
         win.currentTracks = [trk];
         win.playOnlineTrack(trk, true);
     }
@@ -974,7 +988,7 @@ Scope {
             anchors.fill: parent
             z: 0
             visible: opacity > 0.001
-            opacity: (win.currentTrack && win.isPlaying) ? 0.92 : 0.0
+            opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
             Behavior on opacity {
                 NumberAnimation {
                     duration: 450
@@ -988,17 +1002,18 @@ Scope {
                 color: "#0a0b0e"
             }
 
-            // Song Artwork Image
+            // Song Artwork Image - downscaled to 48x48 so high-contrast figures/dolls melt completely into smooth color fields
             Image {
                 id: songAtmosphereImg
                 anchors.fill: parent
                 source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                sourceSize: Qt.size(48, 48)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 visible: false
             }
 
-            // Ultra-diffuse Velvet MultiEffect Blur (blurMax: 96)
+            // Ultra-diffuse Velvet MultiEffect Blur (blurMax: 64)
             MultiEffect {
                 id: songAtmosphereEffect
                 anchors.fill: parent
@@ -1006,10 +1021,10 @@ Scope {
                 visible: songAtmosphereImg.status === Image.Ready
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 96
-                saturation: 1.40
-                brightness: -0.06
-                opacity: 0.62
+                blurMax: 64
+                saturation: 1.45
+                brightness: -0.22
+                opacity: 0.55
             }
 
             // Adaptive Dark Scrim (Comfortable brightness on Home/Downloads, deeper for Now Playing)
@@ -1018,17 +1033,17 @@ Scope {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.68) : Qt.rgba(0.02, 0.02, 0.04, 0.48)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.85) : Qt.rgba(0.02, 0.02, 0.04, 0.72)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.80) : Qt.rgba(0.01, 0.01, 0.02, 0.58)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.90) : Qt.rgba(0.01, 0.01, 0.02, 0.80)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.94) : Qt.rgba(0.01, 0.01, 0.02, 0.72)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.96) : Qt.rgba(0.01, 0.01, 0.02, 0.88)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }
@@ -1475,7 +1490,9 @@ Scope {
                                     win.loadAlbumDetails(trk);
                                     return;
                                 }
-                                if (win.categorizedSearchData && win.categorizedSearchData.songs && win.categorizedSearchData.songs.length > 0) {
+                                if (searchView.activeTab === "songs" && searchView.songsFilterItems && searchView.songsFilterItems.length > 0) {
+                                    win.currentTracks = searchView.songsFilterItems;
+                                } else if (win.categorizedSearchData && win.categorizedSearchData.songs && win.categorizedSearchData.songs.length > 0) {
                                     win.currentTracks = win.categorizedSearchData.songs;
                                 }
                                 win.playingPlaylistId = "";
@@ -1508,12 +1525,14 @@ Scope {
                             onSearchSubmitted: q => {
                                 win.isNowPlayingOpen = false;
                                 win.searchViewMode = "results";
+                                searchView.viewMode = "results";
                                 win.lastYTQuery = q;
                                 win.performYTSearch(q);
                             }
                             onSuggestionClicked: q => {
                                 win.isNowPlayingOpen = false;
                                 win.searchViewMode = "results";
+                                searchView.viewMode = "results";
                                 win.lastYTQuery = q;
                                 win.performYTSearch(q);
                             }
@@ -2575,8 +2594,11 @@ Scope {
             win.visible = true;
             win.isNowPlayingOpen = false;
             win.currentView = "search";
+            if (searchView) {
+                searchView.setSearchInput(q);
+                searchView.viewMode = "results";
+            }
             win.searchViewMode = "results";
-            if (searchView) searchView.setSearchInput(q);
             win.performYTSearch(q);
         }
         function switchSearchTab(tab: string) {

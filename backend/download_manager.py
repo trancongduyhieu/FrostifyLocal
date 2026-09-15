@@ -258,6 +258,31 @@ class DownloadManager:
                     self.batch_completed = 0
                     self.batch_failed = 0
 
+    def _get_exported_cookie_file(self):
+        auth_file = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
+        if not os.path.exists(auth_file):
+            return None
+        try:
+            with open(auth_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            raw_cookie = data.get("cookie", "")
+            if not raw_cookie:
+                return None
+            out_path = "/tmp/nutsty_yt_cookies.txt"
+            now = int(time.time()) + 365 * 86400
+            lines = ["# Netscape HTTP Cookie File\n"]
+            for item in raw_cookie.split(";"):
+                item = item.strip()
+                if not item or "=" not in item:
+                    continue
+                k, v = item.split("=", 1)
+                lines.append(f".youtube.com\tTRUE\t/\tTRUE\t{now}\t{k.strip()}\t{v.strip()}\n")
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            return out_path
+        except Exception:
+            return None
+
     def _execute_download(self, task):
         import yt_dlp
 
@@ -296,10 +321,11 @@ class DownloadManager:
                         "eta": eta_str
                     })
 
-        ydl_opts = {
+        base_opts = {
             "format": "bestaudio/best",
             "outtmpl": os.path.join(dl_dir, "%(title)s.%(ext)s"),
-            "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb"]}},
+            "remote_components": ["ejs:github"],
+            "extractor_args": {"youtube": {"player_client": ["ios", "android", "mweb", "web"]}},
             "writethumbnail": True,
             "embedthumbnail": True,
             "postprocessors": [
@@ -316,40 +342,64 @@ class DownloadManager:
             "progress_hooks": [progress_hook],
         }
 
-        downloaded_file = None
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(target_url, download=True)
-                title = info.get("title", task["title"])
-                task["title"] = title
-                # Find output filename
-                expected_fn = ydl.prepare_filename(info)
-                base, _ = os.path.splitext(expected_fn)
-                m4a_path = base + ".m4a"
-                if os.path.exists(m4a_path):
-                    downloaded_file = m4a_path
-                elif os.path.exists(expected_fn):
-                    downloaded_file = expected_fn
+        attempts = [base_opts]
 
-            with self.lock:
-                task["state"] = STATE_DOWNLOADED
-                task["progress"] = 100.0
-                task["path"] = downloaded_file or ""
+        # Tier 2: Try with exported cookies if user has authenticated
+        cookie_file = self._get_exported_cookie_file()
+        if cookie_file:
+            auth_opts = dict(base_opts)
+            auth_opts["cookiefile"] = cookie_file
+            auth_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
+            attempts.append(auth_opts)
 
-            # Fetch synced lyrics alongside the downloaded audio
-            if downloaded_file:
-                self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
+        # Tier 3: Browser cookie extraction fallback
+        for browser in ["firefox", "chrome", "chromium", "brave"]:
+            b_opts = dict(base_opts)
+            b_opts["cookiesfrombrowser"] = (browser,)
+            b_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
+            attempts.append(b_opts)
 
-            # Trigger library re-index so the new track appears in Nutsty 0ms
-            self._trigger_library_rescan()
-            return True
+        last_err = None
+        for attempt_idx, current_opts in enumerate(attempts):
+            try:
+                with yt_dlp.YoutubeDL(current_opts) as ydl:
+                    info = ydl.extract_info(target_url, download=True)
+                    title = info.get("title", task["title"])
+                    task["title"] = title
+                    # Find output filename
+                    expected_fn = ydl.prepare_filename(info)
+                    base, _ = os.path.splitext(expected_fn)
+                    m4a_path = base + ".m4a"
+                    downloaded_file = None
+                    if os.path.exists(m4a_path):
+                        downloaded_file = m4a_path
+                    elif os.path.exists(expected_fn):
+                        downloaded_file = expected_fn
 
-        except Exception as e:
-            err_msg = str(e)
-            with self.lock:
-                task["state"] = STATE_FAILED
-                task["error"] = err_msg
-            return False
+                with self.lock:
+                    task["state"] = STATE_DOWNLOADED
+                    task["progress"] = 100.0
+                    task["path"] = downloaded_file or ""
+
+                # Fetch synced lyrics alongside the downloaded audio
+                if downloaded_file:
+                    self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
+
+                # Trigger library re-index so the new track appears in Nutsty 0ms
+                self._trigger_library_rescan()
+                return True
+
+            except Exception as e:
+                last_err = e
+                err_str = str(e).lower()
+                if "sign in" not in err_str and "bot" not in err_str and "429" not in err_str and "challenge" not in err_str:
+                    break
+                continue
+
+        with self.lock:
+            task["state"] = STATE_FAILED
+            task["error"] = str(last_err)
+        return False
 
     def _fetch_lyrics_for_file(self, audio_path, title, artist, video_id):
         try:

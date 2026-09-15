@@ -48,8 +48,8 @@ Item {
         width: 390
         height: Math.min(Math.max(tasksCol.implicitHeight + 84, 160), 480)
 
-        // Positioned below header near download pill
-        x: Math.max(20, Math.min(parent.width - width - 24, 380))
+        // Positioned centered below header
+        anchors.horizontalCenter: parent.horizontalCenter
         y: 64
 
         scale: root.isOpen ? 1.0 : 0.95
@@ -258,15 +258,17 @@ Item {
                     spacing: 10
 
                     // Empty State
-                    ColumnLayout {
+                    Column {
                         Layout.fillWidth: true
-                        spacing: 6
+                        width: tasksCol.width
+                        spacing: 8
                         visible: root.activeTasks.length === 0 && root.completedTasks.length === 0
-                        Layout.topMargin: 20
-                        Layout.bottomMargin: 20
+                        topPadding: 24
+                        bottomPadding: 24
 
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
                             text: "No active downloads"
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
@@ -275,7 +277,8 @@ Item {
                         }
 
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
                             text: "Downloaded tracks are saved to ~/Music/Downloads_Phone"
                             font.family: Theme.fontFamily
                             font.pixelSize: 11

@@ -74,6 +74,17 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif path == "/api/filter_search":
+            q = query.get("q", [""])[0]
+            flt = query.get("filter", ["songs"])[0]
+            data = ytmusic_helper.filter_search(q, flt)
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         elif path == "/api/playlist":
             pl_id = query.get("id", [""])[0]
             data = ytmusic_helper.get_playlist_tracks(pl_id)

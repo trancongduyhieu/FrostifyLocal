@@ -32,6 +32,11 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 >      4. Đưa ra giải pháp kỹ thuật tối ưu và trình bày rõ ràng trước khi viết mã nguồn.
 > 7. **QUY TẮC CẬP NHẬT TÀI LIỆU KIẾN TRÚC BẮT BUỘC (MANDATORY ARCHITECTURE UPDATE)**:
 >    - Khi có bất kỳ thay đổi nào về kiến trúc, thêm module, đổi thư viện lõi, hoặc hoàn thành một tính năng lớn từ `TODO.md`, AI **BẮT BUỘC** phải cập nhật lại tài liệu `AGENTS.md` (mô tả kiến trúc chi tiết, giải pháp kỹ thuật, cơ chế hoạt động, file liên quan và các bẫy lỗi cần tránh) kèm tóm tắt changelog.
+> 8. **CHUẨN HÓA MŨI TÊN ĐIỀU HƯỚNG & CAROUSEL (`components/NavArrowButton.qml`)**:
+>    - Mọi nút bấm mũi tên điều hướng, lướt ngang carousel `<` và `>` trên toàn bộ ứng dụng **BẮT BUỘC** phải dùng component chuẩn `components/NavArrowButton.qml`.
+>    - Tuyệt đối không tự ý viết các khối `Rectangle` thủ công với màu xám tĩnh (`rgba(1,1,1,0.06)` hay viền chết).
+>    - `NavArrowButton` tự động liên kết màu sắc động `accentColor` (đổi màu theo hình nền desktop / avatar bài hát đang phát), có hiệu ứng hover mượt mà, scale 1.06x và tự động làm mờ (`opacity: 0.28`, `enabled: false`) khi chạm giới hạn cuộn (`canScroll`).
+>    - **Lưu ý**: Riêng tại trang Kết quả tìm kiếm (`CategorizedSearchView.qml`), không sử dụng các nút `< >` để giữ giao diện tối giản và tinh gọn, người dùng xem đầy đủ danh mục bằng cách chọn trực tiếp các Filter Chips ở đầu trang.
 
 ---
 
@@ -72,6 +77,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 │   ├── SkeletonTrackRow.qml        # Khung xương dòng ngang shimmer cho hàng đợi sidebar
 │   ├── AppIcon.qml             # Component icon SVG độc lập (chuẩn hóa icon toàn app)
 │   ├── MainTrackGrid.qml         # Grid danh sách bài hát, card hiển thị và nút [ ▶ Phát ] tuần tự
+│   ├── NavArrowButton.qml        # Component nút mũi tên điều hướng < và > đồng bộ màu động accentColor
 │   ├── PlayerBarBottom.qml        # Thanh phát nhạc chính Nutsty (thời lượng, âm lượng, Amberol button)
 │   ├── NavSidebar.qml          # Sidebar điều hướng [ Playlists | Queue ] hai tab tương tác
 │   ├── Theme.qml                   # Hệ thống token màu, kích thước bo góc, padding
@@ -699,6 +705,20 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Chuẩn Hóa Cơ Chế Tọa Độ 1:1 Của `DragHandler`**:
       - *Bẫy lỗi trước đó*: `DragHandler.translation` trong Qt Quick là độ dịch chuyển tích lũy từ mốc bắt đầu cử chỉ, không phải delta từng frame. Việc liên tục lấy `contentX - translation.x` mỗi frame tạo ra hiện tượng gia tốc ảo lũy tiến (exponential jumping), khiến danh sách bị văng mất kiểm soát khi rê chuột.
       - *Giải pháp triệt để*: Khai báo thuộc tính `property real startContentX: 0`, lưu mốc tọa độ gốc khi `active` trở thành `true` (`startContentX = flickable.contentX`), và tính toán `flickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x))` khi cử chỉ đang diễn ra, mang lại trải nghiệm kéo rê trực tiếp 1:1 mượt mà và dừng lại chuẩn xác tại hai đầu biên.
+37. **Kiến Trúc Unified Top Result Card & Hiệu Ứng Ryan Mulligan Shiny CTA (`ShinyCardContainer.qml`) (Item 37)**:
+    - **Hợp Nhất Khối Kết Quả Hàng Đầu (Unified Top Result Card Container)**:
+      - *Hiện trạng trước đó*: Thẻ nghệ sĩ (bên trái) nằm trong một ô chữ nhật tối màu bo góc, trong khi 3 bài hát tiêu biểu (bên phải) lại trôi nổi trơ trọi không có nền ngoài trang tìm kiếm, gây mất cân đối thị giác.
+      - *Giải pháp triệt để*: Hợp nhất toàn bộ khối Hero nghệ sĩ và 3 bài hát tiêu biểu vào chung một khối card duy nhất (`components/ShinyCardContainer.qml`).
+      - *Bố cục đáp ứng*: Bên trái là Hero Artist / Album / Song (Avatar tròn 92px cắt mặt nạ chuẩn `MultiEffect`, tên nghệ sĩ 20px Bold, subtitle người đăng ký, cụm nút `[ 🔀 Phát ngẫu nhiên ]` và `[ 📻 Mix ]`); ở giữa là vạch phân cách mờ dọc 1px; bên phải là 3 dòng bài hát nổi bật (thumbnail 42px bo góc 8px, overlay icon Play/Pause, thời lượng và lượt xem/views).
+    - **Chuyển Hóa Hiệu Ứng Ryan Mulligan CSS `@property` Shiny CTA Sang QML Hardware-Accelerated**:
+      - *Tệp cốt lõi*: `components/ShinyCardContainer.qml`.
+      - *Cơ chế quét viền Conic (`border-box conic-gradient`)*: Sử dụng `Shape` với `fillGradient: ConicalGradient` xoay tròn liên tục $0^\circ \rightarrow 360^\circ$ quanh tâm card bằng `RotationAnimation` (chu kỳ 4s, 100% GPU matrix transform, 0% CPU overhead).
+      - *Phổ màu chùm sáng điện ảnh*: Chùm sáng hẹp 18% chu vi: `transparent` $\rightarrow$ `accentColor` (4%) $\rightarrow$ `#ffffff` (8% specular core chói sáng) $\rightarrow$ `subtleAccentColor` (12%) $\rightarrow$ `transparent` (18%..100%).
+      - *Mặt nạ viền bo góc kép (`MultiEffect` mask)*: Mặt nạ ngoài bo tròn `radius: 16` kết hợp lớp bề mặt kính tối bên trong lùi vào `borderWidth: 1.5px`, tạo khe viền đúng 1.5px cho chùm sáng quét vòng quanh perimeter của thẻ.
+      - *Inner Ambient Shimmer Bloom*: Vùng ánh sáng khuếch tán bán nguyệt ở đáy thẻ mờ nhạt 48px (`MultiEffect` blur), phản chiếu sắc độ `accentColor` và tự động bừng sáng mượt mà từ `0.06` lên `0.16` khi rê chuột hover.
+    - **Tối Ưu Nền Acrylic & Tích Hợp Niri GPU Hardware Blur**:
+      - *Cấu hình `window-rule` trong `~/.config/niri/cfg/rules.kdl`*: Khai báo `background-effect { blur true }` cho cả `match title=r#"^Nutsty.*$"#`, `match app-id="dev.noctalia.noctalia-qs"` và `match app-id="frostify-local"`.
+      - *Hiệu ứng quang học*: Cửa sổ Nutsty khi nổi trên desktop Linux Wayland (Niri) làm mờ sâu toàn bộ hình nền anime và các cửa sổ bên dưới thành hiệu ứng bokeh mịn màng, giúp giao diện trong suốt acrylic cực kỳ dịu mắt và nội dung văn bản luôn nổi bật, sắc nét 100%.
 
 ---
 

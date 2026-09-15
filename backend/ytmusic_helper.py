@@ -267,6 +267,15 @@ def normalize_track(item):
         "durationMs": dur_sec * 1000,
         "image": thumb_url
     }
+    alb = item.get("album")
+    if isinstance(alb, dict):
+        res["album"] = alb.get("name", "")
+        res["albumId"] = alb.get("id", "")
+    elif isinstance(alb, str):
+        res["album"] = alb
+    views = item.get("views", "")
+    if views:
+        res["views"] = views if ("lượt" in str(views).lower() or "play" in str(views).lower()) else f"{views} lượt phát"
     if channel_id:
         res["channelId"] = channel_id
     return res
@@ -1541,37 +1550,139 @@ def search_categorized(query):
                 turl = thumbs[-1].get("url", "") if thumbs else ""
                 turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
                 bid = r.get("browseId", "")
+                author = r.get("author", "") or (r.get("artists", [{}])[0].get("name") if r.get("artists") else "")
                 playlists.append({
                     "type": "playlist",
                     "id": bid,
                     "browseId": bid,
                     "title": r.get("title", ""),
                     "name": r.get("title", ""),
-                    "author": r.get("author", ""),
-                    "artist": r.get("author", ""),
+                    "author": author,
+                    "artist": author,
                     "itemCount": r.get("itemCount", ""),
                     "image": turl
                 })
 
         cache_online_tracks(songs)
+
+        # Distinguish community playlists vs featured playlists
+        community_playlists = []
+        featured_playlists = []
+        for pl in playlists:
+            author_low = (pl.get("author") or "").lower()
+            if "youtube music" in author_low or "youtube" in author_low or "tuyển tập" in author_low:
+                featured_playlists.append(pl)
+            else:
+                community_playlists.append(pl)
+
+        # If top_result is not artist but artists list has an exact or strong match for query, promote artist to top_result (YouTube Music Desktop pattern)
+        clean_q_low = q.lower().strip()
+        if artists and (not top_result or top_result.get("type") != "artist"):
+            for a in artists:
+                a_name_low = (a.get("name") or "").lower().strip()
+                if a_name_low == clean_q_low or clean_q_low in a_name_low or a_name_low in clean_q_low:
+                    top_result = a
+                    break
+
+        # Attach top 3 tracks to top_result for 2-column desktop hero card
+        if top_result:
+            if top_result.get("type") == "artist":
+                a_name = top_result.get("name", "")
+                for s in songs:
+                    if not s.get("artist") or s.get("artist") == "YouTube Music":
+                        s["artist"] = a_name
+            top_result["top_tracks"] = songs[:3]
+
         return {
             "query": q,
             "top_result": top_result,
             "songs": songs,
             "albums": albums,
             "artists": artists,
+            "community_playlists": community_playlists,
+            "featured_playlists": featured_playlists,
             "playlists": playlists
         }
     except Exception as e:
-        sys.stderr.write(f"[categorized_search error]: {e}\n")
-        return {
-            "query": q,
-            "top_result": None,
-            "songs": [],
-            "albums": [],
-            "artists": [],
-            "playlists": []
+        sys.stderr.write(f"[search_categorized error]: {e}\n")
+        return {"query": q, "top_result": None, "songs": [], "albums": [], "artists": [], "community_playlists": [], "featured_playlists": [], "playlists": []}
+
+def filter_search(query, category="songs"):
+    q = str(query or "").strip()
+    if not q:
+        return []
+    try:
+        ytm = get_ytmusic_client()
+        cat_map = {
+            "songs": "songs",
+            "albums": "albums",
+            "artists": "artists",
+            "community_playlists": "community_playlists",
+            "playlists": "community_playlists",
+            "featured_playlists": "featured_playlists"
         }
+        flt = cat_map.get(category, "songs")
+        raw = ytm.search(q, filter=flt, limit=60)
+        items = []
+        for r in raw:
+            rtype = r.get("resultType")
+            thumbs = r.get("thumbnails", [])
+            turl = thumbs[-1].get("url", "") if thumbs else ""
+            turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+
+            if flt == "songs" or rtype in ("song", "video"):
+                norm = normalize_track(r)
+                if norm and not is_song_disliked(norm.get("videoId")):
+                    norm["type"] = "song"
+                    items.append(norm)
+            elif flt == "albums" or rtype == "album":
+                arts = r.get("artists", [])
+                aname = ", ".join(a.get("name", "") for a in arts if isinstance(a, dict)) if arts else (r.get("artist") or "")
+                bid = r.get("browseId", "")
+                year_str = str(r.get("year", "") or "")
+                album_type = "EP" if "ep" in (r.get("title", "")).lower() else ("Single" if "single" in (r.get("title", "")).lower() else "Album")
+                items.append({
+                    "type": "album",
+                    "browseId": bid,
+                    "playlistId": r.get("playlistId", "") or bid,
+                    "title": r.get("title", ""),
+                    "name": r.get("title", ""),
+                    "artist": aname,
+                    "albumType": album_type,
+                    "year": year_str,
+                    "image": turl
+                })
+            elif flt == "artists" or rtype == "artist":
+                arts = r.get("artists", [])
+                a_name = r.get("artist") or (arts[0].get("name") if arts else "")
+                a_id = (arts[0].get("id") if arts else "") or r.get("browseId", "")
+                items.append({
+                    "type": "artist",
+                    "browseId": a_id,
+                    "name": a_name,
+                    "artist": a_name,
+                    "subscribers": r.get("subscribers", ""),
+                    "image": turl
+                })
+            elif flt in ("community_playlists", "featured_playlists") or rtype == "playlist":
+                bid = r.get("browseId", "")
+                author = r.get("author", "") or (r.get("artists", [{}])[0].get("name") if r.get("artists") else "")
+                items.append({
+                    "type": "playlist",
+                    "id": bid,
+                    "browseId": bid,
+                    "title": r.get("title", ""),
+                    "name": r.get("title", ""),
+                    "author": author,
+                    "artist": author,
+                    "itemCount": r.get("itemCount", ""),
+                    "image": turl
+                })
+        return items
+    except Exception as e:
+        sys.stderr.write(f"[filter_search error]: {e}\n")
+        return []
+
 
 
 def search_albums(query, limit=10):
@@ -1659,17 +1770,50 @@ def get_search_suggestions(query):
                             subtitle = "".join(x.get("text", "") for x in sub_runs).strip()
                         thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
                         thumb = thumbs[-1].get("url", "") if thumbs else ""
+                        thumb = re.sub(r'=w\d+-h\d+.*', '=w120-h120-l90-rj', thumb)
                         nav = r.get("navigationEndpoint", {})
+
+                        # 1. Check Watch Endpoint (Song)
                         vid = nav.get("watchEndpoint", {}).get("videoId", "")
                         if not vid:
                             overlay = r.get("overlay", {}).get("musicItemThumbnailOverlayRenderer", {})
                             vid = overlay.get("content", {}).get("musicPlayButtonRenderer", {}).get("playNavigationEndpoint", {}).get("watchEndpoint", {}).get("videoId", "")
 
-                        if title and vid:
+                        # 2. Check Browse Endpoint (Artist / Album)
+                        browse_ep = nav.get("browseEndpoint", {})
+                        browse_id = browse_ep.get("browseId", "")
+                        page_type = browse_ep.get("browseEndpointContextSupportedConfigs", {}).get("browseEndpointContextMusicConfig", {}).get("pageType", "")
+                        crop_circle = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnailCrop", "") == "MUSIC_THUMBNAIL_CROP_CIRCLE"
+
+                        if title and (crop_circle or page_type == "MUSIC_PAGE_TYPE_ARTIST" or (browse_id and (browse_id.startswith("UC") or browse_id.startswith("FEmusic_library")))):
+                            recommended.append({
+                                "type": "artist",
+                                "id": browse_id,
+                                "browseId": browse_id,
+                                "name": title,
+                                "title": title,
+                                "artist": title,
+                                "subtitle": subtitle or "Nghệ sĩ",
+                                "image": thumb
+                            })
+                        elif title and (page_type == "MUSIC_PAGE_TYPE_ALBUM" or (browse_id and browse_id.startswith("MPREb_"))):
+                            recommended.append({
+                                "type": "album",
+                                "id": browse_id,
+                                "browseId": browse_id,
+                                "playlistId": browse_id,
+                                "name": title,
+                                "title": title,
+                                "artist": subtitle,
+                                "subtitle": subtitle or "Album",
+                                "image": thumb
+                            })
+                        elif title and vid:
                             # Clean artist name (SimpMusic pattern)
                             parts = subtitle.split(" • ")
                             artist_name = parts[1].strip() if len(parts) > 1 else subtitle
                             recommended.append({
+                                "type": "song",
                                 "id": vid,
                                 "videoId": vid,
                                 "title": title,
@@ -2335,5 +2479,11 @@ if __name__ == "__main__":
         name = sys.argv[2]
         url = get_cached_artist_avatar(name)
         print(json.dumps({"artist": name, "avatar": url}, ensure_ascii=False))
+
+    elif cmd == "filter_search" and len(sys.argv) > 2:
+        q = sys.argv[2]
+        flt = sys.argv[3] if len(sys.argv) > 3 else "songs"
+        res = filter_search(q, flt)
+        print(json.dumps(res, ensure_ascii=False))
 
 

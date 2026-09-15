@@ -68,18 +68,13 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.max(220, heroRow.implicitHeight + 60)
 
-                // Ambient glow behind header
+                // Ambient glow behind header (disabled to avoid foggy white/slate tint over backdrop blur)
                 Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 280
-                    opacity: 0.45
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0.2, 0.25, 0.35, 0.6) }
-                        GradientStop { position: 0.8; color: Qt.rgba(0.08, 0.08, 0.1, 0.0) }
-                        GradientStop { position: 1.0; color: "transparent" }
-                    }
+                    visible: false
                 }
 
                 RowLayout {
@@ -399,12 +394,12 @@ Item {
                             id: trackRowItem
                             Layout.fillWidth: true
                             Layout.preferredHeight: 56
-                            radius: 8
-                            color: rowMouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                            border.color: trackRowItem.isCurrentPlaying ? root.accentColor : "transparent"
-                            border.width: trackRowItem.isCurrentPlaying ? 1 : 0
-                            Behavior on color { ColorAnimation { duration: 100 } }
-                            Behavior on border.color { ColorAnimation { duration: 100 } }
+                            color: trackRowItem.isCurrentPlaying
+                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                                : (rowMouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                            border.color: "transparent"
+                            border.width: 0
+                            Behavior on color { ColorAnimation { duration: 120 } }
 
                             readonly property bool isCurrentPlaying: {
                                 if (!root.currentTrack) return false;
@@ -562,6 +557,7 @@ Item {
                 CarouselSectionHeader {
                     title: "Albums"
                     targetFlickable: albumFlick
+                    accentColor: root.accentColor
                 }
 
                 Flickable {
@@ -701,6 +697,7 @@ Item {
                 CarouselSectionHeader {
                     title: "Đĩa đơn & EPs"
                     targetFlickable: singleFlick
+                    accentColor: root.accentColor
                 }
 
                 Flickable {
@@ -839,6 +836,7 @@ Item {
                 CarouselSectionHeader {
                     title: "Video âm nhạc"
                     targetFlickable: videoFlick
+                    accentColor: root.accentColor
                 }
 
                 Flickable {
@@ -983,6 +981,7 @@ Item {
                 CarouselSectionHeader {
                     title: "Nghệ sĩ liên quan"
                     targetFlickable: relFlick
+                    accentColor: root.accentColor
                 }
 
                 Flickable {
@@ -1164,59 +1163,40 @@ Item {
         }
     }
 
-    // Top Floating Navigation Bar (Back Button + Sticky Title)
-    Rectangle {
+    // Top Floating Navigation (Back Button only, no black header bar)
+    Item {
         anchors.left: parent.left
-        anchors.right: parent.right
         anchors.top: parent.top
+        width: 80
         height: 60
-        color: mainScroll.contentY > 120 ? Qt.rgba(0.08, 0.08, 0.09, 0.95) : "transparent"
-        border.color: mainScroll.contentY > 120 ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-        border.width: mainScroll.contentY > 120 ? 1 : 0
-        Behavior on color { ColorAnimation { duration: 150 } }
+        z: 10
 
-        RowLayout {
-            anchors.fill: parent
+        // Floating Back Button
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
             anchors.leftMargin: 20
-            anchors.rightMargin: 20
-            spacing: 16
+            width: 36
+            height: 36
+            radius: 18
+            color: backMouse.containsMouse ? "#323236" : Qt.rgba(0, 0, 0, 0.55)
+            border.color: Qt.rgba(1, 1, 1, 0.15)
+            border.width: 1
+            Behavior on color { ColorAnimation { duration: 100 } }
 
-            // Back Button
-            Rectangle {
-                width: 36
-                height: 36
-                radius: 18
-                color: backMouse.containsMouse ? "#323236" : Qt.rgba(0, 0, 0, 0.55)
-                border.color: Qt.rgba(1, 1, 1, 0.15)
-                border.width: 1
-                Behavior on color { ColorAnimation { duration: 100 } }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/go-previous-symbolic.svg"
-                    iconSize: 16
-                    color: "#ffffff"
-                }
-
-                MouseArea {
-                    id: backMouse
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    hoverEnabled: true
-                    onClicked: root.backRequested()
-                }
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/go-previous-symbolic.svg"
+                iconSize: 16
+                color: "#ffffff"
             }
 
-            // Sticky Artist Title
-            Text {
-                Layout.fillWidth: true
-                text: (root.artistData && root.artistData.metadata) ? (root.artistData.metadata.name || "") : ""
-                font.family: Theme.fontFamily
-                font.pixelSize: 17
-                font.bold: true
-                color: "#ffffff"
-                opacity: Math.min(1.0, Math.max(0.0, (mainScroll.contentY - 140) / 60))
-                elide: Text.ElideRight
+            MouseArea {
+                id: backMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: root.backRequested()
             }
         }
     }

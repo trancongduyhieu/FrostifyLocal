@@ -9,7 +9,7 @@ Rectangle {
     color: "transparent"
 
     // Props
-    property var searchData: null // { query, top_result, songs, albums, artists, playlists }
+    property var searchData: null // { query, top_result, songs, albums, artists, community_playlists, featured_playlists, playlists }
     property var suggestions: []
     property var recommendedSuggestions: []
     property bool isLoading: false
@@ -20,8 +20,35 @@ Rectangle {
     property alias searchInputText: searchTextInput.text
 
     // State
-    property string activeTab: "all" // "all", "songs", "artists", "albums", "playlists"
+    property string activeTab: "all" // "all", "songs", "albums", "community_playlists", "featured_playlists", "artists"
     property string viewMode: "results" // "results", "suggestions"
+    property var tabResultsCache: ({})
+    property bool isTabLoading: false
+    property var loadedTabs: ({})
+
+    property var songsFilterItems: []
+    property var albumsFilterItems: []
+    property var communityPlaylistsFilterItems: []
+    property var featuredPlaylistsFilterItems: []
+    property var artistsFilterItems: []
+
+    onSearchDataChanged: {
+        searchRoot.activeTab = "all";
+        searchRoot.viewMode = "results";
+        searchRoot.loadedTabs = {};
+        realtimeSuggestTimer.stop();
+        searchRoot.songsFilterItems = [];
+        searchRoot.albumsFilterItems = [];
+        searchRoot.communityPlaylistsFilterItems = [];
+        searchRoot.featuredPlaylistsFilterItems = [];
+        searchRoot.artistsFilterItems = [];
+    }
+
+    onActiveTabChanged: {
+        if (activeTab !== "all") {
+            fetchTabCategory(activeTab);
+        }
+    }
 
     // Signals
     signal trackPlayRequested(var trk)
@@ -90,18 +117,80 @@ Rectangle {
                         }
                         if (!searchRoot.suggestionsCache) searchRoot.suggestionsCache = {};
                         searchRoot.suggestionsCache[cleanQ] = { queries: queries, recommended: recs };
-                        var curQ = searchRoot.getCurrentSearchQuery().toLowerCase();
-                        var targetQ = cleanQ.toLowerCase();
-                        if (curQ === targetQ || curQ.startsWith(targetQ) || targetQ.startsWith(curQ)) {
-                            searchRoot.suggestions = queries;
-                            searchRoot.recommendedSuggestions = recs;
-                            searchRoot.viewMode = "suggestions";
+                        if (searchRoot.viewMode !== "results") {
+                            var curQ = searchRoot.getCurrentSearchQuery().toLowerCase();
+                            var targetQ = cleanQ.toLowerCase();
+                            if (curQ === targetQ || curQ.startsWith(targetQ) || targetQ.startsWith(curQ)) {
+                                searchRoot.suggestions = queries;
+                                searchRoot.recommendedSuggestions = recs;
+                                searchRoot.viewMode = "suggestions";
+                            }
                         }
                     } catch(e) {}
                 }
             }
         };
         xhr.send();
+    }
+
+    function isTabLoaded(cat) {
+        if (cat === "all") return true;
+        return !!(searchRoot.loadedTabs && searchRoot.loadedTabs[cat]);
+    }
+
+    function fetchTabCategory(cat) {
+        var q = searchRoot.currentQuery || (searchRoot.searchData ? searchRoot.searchData.query : "");
+        if (!q) return;
+        var cleanQ = q.trim();
+        var cacheKey = cat + "_" + cleanQ.toLowerCase();
+        if (searchRoot.tabResultsCache && searchRoot.tabResultsCache[cacheKey] && searchRoot.tabResultsCache[cacheKey].length > 0) {
+            var cached = searchRoot.tabResultsCache[cacheKey];
+            if (cat === "songs") searchRoot.songsFilterItems = cached;
+            else if (cat === "albums") searchRoot.albumsFilterItems = cached;
+            else if (cat === "community_playlists") searchRoot.communityPlaylistsFilterItems = cached;
+            else if (cat === "featured_playlists") searchRoot.featuredPlaylistsFilterItems = cached;
+            else if (cat === "artists") searchRoot.artistsFilterItems = cached;
+            var updatedTabs = Object.assign({}, searchRoot.loadedTabs);
+            updatedTabs[cat] = true;
+            searchRoot.loadedTabs = updatedTabs;
+            return;
+        }
+        searchRoot.isTabLoading = true;
+        var xhr = new XMLHttpRequest();
+        var url = "http://127.0.0.1:17890/api/filter_search?q=" + encodeURIComponent(cleanQ) + "&filter=" + encodeURIComponent(cat);
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                searchRoot.isTabLoading = false;
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (Array.isArray(res)) {
+                            if (!searchRoot.tabResultsCache) searchRoot.tabResultsCache = {};
+                            searchRoot.tabResultsCache[cacheKey] = res;
+                            if (cat === "songs") searchRoot.songsFilterItems = res;
+                            else if (cat === "albums") searchRoot.albumsFilterItems = res;
+                            else if (cat === "community_playlists") searchRoot.communityPlaylistsFilterItems = res;
+                            else if (cat === "featured_playlists") searchRoot.featuredPlaylistsFilterItems = res;
+                            else if (cat === "artists") searchRoot.artistsFilterItems = res;
+                            var updatedTabs2 = Object.assign({}, searchRoot.loadedTabs);
+                            updatedTabs2[cat] = true;
+                            searchRoot.loadedTabs = updatedTabs2;
+                        }
+                    } catch(e) {}
+                }
+            }
+        };
+        xhr.send();
+    }
+
+    function getTabItems(cat) {
+        if (cat === "songs") return searchRoot.songsFilterItems || [];
+        if (cat === "albums") return searchRoot.albumsFilterItems || [];
+        if (cat === "community_playlists") return searchRoot.communityPlaylistsFilterItems || [];
+        if (cat === "featured_playlists") return searchRoot.featuredPlaylistsFilterItems || [];
+        if (cat === "artists") return searchRoot.artistsFilterItems || [];
+        return [];
     }
 
     function setSearchInput(val) {
@@ -119,6 +208,7 @@ Rectangle {
         interval: 60
         repeat: false
         onTriggered: {
+            if (searchRoot.viewMode === "results") return;
             var q = searchRoot.getCurrentSearchQuery();
             if (q.length > 0) {
                 searchRoot.viewMode = "suggestions";
@@ -140,7 +230,7 @@ Rectangle {
     readonly property color capsuleActiveTextColor: accentLuminance > 0.65 ? "#0f0f11" : "#ffffff"
 
     // =========================================================================
-    // 0. PINNED TOP SEARCH BAR (SimpMusic / Spotify style)
+    // 0. PINNED TOP SEARCH BAR (Dynamic Accent Color Sync)
     // =========================================================================
     Item {
         id: pinnedSearchBar
@@ -156,19 +246,24 @@ Rectangle {
             anchors.rightMargin: 20
             spacing: 12
 
-            // Back Button
+            // Back Button (Synced with dynamic accent color from wallpaper or track cover)
             Rectangle {
                 Layout.preferredWidth: 34
                 Layout.preferredHeight: 34
                 radius: 17
-                color: backBtnM.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.05)
-                Behavior on color { ColorAnimation { duration: 100 } }
+                color: backBtnM.containsMouse 
+                    ? Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.30) 
+                    : Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.16)
+                border.color: Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, backBtnM.containsMouse ? 0.60 : 0.32)
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on border.color { ColorAnimation { duration: 150 } }
 
                 AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/go-previous-symbolic.svg"
                     iconSize: 14
-                    color: backBtnM.containsMouse ? searchRoot.accentColor : "#ffffff"
+                    color: searchRoot.accentColor
                 }
 
                 MouseArea {
@@ -224,15 +319,29 @@ Rectangle {
                         }
 
                         // Real-time suggestions on EVERY keystroke including Vietnamese IME / Fcitx5 preedit
-                        onDisplayTextChanged: realtimeSuggestTimer.restart()
-                        onTextEdited: realtimeSuggestTimer.restart()
-                        onTextChanged: realtimeSuggestTimer.restart()
-                        onPreeditTextChanged: realtimeSuggestTimer.restart()
-                        onInputMethodComposingChanged: realtimeSuggestTimer.restart()
+                        onDisplayTextChanged: {
+                            if (searchRoot.viewMode !== "results") realtimeSuggestTimer.restart();
+                        }
+                        onTextEdited: {
+                            searchRoot.viewMode = "suggestions";
+                            realtimeSuggestTimer.restart();
+                        }
+                        onTextChanged: {
+                            if (searchRoot.viewMode !== "results") realtimeSuggestTimer.restart();
+                        }
+                        onPreeditTextChanged: {
+                            searchRoot.viewMode = "suggestions";
+                            realtimeSuggestTimer.restart();
+                        }
+                        onInputMethodComposingChanged: {
+                            if (searchRoot.viewMode !== "results") realtimeSuggestTimer.restart();
+                        }
 
                         onAccepted: {
+                            realtimeSuggestTimer.stop();
                             var q = searchRoot.getCurrentSearchQuery();
                             if (q.length > 0) {
+                                searchRoot.viewMode = "results";
                                 searchRoot.searchSubmitted(q);
                             }
                         }
@@ -282,7 +391,7 @@ Rectangle {
     }
 
     // =========================================================================
-    // 1. SUGGESTIONS VIEW (When typing or exploring real-time suggestions)
+    // 1. SUGGESTIONS VIEW (Multi-entity: Artist circle, Album/Song square)
     // =========================================================================
     Flickable {
         id: suggestionsFlickable
@@ -305,9 +414,9 @@ Rectangle {
             width: parent.width
             spacing: 4
 
-            // Section 1: Recommended Songs with Avatars (SimpMusic pattern)
+            // Section 1: Recommended Top Entities (Artist, Album, Song)
             Text {
-                text: "Bài hát đề xuất"
+                text: "Gợi ý hàng đầu"
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -321,12 +430,16 @@ Rectangle {
                 model: searchRoot.recommendedSuggestions
 
                 delegate: Rectangle {
-                    id: recSongRow
+                    id: recEntityRow
                     width: suggestionsCol.width
                     height: 52
                     radius: 8
-                    color: recSongM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                    color: recEntityM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
                     Behavior on color { ColorAnimation { duration: 80 } }
+
+                    readonly property bool isArtist: modelData.type === "artist"
+                    readonly property bool isAlbum: modelData.type === "album"
+                    readonly property bool isSong: modelData.type === "song"
 
                     RowLayout {
                         anchors.fill: parent
@@ -334,7 +447,7 @@ Rectangle {
                         anchors.rightMargin: 12
                         spacing: 12
 
-                        // Thumbnail (40x40, rounded 6px)
+                        // Thumbnail (Round for Artist, Rounded rect for Album/Song)
                         Item {
                             Layout.preferredWidth: 40
                             Layout.preferredHeight: 40
@@ -343,7 +456,7 @@ Rectangle {
                             Rectangle {
                                 id: recMask
                                 anchors.fill: parent
-                                radius: 6
+                                radius: recEntityRow.isArtist ? 20 : 6
                                 visible: false
                                 layer.enabled: true
                             }
@@ -369,9 +482,17 @@ Rectangle {
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: 6
+                                radius: recEntityRow.isArtist ? 20 : 6
                                 color: Qt.rgba(1, 1, 1, 0.08)
                                 visible: recImg.status !== Image.Ready
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: recEntityRow.isArtist ? 20 : 6
+                                color: "transparent"
+                                border.color: Qt.rgba(1, 1, 1, 0.16)
+                                border.width: 1
                             }
                         }
 
@@ -383,18 +504,22 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: modelData.title || ""
+                                text: modelData.title || modelData.name || ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
-                                color: recSongM.containsMouse ? searchRoot.accentColor : "#ffffff"
+                                color: recEntityM.containsMouse ? searchRoot.accentColor : "#ffffff"
                                 elide: Text.ElideRight
                                 Behavior on color { ColorAnimation { duration: 100 } }
                             }
 
                             Text {
                                 Layout.fillWidth: true
-                                text: modelData.artist || modelData.subtitle || ""
+                                text: {
+                                    if (recEntityRow.isArtist) return modelData.subtitle || "Nghệ sĩ";
+                                    if (recEntityRow.isAlbum) return modelData.subtitle || "Album";
+                                    return modelData.artist || modelData.subtitle || "";
+                                }
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
                                 color: Theme.textSecondary
@@ -404,13 +529,19 @@ Rectangle {
                     }
 
                     MouseArea {
-                        id: recSongM
+                        id: recEntityM
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            // Directly play track WITHOUT popping open Now Playing lyrics
-                            searchRoot.trackPlayRequested(modelData);
+                            realtimeSuggestTimer.stop();
+                            if (recEntityRow.isArtist) {
+                                searchRoot.artistSelected(modelData.name || modelData.title, modelData.browseId || modelData.id);
+                            } else if (recEntityRow.isAlbum) {
+                                searchRoot.albumSelected(modelData);
+                            } else {
+                                searchRoot.trackPlayRequested(modelData);
+                            }
                         }
                     }
                 }
@@ -463,7 +594,7 @@ Rectangle {
                             elide: Text.ElideRight
                         }
 
-                        // ArrowOutward button to fill text (SimpMusic pattern)
+                        // ArrowOutward button to fill text
                         Rectangle {
                             Layout.preferredWidth: 30
                             Layout.preferredHeight: 30
@@ -505,6 +636,8 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         preventStealing: true
                         onClicked: {
+                            realtimeSuggestTimer.stop();
+                            searchRoot.viewMode = "results";
                             searchRoot.suggestionClicked(modelData);
                             searchTextInput.text = modelData;
                             searchRoot.searchSubmitted(modelData);
@@ -530,7 +663,7 @@ Rectangle {
         spacing: 12
         visible: searchRoot.viewMode === "results"
 
-        // Filter Chips Bar (Glossy Gel Capsules)
+        // Filter Chips Bar (Glossy Gel Capsules + Reset Filter Chip)
         Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 32
@@ -543,13 +676,41 @@ Rectangle {
                 id: chipsRow
                 spacing: 8
 
+                // Reset Filter Button [ ✕ ] (Shown when not in "all" tab)
+                Rectangle {
+                    height: 30
+                    width: 30
+                    radius: 15
+                    visible: searchRoot.activeTab !== "all"
+                    color: resetM.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: Qt.rgba(1, 1, 1, 0.18)
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 11
+                        color: "#ffffff"
+                    }
+
+                    MouseArea {
+                        id: resetM
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: searchRoot.activeTab = "all"
+                    }
+                }
+
                 Repeater {
                     model: [
                         { id: "all", label: "Tất cả" },
                         { id: "songs", label: "Bài hát" },
-                        { id: "artists", label: "Nghệ sĩ" },
                         { id: "albums", label: "Albums" },
-                        { id: "playlists", label: "Danh sách phát" }
+                        { id: "community_playlists", label: "Danh sách phát cộng đồng" },
+                        { id: "featured_playlists", label: "Danh sách phát nổi bật" },
+                        { id: "artists", label: "Nghệ sĩ" }
                     ]
 
                     delegate: Rectangle {
@@ -582,7 +743,13 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: searchRoot.activeTab = modelData.id
+                            onClicked: {
+                                if (searchRoot.activeTab === modelData.id) {
+                                    searchRoot.activeTab = "all";
+                                } else {
+                                    searchRoot.activeTab = modelData.id;
+                                }
+                            }
                         }
                     }
                 }
@@ -678,7 +845,7 @@ Rectangle {
                 spacing: 24
 
                 // -------------------------------------------------------------
-                // SECTION: TAB "ALL" (Search Summary: Top Result + Songs + Carousels)
+                // SECTION: TAB "ALL" (Desktop 2-Column Hero + Carousels)
                 // -------------------------------------------------------------
                 Item {
                     width: parent.width
@@ -688,391 +855,441 @@ Rectangle {
                     Column {
                         id: allSummaryCol
                         width: parent.width
-                        spacing: 24
+                        spacing: 28
 
-                        // 1. HERO TOP RESULT CARD
+                        // 1. HERO TOP RESULT & TOP SONGS (Desktop 2-Column Connected Hero Grid)
                         Item {
                             width: parent.width
-                            height: topResultCard.height
-                            visible: !!(searchRoot.searchData && searchRoot.searchData.top_result)
+                            height: heroCol.implicitHeight
+                            visible: !!(searchRoot.searchData && (searchRoot.searchData.top_result || (searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0)))
 
-                            Rectangle {
-                                id: topResultCard
-                                width: Math.min(parent.width, 580)
-                                height: 144
-                                radius: 16
-                                color: Qt.rgba(1, 1, 1, 0.04)
-                                border.color: "transparent"
-                                border.width: 0
-                                clip: true
+                            readonly property bool isWide: parent.width >= 750
 
-                                readonly property var topItem: searchRoot.searchData ? searchRoot.searchData.top_result : null
-                                readonly property bool isArtist: topItem && topItem.type === "artist"
-                                readonly property bool isSong: topItem && topItem.type === "song"
-                                readonly property bool isAlbum: topItem && topItem.type === "album"
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 16
-                                    spacing: 16
-
-                                    // Thumbnail / Avatar
-                                    Item {
-                                        Layout.preferredWidth: 112
-                                        Layout.preferredHeight: 112
-
-                                        Rectangle {
-                                            id: artMask
-                                            anchors.fill: parent
-                                            radius: topResultCard.isArtist ? 56 : 12
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: artMask
-                                                autoPaddingEnabled: false
-                                            }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#202024"
-                                                visible: topThumb.status !== Image.Ready
-                                            }
-
-                                            Image {
-                                                id: topThumb
-                                                anchors.fill: parent
-                                                source: topResultCard.topItem ? (topResultCard.topItem.image || "") : ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(224, 224)
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: topResultCard.isArtist ? 56 : 12
-                                            color: "transparent"
-                                            border.color: Qt.rgba(1, 1, 1, 0.18)
-                                            border.width: 1
-                                        }
-                                    }
-
-                                    // Details & Actions
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 4
-
-                                        // Badge
-                                        Rectangle {
-                                            Layout.preferredHeight: 18
-                                            Layout.preferredWidth: badgeText.implicitWidth + 12
-                                            radius: 9
-                                            color: Qt.rgba(1, 1, 1, 0.08)
-
-                                            Text {
-                                                id: badgeText
-                                                anchors.centerIn: parent
-                                                text: topResultCard.isArtist ? "KẾT QUẢ HÀNG ĐẦU • NGHỆ SĨ" : (topResultCard.isAlbum ? "KẾT QUẢ HÀNG ĐẦU • ALBUM" : "KẾT QUẢ HÀNG ĐẦU • BÀI HÁT")
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 9
-                                                font.weight: Font.Bold
-                                                color: searchRoot.accentColor
-                                            }
-                                        }
-
-                                        // Name / Title
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: topResultCard.topItem ? (topResultCard.topItem.name || topResultCard.topItem.title || "") : ""
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 19
-                                            font.weight: Font.Bold
-                                            color: Theme.textPrimary
-                                            elide: Text.ElideRight
-                                        }
-
-                                        // Subtitle (Artist or Subscribers or Duration)
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: {
-                                                if (!topResultCard.topItem) return "";
-                                                if (topResultCard.isArtist) return topResultCard.topItem.subscribers ? (topResultCard.topItem.subscribers + " người theo dõi") : "Nghệ sĩ chính thức";
-                                                if (topResultCard.isAlbum) return (topResultCard.topItem.artist || "") + (topResultCard.topItem.year ? (" • " + topResultCard.topItem.year) : "");
-                                                return (topResultCard.topItem.artist || "") + (topResultCard.topItem.duration ? (" • " + topResultCard.topItem.duration) : "");
-                                            }
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            color: Theme.textSecondary
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Item { Layout.preferredHeight: 4 }
-
-                                        // Action buttons
-                                        RowLayout {
-                                            spacing: 10
-
-                                            // Main Button
-                                            Rectangle {
-                                                Layout.preferredHeight: 28
-                                                Layout.preferredWidth: mainBtnRow.implicitWidth + 24
-                                                radius: 14
-                                                color: searchRoot.accentColor
-
-                                                RowLayout {
-                                                    id: mainBtnRow
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-
-                                                    AppIcon {
-                                                        source: topResultCard.isArtist ? "../assets/icons/avatar-default-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
-                                                        iconSize: 11
-                                                        color: searchRoot.capsuleActiveTextColor
-                                                    }
-
-                                                    Text {
-                                                        id: btnLabel
-                                                        text: topResultCard.isArtist ? "Xem nghệ sĩ" : (topResultCard.isAlbum ? "Xem album" : "Phát ngay")
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 11
-                                                        font.weight: Font.Bold
-                                                        color: searchRoot.capsuleActiveTextColor
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        if (topResultCard.isArtist) {
-                                                            searchRoot.artistSelected(topResultCard.topItem.name, topResultCard.topItem.browseId);
-                                                        } else if (topResultCard.isAlbum) {
-                                                            searchRoot.albumSelected(topResultCard.topItem);
-                                                        } else {
-                                                            searchRoot.trackPlayRequested(topResultCard.topItem);
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Secondary Button (Radio)
-                                            Rectangle {
-                                                Layout.preferredHeight: 28
-                                                Layout.preferredWidth: radioBtnRow.implicitWidth + 24
-                                                radius: 14
-                                                color: Qt.rgba(1, 1, 1, 0.08)
-                                                border.color: "transparent"
-                                                border.width: 0
-                                                visible: topResultCard.isArtist || topResultCard.isSong
-
-                                                RowLayout {
-                                                    id: radioBtnRow
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-
-                                                    AppIcon {
-                                                        source: "../assets/icons/radio-symbolic.svg"
-                                                        iconSize: 11
-                                                        color: Theme.textPrimary
-                                                    }
-
-                                                    Text {
-                                                        id: radioLabel
-                                                        text: "Đài phát"
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 11
-                                                        font.weight: Font.Medium
-                                                        color: Theme.textPrimary
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        if (topResultCard.isArtist) {
-                                                            searchRoot.startRadioRequested({ id: topResultCard.topItem.browseId, name: topResultCard.topItem.name });
-                                                        } else {
-                                                            searchRoot.startRadioRequested(topResultCard.topItem);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 2. TOP SONGS LIST (4 items in All view)
-                        Item {
-                            width: parent.width
-                            height: songsBlockCol.height
-                            visible: !!(searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0)
-
-                            Column {
-                                id: songsBlockCol
+                            ColumnLayout {
+                                id: heroCol
                                 width: parent.width
-                                spacing: 8
+                                spacing: 12
 
-                                RowLayout {
-                                    width: parent.width
-
-                                    Text {
-                                        text: "Bài hát"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 17
-                                        font.weight: Font.Bold
-                                        color: Theme.textPrimary
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Text {
-                                        text: "Xem tất cả >"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.weight: Font.Medium
-                                        color: searchRoot.accentColor
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: searchRoot.activeTab = "songs"
-                                        }
-                                    }
+                                Text {
+                                    text: "Kết quả hàng đầu"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 18
+                                    font.weight: Font.Bold
+                                    color: Theme.textPrimary
                                 }
 
-                                Column {
-                                    width: parent.width
-                                    spacing: 4
+                                ShinyCardContainer {
+                                    id: topResultUnifiedCard
+                                    Layout.preferredWidth: heroCol.parent.isWide ? Math.min(heroCol.width, 760) : heroCol.width
+                                    Layout.fillWidth: !heroCol.parent.isWide
+                                    Layout.alignment: Qt.AlignLeft
+                                    implicitHeight: heroCol.parent.isWide ? 194 : (topHeroRow.implicitHeight + (topResultUnifiedCard.hasTopTracks ? (topTracksWideCol.implicitHeight + 20) : 0) + 32)
+                                    accentColor: searchRoot.accentColor
+                                    radius: 16
+                                    borderWidth: 1.5
 
-                                    Repeater {
-                                        model: searchRoot.searchData ? searchRoot.searchData.songs.slice(0, 4) : []
+                                    readonly property var topItem: searchRoot.searchData ? searchRoot.searchData.top_result : null
+                                    readonly property bool hasTopResult: !!topItem
+                                    readonly property bool isArtist: topItem && topItem.type === "artist"
+                                    readonly property bool isSong: topItem && topItem.type === "song"
+                                    readonly property bool isAlbum: topItem && topItem.type === "album"
 
-                                        delegate: Rectangle {
-                                            id: trackItem
-                                            width: parent.width
-                                            height: 48
-                                            radius: 8
-                                            color: trackItemM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
-                                            Behavior on color { ColorAnimation { duration: 80 } }
+                                    readonly property var topTracksModel: {
+                                        if (topItem && topItem.top_tracks && topItem.top_tracks.length > 0) {
+                                            return topItem.top_tracks.slice(0, 3);
+                                        }
+                                        if (searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0) {
+                                            return searchRoot.searchData.songs.slice(0, 3);
+                                        }
+                                        return [];
+                                    }
+                                    readonly property bool hasTopTracks: topTracksModel && topTracksModel.length > 0
 
-                                            readonly property bool isCurrent: searchRoot.currentTrack && (searchRoot.currentTrack.videoId === modelData.videoId || (searchRoot.currentTrack.path && searchRoot.currentTrack.path === modelData.path))
+                                    // Unified Content: Responsive Layout (Side-by-side in wide view, stacked in narrow view)
+                                    GridLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        columns: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? 3 : 1
+                                        columnSpacing: 14
+                                        rowSpacing: 10
 
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 12
-                                                spacing: 12
+                                        // =================================================
+                                        // LEFT: TOP RESULT (ARTIST / ALBUM / SONG HERO)
+                                        // =================================================
+                                        RowLayout {
+                                            id: topHeroRow
+                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopTracks) ? 310 : -1
+                                            Layout.fillWidth: !heroCol.parent.isWide || !topResultUnifiedCard.hasTopTracks
+                                            Layout.fillHeight: heroCol.parent.isWide
+                                            spacing: 14
+                                            visible: topResultUnifiedCard.hasTopResult
 
-                                                // Thumbnail with hover play overlay
+                                            // Thumbnail / Round Avatar
+                                            Item {
+                                                Layout.preferredWidth: 92
+                                                Layout.preferredHeight: 92
+                                                Layout.alignment: Qt.AlignVCenter
+
+                                                Rectangle {
+                                                    id: artMask
+                                                    anchors.fill: parent
+                                                    radius: topResultUnifiedCard.isArtist ? 46 : 12
+                                                    color: "#ffffff"
+                                                    visible: false
+                                                    layer.enabled: true
+                                                }
+
                                                 Item {
-                                                    Layout.preferredWidth: 38
-                                                    Layout.preferredHeight: 38
-
-                                                    Rectangle {
-                                                        id: rowThumbMask
-                                                        anchors.fill: parent
-                                                        radius: 6
-                                                        color: "#ffffff"
-                                                        visible: false
-                                                        layer.enabled: true
-                                                    }
-
-                                                    Item {
-                                                        anchors.fill: parent
-                                                        layer.enabled: true
-                                                        layer.effect: MultiEffect {
-                                                            maskEnabled: true
-                                                            maskSource: rowThumbMask
-                                                            autoPaddingEnabled: false
-                                                        }
-
-                                                        Rectangle {
-                                                            anchors.fill: parent
-                                                            color: "#202024"
-                                                            visible: rowThumb.status !== Image.Ready
-                                                        }
-
-                                                        Image {
-                                                            id: rowThumb
-                                                            anchors.fill: parent
-                                                            source: modelData.image || ""
-                                                            fillMode: Image.PreserveAspectCrop
-                                                            sourceSize: Qt.size(76, 76)
-                                                            asynchronous: true
-                                                            visible: status === Image.Ready
-                                                        }
+                                                    anchors.fill: parent
+                                                    layer.enabled: true
+                                                    layer.effect: MultiEffect {
+                                                        maskEnabled: true
+                                                        maskSource: artMask
+                                                        autoPaddingEnabled: false
                                                     }
 
                                                     Rectangle {
                                                         anchors.fill: parent
-                                                        radius: 6
-                                                        color: Qt.rgba(0, 0, 0, 0.45)
-                                                        visible: trackItemM.containsMouse || trackItem.isCurrent
+                                                        color: "#202024"
+                                                        visible: topThumb.status !== Image.Ready
+                                                    }
 
-                                                        AppIcon {
-                                                            anchors.centerIn: parent
-                                                            source: (trackItem.isCurrent && searchRoot.isPlaying) ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
-                                                            iconSize: 14
-                                                            color: "#ffffff"
+                                                    Image {
+                                                        id: topThumb
+                                                        anchors.fill: parent
+                                                        source: topResultUnifiedCard.topItem ? (topResultUnifiedCard.topItem.image || "") : ""
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        sourceSize: Qt.size(192, 192)
+                                                        asynchronous: true
+                                                        visible: status === Image.Ready
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: topResultUnifiedCard.isArtist ? 46 : 12
+                                                    color: topThumbM.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                                    border.color: Qt.rgba(1, 1, 1, 0.18)
+                                                    border.width: 1
+                                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                                }
+
+                                                MouseArea {
+                                                    id: topThumbM
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (!topResultUnifiedCard.topItem) return;
+                                                        if (topResultUnifiedCard.isArtist) {
+                                                            searchRoot.artistSelected(topResultUnifiedCard.topItem.name, topResultUnifiedCard.topItem.browseId);
+                                                        } else if (topResultUnifiedCard.isAlbum) {
+                                                            searchRoot.albumSelected(topResultUnifiedCard.topItem);
+                                                        } else {
+                                                            searchRoot.trackPlayRequested(topResultUnifiedCard.topItem);
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Title & Artist
-                                                ColumnLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 2
+                                            // Details & Action Buttons
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 4
 
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.title || modelData.name || ""
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 13
-                                                        font.weight: Font.Medium
-                                                        color: trackItem.isCurrent ? searchRoot.accentColor : Theme.textPrimary
-                                                        elide: Text.ElideRight
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.artist || ""
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 11
-                                                        color: Theme.textSecondary
-                                                        elide: Text.ElideRight
-                                                    }
-                                                }
-
-                                                // Duration
+                                                // Name / Title
                                                 Text {
-                                                    text: modelData.duration || ""
+                                                    id: topResultTitleText
+                                                    Layout.fillWidth: true
+                                                    text: topResultUnifiedCard.topItem ? (topResultUnifiedCard.topItem.name || topResultUnifiedCard.topItem.title || "") : ""
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 20
+                                                    font.weight: Font.Bold
+                                                    color: topResultTitleM.containsMouse ? searchRoot.accentColor : Theme.textPrimary
+                                                    elide: Text.ElideRight
+                                                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                                                    MouseArea {
+                                                        id: topResultTitleM
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            if (!topResultUnifiedCard.topItem) return;
+                                                            if (topResultUnifiedCard.isArtist) {
+                                                                searchRoot.artistSelected(topResultUnifiedCard.topItem.name, topResultUnifiedCard.topItem.browseId);
+                                                            } else if (topResultUnifiedCard.isAlbum) {
+                                                                searchRoot.albumSelected(topResultUnifiedCard.topItem);
+                                                            } else {
+                                                                searchRoot.trackPlayRequested(topResultUnifiedCard.topItem);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Subtitle
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: {
+                                                        if (!topResultUnifiedCard.topItem) return "";
+                                                        if (topResultUnifiedCard.isArtist) return "Nghệ sĩ" + (topResultUnifiedCard.topItem.subscribers ? (" • " + topResultUnifiedCard.topItem.subscribers) : "");
+                                                        if (topResultUnifiedCard.isAlbum) return (topResultUnifiedCard.topItem.albumType || "Album") + (topResultUnifiedCard.topItem.year ? (" • " + topResultUnifiedCard.topItem.year) : "") + (topResultUnifiedCard.topItem.artist ? (" • " + topResultUnifiedCard.topItem.artist) : "");
+                                                        return (topResultUnifiedCard.topItem.artist || "") + (topResultUnifiedCard.topItem.duration ? (" • " + topResultUnifiedCard.topItem.duration) : "");
+                                                    }
                                                     font.family: Theme.fontFamily
                                                     font.pixelSize: 12
-                                                    color: Theme.textMuted
+                                                    color: Theme.textSecondary
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                Item { Layout.preferredHeight: 8 }
+
+                                                // Action Buttons (Shuffle + Mix)
+                                                RowLayout {
+                                                    spacing: 8
+
+                                                    // Main Action Button (Shuffle for Artist, Play for Song/Album)
+                                                    Rectangle {
+                                                        Layout.preferredHeight: 32
+                                                        Layout.preferredWidth: heroMainBtnRow.implicitWidth + 24
+                                                        radius: 16
+                                                        color: searchRoot.accentColor
+
+                                                        RowLayout {
+                                                            id: heroMainBtnRow
+                                                            anchors.centerIn: parent
+                                                            spacing: 6
+
+                                                            AppIcon {
+                                                                source: topResultUnifiedCard.isArtist ? "../assets/icons/media-playlist-shuffle-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                                                                iconSize: 12
+                                                                color: searchRoot.capsuleActiveTextColor
+                                                            }
+
+                                                            Text {
+                                                                text: topResultUnifiedCard.isArtist ? "Phát ngẫu nhiên" : "Phát ngay"
+                                                                font.family: Theme.fontFamily
+                                                                font.pixelSize: 11
+                                                                font.weight: Font.Bold
+                                                                color: searchRoot.capsuleActiveTextColor
+                                                            }
+                                                        }
+
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (topResultUnifiedCard.isArtist) {
+                                                                    var trk = (topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks && topResultUnifiedCard.topItem.top_tracks.length > 0)
+                                                                              ? topResultUnifiedCard.topItem.top_tracks[0]
+                                                                              : ((searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0) ? searchRoot.searchData.songs[0] : null);
+                                                                    if (trk) {
+                                                                        searchRoot.startRadioRequested(trk);
+                                                                    } else {
+                                                                        searchRoot.artistSelected(topResultUnifiedCard.topItem.name, topResultUnifiedCard.topItem.browseId);
+                                                                    }
+                                                                } else if (topResultUnifiedCard.isAlbum) {
+                                                                    searchRoot.albumSelected(topResultUnifiedCard.topItem);
+                                                                } else {
+                                                                    searchRoot.trackPlayRequested(topResultUnifiedCard.topItem);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Secondary Button (Radio/Mix for Artist, Radio for Song, or Details)
+                                                    Rectangle {
+                                                        Layout.preferredHeight: 32
+                                                        Layout.preferredWidth: heroSecBtnRow.implicitWidth + 24
+                                                        radius: 16
+                                                        color: Qt.rgba(1, 1, 1, 0.08)
+                                                        border.color: Qt.rgba(1, 1, 1, 0.14)
+                                                        border.width: 1
+
+                                                        RowLayout {
+                                                            id: heroSecBtnRow
+                                                            anchors.centerIn: parent
+                                                            spacing: 6
+
+                                                            AppIcon {
+                                                                source: topResultUnifiedCard.isAlbum ? "../assets/icons/view-more-symbolic.svg" : "../assets/icons/radio-symbolic.svg"
+                                                                iconSize: 11
+                                                                color: Theme.textPrimary
+                                                            }
+
+                                                            Text {
+                                                                text: topResultUnifiedCard.isArtist ? "Mix" : (topResultUnifiedCard.isAlbum ? "Xem album" : "Đài phát")
+                                                                font.family: Theme.fontFamily
+                                                                font.pixelSize: 11
+                                                                font.weight: Font.Medium
+                                                                color: Theme.textPrimary
+                                                            }
+                                                        }
+
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (topResultUnifiedCard.isArtist) {
+                                                                    var trk2 = (topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks && topResultUnifiedCard.topItem.top_tracks.length > 0)
+                                                                               ? topResultUnifiedCard.topItem.top_tracks[0]
+                                                                               : ((searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0) ? searchRoot.searchData.songs[0] : null);
+                                                                    if (trk2) {
+                                                                        searchRoot.startRadioRequested(trk2);
+                                                                    } else {
+                                                                        searchRoot.artistSelected(topResultUnifiedCard.topItem.name, topResultUnifiedCard.topItem.browseId);
+                                                                    }
+                                                                } else if (topResultUnifiedCard.isAlbum) {
+                                                                    searchRoot.albumSelected(topResultUnifiedCard.topItem);
+                                                                } else {
+                                                                    searchRoot.startRadioRequested(topResultUnifiedCard.topItem);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
+                                        }
 
-                                            MouseArea {
-                                                id: trackItemM
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                onClicked: mouse => {
-                                                    if (mouse.button === Qt.RightButton) {
-                                                        searchRoot.trackContextMenuRequested(modelData, mouse.x + trackItem.x, mouse.y + trackItem.y);
-                                                    } else {
-                                                        searchRoot.trackPlayRequested(modelData);
+                                        // Subtle Divider (Vertical on wide, Horizontal on narrow)
+                                        Rectangle {
+                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? 1 : -1
+                                            Layout.preferredHeight: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks) ? -1 : 1
+                                            Layout.fillWidth: !(heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks)
+                                            Layout.fillHeight: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult && topResultUnifiedCard.hasTopTracks)
+                                            Layout.topMargin: 10
+                                            Layout.bottomMargin: 10
+                                            color: Qt.rgba(1, 1, 1, 0.08)
+                                            visible: topResultUnifiedCard.hasTopTracks && topResultUnifiedCard.hasTopResult
+                                        }
+
+                                        // =================================================
+                                        // RIGHT: TOP 3 SONGS LIST
+                                        // =================================================
+                                        ColumnLayout {
+                                            id: topTracksWideCol
+                                            Layout.preferredWidth: (heroCol.parent.isWide && topResultUnifiedCard.hasTopResult) ? 390 : -1
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: heroCol.parent.isWide
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: 4
+                                            visible: topResultUnifiedCard.hasTopTracks
+
+                                            Repeater {
+                                                model: topResultUnifiedCard.topTracksModel
+
+                                                delegate: Rectangle {
+                                                    id: topTrackRow
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 50
+                                                    radius: 8
+                                                    color: topTrackM.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+                                                    Behavior on color { ColorAnimation { duration: 80 } }
+
+                                                    readonly property bool isCurrent: searchRoot.currentTrack && (searchRoot.currentTrack.videoId === modelData.videoId || (searchRoot.currentTrack.path && searchRoot.currentTrack.path === modelData.path))
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 12
+                                                        spacing: 12
+
+                                                        // 42x42 Thumbnail with Play Overlay
+                                                        Item {
+                                                            Layout.preferredWidth: 42
+                                                            Layout.preferredHeight: 42
+                                                            Layout.alignment: Qt.AlignVCenter
+
+                                                            Rectangle {
+                                                                id: rThumbMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true
+                                                            }
+                                                            Item {
+                                                                anchors.fill: parent
+                                                                layer.enabled: true
+                                                                layer.effect: MultiEffect { maskEnabled: true; maskSource: rThumbMask; autoPaddingEnabled: false }
+                                                                Rectangle { anchors.fill: parent; color: "#202024"; visible: rThumb.status !== Image.Ready }
+                                                                Image {
+                                                                    id: rThumb
+                                                                    anchors.fill: parent
+                                                                    source: modelData.image || ""
+                                                                    fillMode: Image.PreserveAspectCrop
+                                                                    sourceSize: Qt.size(96, 96)
+                                                                    asynchronous: true
+                                                                    visible: status === Image.Ready
+                                                                }
+                                                            }
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                radius: 8
+                                                                color: Qt.rgba(0, 0, 0, 0.45)
+                                                                visible: topTrackM.containsMouse || topTrackRow.isCurrent
+
+                                                                AppIcon {
+                                                                    anchors.centerIn: parent
+                                                                    source: (topTrackRow.isCurrent && searchRoot.isPlaying) ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                                                                    iconSize: 14
+                                                                    color: "#ffffff"
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Title & Detailed Subtitle with Views
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                            spacing: 2
+
+                                                            Text {
+                                                                Layout.fillWidth: true
+                                                                text: modelData.title || modelData.name || ""
+                                                                font.family: Theme.fontFamily
+                                                                font.pixelSize: 14
+                                                                font.weight: Font.DemiBold
+                                                                color: topTrackRow.isCurrent ? searchRoot.accentColor : Theme.textPrimary
+                                                                elide: Text.ElideRight
+                                                            }
+
+                                                            Text {
+                                                                Layout.fillWidth: true
+                                                                text: {
+                                                                    var parts = [];
+                                                                    if (modelData.type === "album" || modelData.albumType) {
+                                                                        parts.push(modelData.albumType || "Album");
+                                                                    } else {
+                                                                        parts.push("Bài hát");
+                                                                    }
+                                                                    if (modelData.duration) {
+                                                                        parts.push(modelData.duration);
+                                                                    }
+                                                                    if (modelData.views) {
+                                                                        parts.push(modelData.views);
+                                                                    } else if (modelData.artist && modelData.artist !== "YouTube Music") {
+                                                                        parts.push(modelData.artist);
+                                                                    }
+                                                                    return parts.join(" • ");
+                                                                }
+                                                                font.family: Theme.fontFamily
+                                                                font.pixelSize: 12
+                                                                color: Theme.textSecondary
+                                                                elide: Text.ElideRight
+                                                            }
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        id: topTrackM
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                        onClicked: mouse => {
+                                                            if (mouse.button === Qt.RightButton) {
+                                                                searchRoot.trackContextMenuRequested(modelData, mouse.x + topTrackRow.x, mouse.y + topTrackRow.y);
+                                                            } else {
+                                                                searchRoot.trackPlayRequested(modelData);
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1082,7 +1299,7 @@ Rectangle {
                             }
                         }
 
-                        // 3. ALBUMS CAROUSEL
+                        // 2. ALBUMS CAROUSEL
                         Item {
                             width: parent.width
                             height: albumsCol.height
@@ -1093,37 +1310,12 @@ Rectangle {
                                 width: parent.width
                                 spacing: 10
 
-                                RowLayout {
-                                    width: parent.width
-
-                                    Text {
-                                        text: "Albums & Đĩa đơn"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 17
-                                        font.weight: Font.Bold
-                                        color: Theme.textPrimary
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    // Carousel Navigation Arrows < >
-                                    Row {
-                                        spacing: 6
-                                        Rectangle {
-                                            width: 28; height: 28; radius: 14
-                                            color: albPrevM.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
-                                            border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1
-                                            AppIcon { anchors.centerIn: parent; source: "../assets/icons/go-previous-symbolic.svg"; iconSize: 12; color: searchRoot.accentColor }
-                                            MouseArea { id: albPrevM; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: albumsFlick.contentX = Math.max(0, albumsFlick.contentX - 320) }
-                                        }
-                                        Rectangle {
-                                            width: 28; height: 28; radius: 14
-                                            color: albNextM.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
-                                            border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1
-                                            AppIcon { anchors.centerIn: parent; source: "../assets/icons/go-next-symbolic.svg"; iconSize: 12; color: searchRoot.accentColor }
-                                            MouseArea { id: albNextM; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: albumsFlick.contentX = Math.min(albumsFlick.contentWidth - albumsFlick.width, albumsFlick.contentX + 320) }
-                                        }
-                                    }
+                                Text {
+                                    text: "Albums & Đĩa đơn"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    color: Theme.textPrimary
                                 }
 
                                 Flickable {
@@ -1215,7 +1407,7 @@ Rectangle {
 
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: (modelData.artist || "") + (modelData.year ? (" • " + modelData.year) : "")
+                                                        text: (modelData.albumType ? (modelData.albumType + " • ") : "") + (modelData.year ? (modelData.year + " • ") : "") + (modelData.artist || "")
                                                         font.family: Theme.fontFamily
                                                         font.pixelSize: 10
                                                         color: Theme.textSecondary
@@ -1237,7 +1429,249 @@ Rectangle {
                             }
                         }
 
-                        // 4. ARTISTS CAROUSEL
+                        // 3. COMMUNITY PLAYLISTS CAROUSEL
+                        Item {
+                            width: parent.width
+                            height: commPlCol.height
+                            visible: !!(searchRoot.searchData && ((searchRoot.searchData.community_playlists && searchRoot.searchData.community_playlists.length > 0) || (searchRoot.searchData.playlists && searchRoot.searchData.playlists.length > 0)))
+
+                            Column {
+                                id: commPlCol
+                                width: parent.width
+                                spacing: 10
+
+                                Text {
+                                    text: "Danh sách phát cộng đồng"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    color: Theme.textPrimary
+                                }
+
+                                Flickable {
+                                    id: commPlFlick
+                                    width: parent.width
+                                    height: 180
+                                    contentWidth: commPlRow.width + 10
+                                    contentHeight: height
+                                    clip: true
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    Row {
+                                        id: commPlRow
+                                        spacing: 14
+
+                                        Repeater {
+                                            model: (searchRoot.searchData && searchRoot.searchData.community_playlists && searchRoot.searchData.community_playlists.length > 0)
+                                                ? searchRoot.searchData.community_playlists
+                                                : (searchRoot.searchData ? searchRoot.searchData.playlists : [])
+
+                                            delegate: Rectangle {
+                                                width: 130
+                                                height: 174
+                                                radius: 12
+                                                color: cplCardM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 6
+
+                                                    Item {
+                                                        Layout.preferredWidth: 118
+                                                        Layout.preferredHeight: 118
+
+                                                        Rectangle {
+                                                            id: cplMask
+                                                            anchors.fill: parent
+                                                            radius: 8
+                                                            color: "#ffffff"
+                                                            visible: false
+                                                            layer.enabled: true
+                                                        }
+
+                                                        Item {
+                                                            anchors.fill: parent
+                                                            layer.enabled: true
+                                                            layer.effect: MultiEffect {
+                                                                maskEnabled: true
+                                                                maskSource: cplMask
+                                                                autoPaddingEnabled: false
+                                                            }
+
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                color: "#202024"
+                                                                visible: cplThumb.status !== Image.Ready
+                                                            }
+
+                                                            Image {
+                                                                id: cplThumb
+                                                                anchors.fill: parent
+                                                                source: modelData.image || ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                sourceSize: Qt.size(236, 236)
+                                                                asynchronous: true
+                                                                visible: status === Image.Ready
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.title || ""
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 12
+                                                        font.weight: Font.DemiBold
+                                                        color: Theme.textPrimary
+                                                        elide: Text.ElideRight
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.author || modelData.artist || "Cộng đồng"
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 10
+                                                        color: Theme.textSecondary
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: cplCardM
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: searchRoot.playlistSelected(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. FEATURED PLAYLISTS CAROUSEL
+                        Item {
+                            width: parent.width
+                            height: featPlCol.height
+                            visible: !!(searchRoot.searchData && searchRoot.searchData.featured_playlists && searchRoot.searchData.featured_playlists.length > 0)
+
+                            Column {
+                                id: featPlCol
+                                width: parent.width
+                                spacing: 10
+
+                                Text {
+                                    text: "Danh sách phát nổi bật"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    color: Theme.textPrimary
+                                }
+
+                                Flickable {
+                                    id: featPlFlick
+                                    width: parent.width
+                                    height: 180
+                                    contentWidth: featPlRow.width + 10
+                                    contentHeight: height
+                                    clip: true
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    Row {
+                                        id: featPlRow
+                                        spacing: 14
+
+                                        Repeater {
+                                            model: searchRoot.searchData ? searchRoot.searchData.featured_playlists : []
+
+                                            delegate: Rectangle {
+                                                width: 130
+                                                height: 174
+                                                radius: 12
+                                                color: fplCardM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 6
+
+                                                    Item {
+                                                        Layout.preferredWidth: 118
+                                                        Layout.preferredHeight: 118
+
+                                                        Rectangle {
+                                                            id: fplmMask
+                                                            anchors.fill: parent
+                                                            radius: 8
+                                                            color: "#ffffff"
+                                                            visible: false
+                                                            layer.enabled: true
+                                                        }
+
+                                                        Item {
+                                                            anchors.fill: parent
+                                                            layer.enabled: true
+                                                            layer.effect: MultiEffect {
+                                                                maskEnabled: true
+                                                                maskSource: fplmMask
+                                                                autoPaddingEnabled: false
+                                                            }
+
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                color: "#202024"
+                                                                visible: fplmThumb.status !== Image.Ready
+                                                            }
+
+                                                            Image {
+                                                                id: fplmThumb
+                                                                anchors.fill: parent
+                                                                source: modelData.image || ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                sourceSize: Qt.size(236, 236)
+                                                                asynchronous: true
+                                                                visible: status === Image.Ready
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.title || ""
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 12
+                                                        font.weight: Font.DemiBold
+                                                        color: Theme.textPrimary
+                                                        elide: Text.ElideRight
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: "YouTube Music"
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 10
+                                                        color: Theme.textSecondary
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: fplCardM
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: searchRoot.playlistSelected(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. ARTISTS CAROUSEL
                         Item {
                             width: parent.width
                             height: artistsCol.height
@@ -1248,36 +1682,12 @@ Rectangle {
                                 width: parent.width
                                 spacing: 10
 
-                                RowLayout {
-                                    width: parent.width
-
-                                    Text {
-                                        text: "Nghệ sĩ liên quan"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 17
-                                        font.weight: Font.Bold
-                                        color: Theme.textPrimary
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Row {
-                                        spacing: 6
-                                        Rectangle {
-                                            width: 28; height: 28; radius: 14
-                                            color: artPrevM.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
-                                            border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1
-                                            AppIcon { anchors.centerIn: parent; source: "../assets/icons/go-previous-symbolic.svg"; iconSize: 12; color: searchRoot.accentColor }
-                                            MouseArea { id: artPrevM; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: artistsFlick.contentX = Math.max(0, artistsFlick.contentX - 320) }
-                                        }
-                                        Rectangle {
-                                            width: 28; height: 28; radius: 14
-                                            color: artNextM.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
-                                            border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1
-                                            AppIcon { anchors.centerIn: parent; source: "../assets/icons/go-next-symbolic.svg"; iconSize: 12; color: searchRoot.accentColor }
-                                            MouseArea { id: artNextM; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: artistsFlick.contentX = Math.min(artistsFlick.contentWidth - artistsFlick.width, artistsFlick.contentX + 320) }
-                                        }
-                                    }
+                                Text {
+                                    text: "Nghệ sĩ liên quan"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    color: Theme.textPrimary
                                 }
 
                                 Flickable {
@@ -1393,130 +1803,11 @@ Rectangle {
                                 }
                             }
                         }
-
-                        // 5. PLAYLISTS CAROUSEL
-                        Item {
-                            width: parent.width
-                            height: plCol.height
-                            visible: !!(searchRoot.searchData && searchRoot.searchData.playlists && searchRoot.searchData.playlists.length > 0)
-
-                            Column {
-                                id: plCol
-                                width: parent.width
-                                spacing: 10
-
-                                Text {
-                                    text: "Danh sách phát"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 17
-                                    font.weight: Font.Bold
-                                    color: Theme.textPrimary
-                                }
-
-                                Flickable {
-                                    width: parent.width
-                                    height: 180
-                                    contentWidth: plRow.width + 10
-                                    contentHeight: height
-                                    clip: true
-                                    boundsBehavior: Flickable.StopAtBounds
-
-                                    Row {
-                                        id: plRow
-                                        spacing: 14
-
-                                        Repeater {
-                                            model: searchRoot.searchData ? searchRoot.searchData.playlists : []
-
-                                            delegate: Rectangle {
-                                                width: 130
-                                                height: 174
-                                                radius: 12
-                                                color: plCardM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
-
-                                                ColumnLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 6
-                                                    spacing: 6
-
-                                                    Item {
-                                                        Layout.preferredWidth: 118
-                                                        Layout.preferredHeight: 118
-
-                                                        Rectangle {
-                                                            id: plMask
-                                                            anchors.fill: parent
-                                                            radius: 8
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: plMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#202024"
-                                                                visible: plThumb.status !== Image.Ready
-                                                            }
-
-                                                            Image {
-                                                                id: plThumb
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                sourceSize: Qt.size(236, 236)
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.title || ""
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 12
-                                                        font.weight: Font.DemiBold
-                                                        color: Theme.textPrimary
-                                                        elide: Text.ElideRight
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.author || "YouTube Music"
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 10
-                                                        color: Theme.textSecondary
-                                                        elide: Text.ElideRight
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    id: plCardM
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: searchRoot.playlistSelected(modelData)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 
                 // -------------------------------------------------------------
-                // SECTION: TAB "SONGS" (Full list of songs)
+                // SECTION: TAB "SONGS" (Full list of songs, 30+ items)
                 // -------------------------------------------------------------
                 Item {
                     width: parent.width
@@ -1528,13 +1819,43 @@ Rectangle {
                         width: parent.width
                         spacing: 4
 
+                        // Header
+                        RowLayout {
+                            width: parent.width
+                            height: 36
+
+                            Text {
+                                text: searchRoot.isTabLoaded("songs") ? ("Toàn bộ bài hát (" + searchRoot.getTabItems("songs").length + ")") : "Toàn bộ bài hát"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                                color: Theme.textPrimary
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Skeleton Loading Placeholder
+                        Column {
+                            width: parent.width
+                            spacing: 4
+                            visible: !searchRoot.isTabLoaded("songs")
+
+                            Repeater {
+                                model: 8
+                                SkeletonTrackRow {
+                                    width: fullSongsCol.width
+                                }
+                            }
+                        }
+
                         Repeater {
-                            model: (searchRoot.searchData && searchRoot.searchData.songs) ? searchRoot.searchData.songs : []
+                            model: searchRoot.isTabLoaded("songs") ? searchRoot.getTabItems("songs") : []
 
                             delegate: Rectangle {
                                 id: fullSongRow
                                 width: fullSongsCol.width
-                                height: 50
+                                height: 52
                                 radius: 8
                                 color: fullSongM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
@@ -1569,7 +1890,7 @@ Rectangle {
                                         }
                                     }
 
-                                    // Thumbnail
+                                    // Thumbnail with Play overlay
                                     Item {
                                         Layout.preferredWidth: 40
                                         Layout.preferredHeight: 40
@@ -1586,6 +1907,19 @@ Rectangle {
                                                 id: fImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(80, 80); asynchronous: true; visible: status === Image.Ready
                                             }
                                         }
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: Qt.rgba(0, 0, 0, 0.45)
+                                            visible: fullSongM.containsMouse || fullSongRow.isCurrent
+
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                source: (fullSongRow.isCurrent && searchRoot.isPlaying) ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                                                iconSize: 14
+                                                color: "#ffffff"
+                                            }
+                                        }
                                     }
 
                                     // Title & Artist
@@ -1598,14 +1932,20 @@ Rectangle {
                                             text: modelData.title || modelData.name || ""
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 13
-                                            font.weight: Font.Medium
+                                            font.weight: Font.DemiBold
                                             color: fullSongRow.isCurrent ? searchRoot.accentColor : Theme.textPrimary
                                             elide: Text.ElideRight
                                         }
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.artist || ""
+                                            text: {
+                                                var parts = [];
+                                                if (modelData.artist && modelData.artist !== "YouTube Music") parts.push(modelData.artist);
+                                                if (modelData.album) parts.push(modelData.album);
+                                                if (modelData.views) parts.push(modelData.views);
+                                                return parts.length > 0 ? parts.join(" • ") : (modelData.artist || "");
+                                            }
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 11
                                             color: Theme.textSecondary
@@ -1642,102 +1982,68 @@ Rectangle {
                 }
 
                 // -------------------------------------------------------------
-                // SECTION: TAB "ARTISTS" (Full list / Grid of artists)
+                // SECTION: TAB "ALBUMS" (Full vertical list of Albums & Singles)
                 // -------------------------------------------------------------
                 Item {
                     width: parent.width
-                    height: fullArtGrid.height
-                    visible: searchRoot.activeTab === "artists"
+                    height: fullAlbCol.height
+                    visible: searchRoot.activeTab === "albums"
 
-                    Flow {
-                        id: fullArtGrid
+                    Column {
+                        id: fullAlbCol
                         width: parent.width
-                        spacing: 16
+                        spacing: 6
 
-                        Repeater {
-                            model: (searchRoot.searchData && searchRoot.searchData.artists) ? searchRoot.searchData.artists : []
+                        // Header
+                        RowLayout {
+                            width: parent.width
+                            height: 36
 
-                            delegate: Rectangle {
-                                width: 140
-                                height: 170
-                                radius: 12
-                                color: fArtM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                            Text {
+                                text: searchRoot.isTabLoaded("albums") ? ("Albums & Đĩa đơn (" + searchRoot.getTabItems("albums").length + ")") : "Albums & Đĩa đơn"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                                color: Theme.textPrimary
+                            }
 
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
+                            Item { Layout.fillWidth: true }
+                        }
 
-                                    Item {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        Layout.preferredWidth: 104
-                                        Layout.preferredHeight: 104
+                        // Skeleton Loading Placeholder
+                        Column {
+                            width: parent.width
+                            spacing: 6
+                            visible: !searchRoot.isTabLoaded("albums")
 
-                                        Rectangle { id: faMask; anchors.fill: parent; radius: 52; color: "#ffffff"; visible: false; layer.enabled: true }
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: faMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: faImg.status !== Image.Ready }
-                                            Image { id: faImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(208, 208); asynchronous: true; visible: status === Image.Ready }
-                                        }
-                                        Rectangle { anchors.fill: parent; radius: 52; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.18); border.width: 1 }
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.name || modelData.artist || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.weight: Font.DemiBold
-                                        color: Theme.textPrimary
-                                        horizontalAlignment: Text.AlignHCenter
-                                        elide: Text.ElideRight
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: fArtM
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: searchRoot.artistSelected(modelData.name || modelData.artist, modelData.browseId)
+                            Repeater {
+                                model: 6
+                                SkeletonTrackRow {
+                                    width: fullAlbCol.width
+                                    height: 68
                                 }
                             }
                         }
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // SECTION: TAB "ALBUMS" (Full list / Grid of albums)
-                // -------------------------------------------------------------
-                Item {
-                    width: parent.width
-                    height: fullAlbGrid.height
-                    visible: searchRoot.activeTab === "albums"
-
-                    Flow {
-                        id: fullAlbGrid
-                        width: parent.width
-                        spacing: 16
 
                         Repeater {
-                            model: (searchRoot.searchData && searchRoot.searchData.albums) ? searchRoot.searchData.albums : []
+                            model: searchRoot.isTabLoaded("albums") ? searchRoot.getTabItems("albums") : []
 
                             delegate: Rectangle {
-                                width: 148
-                                height: 200
-                                radius: 12
-                                color: fAlbM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                                width: fullAlbCol.width
+                                height: 68
+                                radius: 8
+                                color: fullAlbRowM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
-                                ColumnLayout {
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 6
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 16
+                                    spacing: 14
 
+                                    // Thumbnail 54x54
                                     Item {
-                                        Layout.preferredWidth: 132
-                                        Layout.preferredHeight: 132
+                                        Layout.preferredWidth: 54
+                                        Layout.preferredHeight: 54
 
                                         Rectangle { id: falbMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
                                         Item {
@@ -1745,32 +2051,46 @@ Rectangle {
                                             layer.enabled: true
                                             layer.effect: MultiEffect { maskEnabled: true; maskSource: falbMask; autoPaddingEnabled: false }
                                             Rectangle { anchors.fill: parent; color: "#202024"; visible: falbImg.status !== Image.Ready }
-                                            Image { id: falbImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(264, 264); asynchronous: true; visible: status === Image.Ready }
+                                            Image { id: falbImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                        }
+                                        Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
+                                    }
+
+                                    // Details
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || modelData.name || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            color: fullAlbRowM.containsMouse ? searchRoot.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Behavior on color { ColorAnimation { duration: 80 } }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (modelData.albumType ? (modelData.albumType + " • ") : "Album • ") + (modelData.year ? (modelData.year + " • ") : "") + (modelData.artist || "")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
                                         }
                                     }
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.weight: Font.DemiBold
-                                        color: Theme.textPrimary
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (modelData.artist || "") + (modelData.year ? (" • " + modelData.year) : "")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 10
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
+                                    AppIcon {
+                                        source: "../assets/icons/go-next-symbolic.svg"
+                                        iconSize: 14
+                                        color: fullAlbRowM.containsMouse ? searchRoot.accentColor : Theme.textMuted
                                     }
                                 }
 
                                 MouseArea {
-                                    id: fAlbM
+                                    id: fullAlbRowM
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
@@ -1782,72 +2102,351 @@ Rectangle {
                 }
 
                 // -------------------------------------------------------------
-                // SECTION: TAB "PLAYLISTS" (Full list / Grid of playlists)
+                // SECTION: TAB "COMMUNITY_PLAYLISTS" (Full vertical list)
                 // -------------------------------------------------------------
                 Item {
                     width: parent.width
-                    height: fullPlGrid.height
-                    visible: searchRoot.activeTab === "playlists"
+                    height: fullCommPlCol.height
+                    visible: searchRoot.activeTab === "community_playlists"
 
-                    Flow {
-                        id: fullPlGrid
+                    Column {
+                        id: fullCommPlCol
                         width: parent.width
-                        spacing: 16
+                        spacing: 6
+
+                        RowLayout {
+                            width: parent.width
+                            height: 36
+
+                            Text {
+                                text: searchRoot.isTabLoaded("community_playlists") ? ("Danh sách phát cộng đồng (" + searchRoot.getTabItems("community_playlists").length + ")") : "Danh sách phát cộng đồng"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                                color: Theme.textPrimary
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Skeleton Loading Placeholder
+                        Column {
+                            width: parent.width
+                            spacing: 6
+                            visible: !searchRoot.isTabLoaded("community_playlists")
+
+                            Repeater {
+                                model: 6
+                                SkeletonTrackRow {
+                                    width: fullCommPlCol.width
+                                    height: 68
+                                }
+                            }
+                        }
 
                         Repeater {
-                            model: (searchRoot.searchData && searchRoot.searchData.playlists) ? searchRoot.searchData.playlists : []
+                            model: searchRoot.isTabLoaded("community_playlists") ? searchRoot.getTabItems("community_playlists") : []
 
                             delegate: Rectangle {
-                                width: 148
-                                height: 190
-                                radius: 12
-                                color: fPlM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                                width: fullCommPlCol.width
+                                height: 68
+                                radius: 8
+                                color: commPlRowM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
 
-                                ColumnLayout {
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 6
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 16
+                                    spacing: 14
 
                                     Item {
-                                        Layout.preferredWidth: 132
-                                        Layout.preferredHeight: 132
+                                        Layout.preferredWidth: 54
+                                        Layout.preferredHeight: 54
 
-                                        Rectangle { id: fplMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
+                                        Rectangle { id: cplmMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
                                         Item {
                                             anchors.fill: parent
                                             layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: fplMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: fplImg.status !== Image.Ready }
-                                            Image { id: fplImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(264, 264); asynchronous: true; visible: status === Image.Ready }
+                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: cplmMask; autoPaddingEnabled: false }
+                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: cplmImg.status !== Image.Ready }
+                                            Image { id: cplmImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                        }
+                                        Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            color: commPlRowM.containsMouse ? searchRoot.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Behavior on color { ColorAnimation { duration: 80 } }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (modelData.author || modelData.artist || "Cộng đồng") + (modelData.itemCount ? (" • " + modelData.itemCount + " bài hát") : "")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
                                         }
                                     }
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.title || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.weight: Font.DemiBold
-                                        color: Theme.textPrimary
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.author || "YouTube Music"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 10
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
+                                    AppIcon {
+                                        source: "../assets/icons/go-next-symbolic.svg"
+                                        iconSize: 14
+                                        color: commPlRowM.containsMouse ? searchRoot.accentColor : Theme.textMuted
                                     }
                                 }
 
                                 MouseArea {
-                                    id: fPlM
+                                    id: commPlRowM
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: searchRoot.playlistSelected(modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // SECTION: TAB "FEATURED_PLAYLISTS" (Full vertical list)
+                // -------------------------------------------------------------
+                Item {
+                    width: parent.width
+                    height: fullFeatPlCol.height
+                    visible: searchRoot.activeTab === "featured_playlists"
+
+                    Column {
+                        id: fullFeatPlCol
+                        width: parent.width
+                        spacing: 6
+
+                        RowLayout {
+                            width: parent.width
+                            height: 36
+
+                            Text {
+                                text: searchRoot.isTabLoaded("featured_playlists") ? ("Danh sách phát nổi bật (" + searchRoot.getTabItems("featured_playlists").length + ")") : "Danh sách phát nổi bật"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                                color: Theme.textPrimary
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Skeleton Loading Placeholder
+                        Column {
+                            width: parent.width
+                            spacing: 6
+                            visible: !searchRoot.isTabLoaded("featured_playlists")
+
+                            Repeater {
+                                model: 6
+                                SkeletonTrackRow {
+                                    width: fullFeatPlCol.width
+                                    height: 68
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: searchRoot.isTabLoaded("featured_playlists") ? searchRoot.getTabItems("featured_playlists") : []
+
+                            delegate: Rectangle {
+                                width: fullFeatPlCol.width
+                                height: 68
+                                radius: 8
+                                color: featPlRowM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 16
+                                    spacing: 14
+
+                                    Item {
+                                        Layout.preferredWidth: 54
+                                        Layout.preferredHeight: 54
+
+                                        Rectangle { id: fpl2Mask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: fpl2Mask; autoPaddingEnabled: false }
+                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: fpl2Img.status !== Image.Ready }
+                                            Image { id: fpl2Img; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                        }
+                                        Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.title || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            color: featPlRowM.containsMouse ? searchRoot.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Behavior on color { ColorAnimation { duration: 80 } }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Tuyển tập chính thức YouTube Music" + (modelData.itemCount ? (" • " + modelData.itemCount + " bài") : "")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    AppIcon {
+                                        source: "../assets/icons/go-next-symbolic.svg"
+                                        iconSize: 14
+                                        color: featPlRowM.containsMouse ? searchRoot.accentColor : Theme.textMuted
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: featPlRowM
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: searchRoot.playlistSelected(modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // SECTION: TAB "ARTISTS" (Full vertical list of Artists)
+                // -------------------------------------------------------------
+                Item {
+                    width: parent.width
+                    height: fullArtCol.height
+                    visible: searchRoot.activeTab === "artists"
+
+                    Column {
+                        id: fullArtCol
+                        width: parent.width
+                        spacing: 6
+
+                        RowLayout {
+                            width: parent.width
+                            height: 36
+
+                            Text {
+                                text: searchRoot.isTabLoaded("artists") ? ("Nghệ sĩ liên quan (" + searchRoot.getTabItems("artists").length + ")") : "Nghệ sĩ liên quan"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                                color: Theme.textPrimary
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Skeleton Loading Placeholder
+                        Column {
+                            width: parent.width
+                            spacing: 6
+                            visible: !searchRoot.isTabLoaded("artists")
+
+                            Repeater {
+                                model: 6
+                                SkeletonTrackRow {
+                                    width: fullArtCol.width
+                                    height: 68
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: searchRoot.isTabLoaded("artists") ? searchRoot.getTabItems("artists") : []
+
+                            delegate: Rectangle {
+                                width: fullArtCol.width
+                                height: 68
+                                radius: 8
+                                color: fArtRowM.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 16
+                                    spacing: 14
+
+                                    // Round Avatar 54x54
+                                    Item {
+                                        Layout.preferredWidth: 54
+                                        Layout.preferredHeight: 54
+
+                                        Rectangle { id: faMask; anchors.fill: parent; radius: 27; color: "#ffffff"; visible: false; layer.enabled: true }
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: faMask; autoPaddingEnabled: false }
+                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: faImg.status !== Image.Ready }
+                                            Image { id: faImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                        }
+                                        Rectangle { anchors.fill: parent; radius: 27; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.18); border.width: 1 }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.name || modelData.artist || ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            color: fArtRowM.containsMouse ? searchRoot.accentColor : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Behavior on color { ColorAnimation { duration: 80 } }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Nghệ sĩ" + (modelData.subscribers ? (" • " + modelData.subscribers) : "")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    AppIcon {
+                                        source: "../assets/icons/go-next-symbolic.svg"
+                                        iconSize: 14
+                                        color: fArtRowM.containsMouse ? searchRoot.accentColor : Theme.textMuted
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: fArtRowM
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: searchRoot.artistSelected(modelData.name || modelData.artist, modelData.browseId)
                                 }
                             }
                         }
