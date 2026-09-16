@@ -271,7 +271,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + " bài hát"
+                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + I18n.tr(" bài hát", " songs")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 color: Theme.textSecondary
@@ -293,23 +293,21 @@ Rectangle {
                             }
                         }
 
-                        // Optional short description if available
                         Text {
                             Layout.fillWidth: true
-                            Layout.topMargin: 2
-                            visible: root.albumMetadata && !!root.albumMetadata.description
                             text: root.albumMetadata ? root.albumMetadata.description : ""
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
-                            color: Theme.textMuted
-                            elide: Text.ElideRight
-                            maximumLineCount: 2
+                            color: Theme.textSecondary
                             wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            visible: text !== ""
                         }
                     }
                 }
 
-                // Standard Section Header (When NOT in Album Hero mode)
+                // Normal View Header: Title, Count & View Options (Downloads Sub-tabs)
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.albumMetadata === null
@@ -320,7 +318,7 @@ Rectangle {
                         spacing: 12
 
                         Text {
-                            text: root.isDownloadsView ? "Downloads" : root.sectionTitle
+                            text: root.isDownloadsView ? I18n.tr("Tải xuống", "Downloads") : root.sectionTitle
                             font.family: Theme.fontFamily
                             font.pixelSize: 28
                             font.bold: true
@@ -339,7 +337,7 @@ Rectangle {
                             Text {
                                 id: countBadgeText
                                 anchors.centerIn: parent
-                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + " bài hát"
+                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + I18n.tr(" bài hát", " songs")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
@@ -354,16 +352,16 @@ Rectangle {
                     Rectangle {
                         visible: root.isDownloadsView
                         height: 34
-                        width: 204
+                        width: 210
                         radius: 17
-                        color: Qt.rgba(1, 1, 1, 0.05)
-                        border.color: Qt.rgba(1, 1, 1, 0.10)
+                        color: Qt.rgba(0.08, 0.08, 0.11, 0.85)
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
                         border.width: 1
 
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 3
-                            spacing: 3
+                            spacing: 2
 
                             // Subtab: Bài hát
                             Rectangle {
@@ -383,7 +381,7 @@ Rectangle {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Bài hát"
+                                    text: I18n.tr("Bài hát", "Songs")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: root.downloadsSubTab === "tracks"
@@ -416,7 +414,7 @@ Rectangle {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Albums (" + (root.localAlbums ? root.localAlbums.length : 0) + ")"
+                                    text: I18n.tr("Tuyển tập (", "Albums (") + (root.localAlbums ? root.localAlbums.length : 0) + ")"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: root.downloadsSubTab === "albums"
@@ -435,7 +433,7 @@ Rectangle {
 
                     Text {
                         visible: !root.isDownloadsView && !root.isLoading
-                        text: (root.sortedTracks ? root.sortedTracks.length + " tracks" : "")
+                        text: (root.sortedTracks ? root.sortedTracks.length + I18n.tr(" bài", " tracks") : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
@@ -443,13 +441,13 @@ Rectangle {
                     }
                 }
 
-                // Action Toolbar (Shuffle Play, Sort, Multi-Select)
+                // Unified Toolbar: Play All, Shuffle Play, Sort Options
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.isDownloadsView || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
                     spacing: 12
 
-                    // Play All (From 1st Track) Button
+                    // Primary Play All Button (Emerald Green Solid)
                     Rectangle {
                         height: 36
                         width: playRow.implicitWidth + 24
@@ -457,6 +455,7 @@ Rectangle {
                         color: playH.hovered ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                         scale: playH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: 100 } }
 
                         RowLayout {
                             id: playRow
@@ -470,7 +469,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Phát"
+                                text: I18n.tr("Phát", "Play")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -509,7 +508,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Phát ngẫu nhiên"
+                                text: I18n.tr("Phát ngẫu nhiên", "Shuffle")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -549,7 +548,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Hàng đợi"
+                                text: I18n.tr("Hàng đợi", "Queue")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -589,7 +588,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Tải Album"
+                                text: I18n.tr("Tải Album", "Download Album")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -624,7 +623,7 @@ Rectangle {
                             Text {
                                 Layout.leftMargin: 8
                                 Layout.rightMargin: 2
-                                text: "Sắp xếp:"
+                                text: I18n.tr("Sắp xếp:", "Sort by:")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
@@ -645,7 +644,7 @@ Rectangle {
                                 Text {
                                     id: sortRecentText
                                     anchors.centerIn: parent
-                                    text: "Mới nhất"
+                                    text: I18n.tr("Mới nhất", "Latest")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: root.sortBy === "recent"
@@ -673,7 +672,7 @@ Rectangle {
                                 Text {
                                     id: sortTitleText
                                     anchors.centerIn: parent
-                                    text: "Tên A-Z"
+                                    text: I18n.tr("Tên A-Z", "Title A-Z")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: root.sortBy === "title"
@@ -701,7 +700,7 @@ Rectangle {
                                 Text {
                                     id: sortArtistText
                                     anchors.centerIn: parent
-                                    text: "Nghệ sĩ"
+                                    text: I18n.tr("Nghệ sĩ", "Artist")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: root.sortBy === "artist"
@@ -755,7 +754,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "Đã chọn: " + root.selectedTrackPaths.length + " bài"
+                                    text: I18n.tr("Đã chọn: ", "Selected: ") + root.selectedTrackPaths.length + I18n.tr(" bài", " songs")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -777,7 +776,7 @@ Rectangle {
                             Text {
                                 id: selAllText
                                 anchors.centerIn: parent
-                                text: "Chọn tất cả"
+                                text: I18n.tr("Chọn tất cả", "Select All")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
@@ -804,7 +803,7 @@ Rectangle {
                             Text {
                                 id: clearSelText
                                 anchors.centerIn: parent
-                                text: "Bỏ chọn"
+                                text: I18n.tr("Bỏ chọn", "Deselect")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textSecondary
@@ -842,7 +841,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "+ Tạo Playlist"
+                                    text: I18n.tr("+ Tạo danh sách phát", "+ New Playlist")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -883,7 +882,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "Xóa (" + root.selectedTrackPaths.length + ")"
+                                    text: I18n.tr("Xóa (", "Delete (") + root.selectedTrackPaths.length + ")"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -959,7 +958,7 @@ Rectangle {
 
                 Text {
                     visible: !root.isLoading && (!root.sortedTracks || root.sortedTracks.length === 0)
-                    text: root.isPlaylistView ? "This playlist is empty. Add songs using the context menu on any song!" : "No tracks found. Type in search bar to explore online tracks!"
+                    text: root.isPlaylistView ? I18n.tr("Danh sách phát này đang trống. Thêm bài hát bằng menu chuột phải!", "This playlist is empty. Add songs using the context menu on any song!") : I18n.tr("Không tìm thấy bài hát nào. Nhập vào thanh tìm kiếm để khám phá!", "No tracks found. Type in search bar to explore online tracks!")
                     font.family: Theme.fontFamily
                     font.pixelSize: 14
                     color: Theme.textSecondary
@@ -1103,7 +1102,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: (modelData.artist || "Unknown") + " • " + (modelData.trackCount || 0) + " bài"
+                                    text: (modelData.artist || I18n.tr("Không rõ", "Unknown")) + " • " + (modelData.trackCount || 0) + I18n.tr(" bài", " songs")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     color: Theme.textSecondary
@@ -1296,7 +1295,7 @@ Rectangle {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.name || modelData.title || "Unknown Track"
+                                        text: modelData.name || modelData.title || I18n.tr("Bài hát không tên", "Unknown Track")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
@@ -1308,7 +1307,7 @@ Rectangle {
                                     Text {
                                         Layout.fillWidth: true
                                         text: {
-                                            var art = modelData.artist || "Unknown Artist";
+                                            var art = modelData.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist");
                                             var alb = modelData.album || "";
                                             return (alb && alb !== art) ? (art + " • " + alb) : art;
                                         }

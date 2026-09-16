@@ -326,7 +326,7 @@ Rectangle {
                         clip: true
 
                         Text {
-                            text: "Tìm kiếm bài hát, album, nghệ sĩ..."
+                            text: I18n.tr("Tìm kiếm bài hát, album, nghệ sĩ...", "Search songs, albums, artists...")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             color: Theme.textMuted
@@ -432,7 +432,7 @@ Rectangle {
 
             // Section 1: Recommended Top Entities (Artist, Album, Song)
             Text {
-                text: "Gợi ý hàng đầu"
+                text: I18n.tr("Gợi ý hàng đầu", "Top Suggestions")
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -565,7 +565,7 @@ Rectangle {
 
             // Section 2: Search Queries (Keywords)
             Text {
-                text: "Từ khóa tìm kiếm"
+                text: I18n.tr("Từ khóa tìm kiếm", "Search Queries")
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -721,12 +721,12 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { id: "all", label: "Tất cả" },
-                        { id: "songs", label: "Bài hát" },
-                        { id: "albums", label: "Albums" },
-                        { id: "community_playlists", label: "Danh sách phát cộng đồng" },
-                        { id: "featured_playlists", label: "Danh sách phát nổi bật" },
-                        { id: "artists", label: "Nghệ sĩ" }
+                        { id: "all", label: I18n.tr("Tất cả", "All") },
+                        { id: "songs", label: I18n.tr("Bài hát", "Songs") },
+                        { id: "albums", label: I18n.tr("Tuyển tập", "Albums") },
+                        { id: "community_playlists", label: I18n.tr("Danh sách phát cộng đồng", "Community Playlists") },
+                        { id: "featured_playlists", label: I18n.tr("Danh sách phát nổi bật", "Featured Playlists") },
+                        { id: "artists", label: I18n.tr("Nghệ sĩ", "Artists") }
                     ]
 
                     delegate: Rectangle {
@@ -887,7 +887,7 @@ Rectangle {
                                 spacing: 12
 
                                 Text {
-                                    text: "Kết quả hàng đầu"
+                                    text: I18n.tr("Kết quả hàng đầu", "Top Result")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 18
                                     font.weight: Font.Bold
@@ -1322,7 +1322,7 @@ Rectangle {
                                 spacing: 10
 
                                 Text {
-                                    text: "Albums & Đĩa đơn"
+                                    text: I18n.tr("Tuyển tập & Đĩa đơn", "Albums & Singles")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 17
                                     font.weight: Font.Bold
@@ -1452,7 +1452,7 @@ Rectangle {
                                 spacing: 10
 
                                 Text {
-                                    text: "Danh sách phát cộng đồng"
+                                    text: I18n.tr("Danh sách phát cộng đồng", "Community Playlists")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 17
                                     font.weight: Font.Bold
@@ -1574,7 +1574,7 @@ Rectangle {
                                 spacing: 10
 
                                 Text {
-                                    text: "Danh sách phát nổi bật"
+                                    text: I18n.tr("Danh sách phát nổi bật", "Featured Playlists")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 17
                                     font.weight: Font.Bold
@@ -1694,7 +1694,7 @@ Rectangle {
                                 spacing: 10
 
                                 Text {
-                                    text: "Nghệ sĩ liên quan"
+                                    text: I18n.tr("Nghệ sĩ liên quan", "Related Artists")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 17
                                     font.weight: Font.Bold
@@ -2319,7 +2319,7 @@ Rectangle {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Tuyển tập chính thức YouTube Music" + (modelData.itemCount ? (" • " + modelData.itemCount + " bài") : "")
+                                            text: I18n.tr("Tuyển tập chính thức YouTube Music", "Official YouTube Music Playlist") + (modelData.itemCount ? (" • " + modelData.itemCount + I18n.tr(" bài", " tracks")) : "")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             color: Theme.textSecondary
@@ -2437,7 +2437,7 @@ Rectangle {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Nghệ sĩ" + (modelData.subscribers ? (" • " + modelData.subscribers) : "")
+                                            text: I18n.tr("Nghệ sĩ", "Artist") + (modelData.subscribers ? (" • " + modelData.subscribers) : "")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             color: Theme.textSecondary

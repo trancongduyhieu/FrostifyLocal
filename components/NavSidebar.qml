@@ -118,7 +118,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Home"
+                        text: I18n.tr("Khám phá", "Home")
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -157,7 +157,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Downloads"
+                        text: I18n.tr("Tải xuống", "Downloads")
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -196,7 +196,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Settings & Account"
+                        text: I18n.tr("Cài đặt & Tài khoản", "Settings & Account")
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -258,7 +258,7 @@ Rectangle {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Playlists"
+                            text: I18n.tr("Danh sách phát", "Playlists")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: root.sidebarTab === "playlists"
@@ -299,7 +299,7 @@ Rectangle {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Queue"
+                            text: I18n.tr("Hàng đợi", "Queue")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: root.sidebarTab === "queue"
@@ -349,7 +349,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: root.currentView === "library" ? "Collections" : "Featured Playlists"
+                            text: root.currentView === "library" ? I18n.tr("Bộ sưu tập", "Collections") : I18n.tr("Danh sách phát nổi bật", "Featured Playlists")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -379,20 +379,15 @@ Rectangle {
                         delegate: Rectangle {
                             id: plItem
                             width: plList.width
-                            height: 52
-                            radius: 8
-
-                            readonly property bool isCustom: !!modelData.isCustom || String(modelData.id || "").startsWith("custom_pl_")
-                            readonly property bool isLocal: isCustom || !!modelData.isLocal || !modelData.playlistId
-                            readonly property bool isSelected: (modelData.id && modelData.id === root.activePlaylistId) || (modelData.playlistId && modelData.playlistId === root.activePlaylistId)
-                            readonly property bool isCurrentlyPlaying: (modelData.id && modelData.id === root.playingPlaylistId) || (modelData.playlistId && modelData.playlistId === root.playingPlaylistId)
-
-                            color: isSelected ? Qt.rgba(1.0, 1.0, 1.0, 0.09) : (plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
-                            border.color: isSelected ? Qt.rgba(1.0, 1.0, 1.0, 0.20) : (plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
-                            border.width: 1
-
+                            height: 48
+                            radius: 6
+                            color: isCurrentlyPlaying ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : (isSelected ? Theme.bgHighlight : (plH.hovered ? Theme.bgCardHover : "transparent"))
                             Behavior on color { ColorAnimation { duration: 100 } }
-                            Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                            readonly property bool isSelected: root.selectedIndex === index && root.currentView === "library"
+                            readonly property bool isCurrentlyPlaying: (modelData.id || modelData.playlistId) === root.playingPlaylistId
+                            readonly property bool isLocal: modelData.isLocal === true || !modelData.id || modelData.id.indexOf("local_") === 0
+                            readonly property bool isCustom: modelData.isCustom === true
 
                             HoverHandler { id: plH }
 
@@ -402,88 +397,53 @@ Rectangle {
                                 anchors.rightMargin: 8
                                 spacing: 10
 
-                                // 38x38 Thumbnail with rounded corners and hairline border
-                                Item {
-                                    Layout.preferredWidth: 38
-                                    Layout.preferredHeight: 38
+                                // Playlist Thumbnail or Icon
+                                Rectangle {
+                                    Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 36
+                                    radius: 4
+                                    color: Theme.bgElevated
+                                    clip: true
 
-                                    Rectangle {
-                                        id: plThumbMask
+                                    Image {
                                         anchors.fill: parent
-                                        radius: 5
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
+                                        source: modelData.image || ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        visible: modelData.image !== undefined && modelData.image !== ""
+                                        asynchronous: true
+                                        cache: true
                                     }
 
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: plThumbMask
-                                            autoPaddingEnabled: false
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#202024"
-                                            visible: !plThumbImg.visible || plThumbImg.status !== Image.Ready
-                                        }
-
-                                        Image {
-                                            id: plThumbImg
-                                            anchors.fill: parent
-                                            source: modelData.image || modelData.thumbnail || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            asynchronous: true
-                                            visible: !!source
-                                        }
-
-                                        // Local Collection Letter Avatar Fallback
-                                        Text {
-                                            anchors.centerIn: parent
-                                            visible: !modelData.image && !modelData.thumbnail
-                                            text: (modelData.name || modelData.title || "P").charAt(0).toUpperCase()
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 15
-                                            font.bold: true
-                                            color: "#ffffff"
-                                        }
-                                    }
-
-                                    // 1px Hairline Border Overlay on top of thumbnail
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 6
-                                        color: "transparent"
-                                        border.color: plH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
-                                        border.width: 1
-                                        z: 1
-                                        Behavior on border.color { ColorAnimation { duration: 100 } }
+                                    // Fallback text initials if no image
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: !modelData.image
+                                        text: (modelData.name || modelData.title || "P").charAt(0).toUpperCase()
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: Theme.textSecondary
                                     }
                                 }
 
-                                // Playlist Title and Subtitle
+                                // Playlist Title & Meta
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 2
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || "Playlist"
+                                        text: modelData.title || modelData.name || I18n.tr("Danh sách phát", "Playlist")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
-                                        font.bold: true
+                                        font.bold: plItem.isCurrentlyPlaying || plItem.isSelected
                                         color: plItem.isCurrentlyPlaying ? root.accentColor : (plItem.isSelected ? "#ffffff" : (plH.hovered ? "#ffffff" : Theme.textPrimary))
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.subtitle || (modelData.count ? (modelData.count + " songs") : (modelData.tracks ? (modelData.tracks.length + " songs") : (modelData.author || "Playlist")))
+                                        text: modelData.subtitle || (modelData.count ? (modelData.count + I18n.tr(" bài hát", " songs")) : (modelData.tracks ? (modelData.tracks.length + I18n.tr(" bài hát", " songs")) : (modelData.author || I18n.tr("Danh sách phát", "Playlist"))))
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textSecondary
@@ -588,7 +548,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Now Playing Queue"
+                            text: I18n.tr("Hàng đợi đang phát", "Now Playing Queue")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -596,7 +556,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: (root.queueTracks ? root.queueTracks.length : 0) + " tracks"
+                            text: (root.queueTracks ? root.queueTracks.length : 0) + I18n.tr(" bài", " tracks")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textMuted
@@ -622,7 +582,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Queue is empty"
+                                text: I18n.tr("Hàng đợi trống", "Queue is empty")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -631,7 +591,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Play a playlist or track to start"
+                                text: I18n.tr("Chọn bài hát để bắt đầu", "Play a playlist or track to start")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textMuted

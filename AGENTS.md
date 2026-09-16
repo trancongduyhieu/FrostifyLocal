@@ -37,6 +37,12 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 >    - Tuyệt đối không tự ý viết các khối `Rectangle` thủ công với màu xám tĩnh (`rgba(1,1,1,0.06)` hay viền chết).
 >    - `NavArrowButton` tự động liên kết màu sắc động `accentColor` (đổi màu theo hình nền desktop / avatar bài hát đang phát), có hiệu ứng hover mượt mà, scale 1.06x và tự động làm mờ (`opacity: 0.28`, `enabled: false`) khi chạm giới hạn cuộn (`canScroll`).
 >    - **Lưu ý**: Riêng tại trang Kết quả tìm kiếm (`CategorizedSearchView.qml`), không sử dụng các nút `< >` để giữ giao diện tối giản và tinh gọn, người dùng xem đầy đủ danh mục bằng cách chọn trực tiếp các Filter Chips ở đầu trang.
+> 9. **QUY TẮC SONG NGỮ NGHIÊM NGẶT (STRICT BIMODAL LOCALIZATION - NO HYBRID SPANGLISH)**:
+>    - Mọi chuỗi ký tự hiển thị trên toàn bộ giao diện (tiêu đề, nhãn, nút bấm, modal, context menu, danh mục, tooltip, trạng thái) **BẮT BUỘC** phải sử dụng qua helper `I18n.tr("Tiếng Việt", "English")` từ singleton `components/I18n.qml`.
+>    - **Tuyệt đối không chèn tiếng Anh khi ở Tiếng Việt và ngược lại**:
+>      - Khi `I18n.locale === "vi"`: Toàn bộ giao diện phải hiển thị 100% tiếng Việt thuần túy (*Danh sách phát*, *Hàng đợi*, *Tải xuống*, *Phát tất cả*, *Cài đặt*, *Nghe lại*, *Tuyển tập nhanh*...). Cấm để sót tiếng Anh nửa nạc nửa mỡ.
+>      - Khi `I18n.locale === "en"`: Toàn bộ giao diện phải hiển thị 100% tiếng Anh chuẩn (*Playlists*, *Queue*, *Downloads*, *Play All*, *Settings*, *Listen again*, *Quick picks*...).
+>    - **Quy tắc khi tạo tính năng mới**: Bất cứ khi nào tạo component, thêm màn hình, modal hay cập nhật giao diện, AI **BẮT BUỘC** cung cấp đồng thời cả 2 bản dịch tại chỗ qua `I18n.tr(vi, en)`. Không được phép chỉ viết một thứ tiếng rồi để lại TODO.
 
 ---
 

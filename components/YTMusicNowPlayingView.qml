@@ -15,7 +15,7 @@ Item {
     property real totalDuration: 1.0
     property bool isPlaying: false
     property var queueTracks: []
-    property string playingPlaylistTitle: "Queue"
+    property string playingPlaylistTitle: I18n.tr("Hàng đợi", "Queue")
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
 
@@ -641,7 +641,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.track ? (root.track.title || root.track.name || "") : "No track playing"
+                    text: root.track ? (root.track.title || root.track.name || "") : I18n.tr("Chưa chọn bài hát", "No track playing")
                     font.family: Theme.fontFamily
                     font.pixelSize: 22
                     font.bold: true
@@ -655,7 +655,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: root.track ? (root.track.artist || "Unknown Artist") : ""
+                        text: root.track ? (root.track.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
                         font.family: Theme.fontFamily
                         font.pixelSize: 15
                         font.bold: true
@@ -873,7 +873,7 @@ Item {
                         Text {
                             id: upNextTxt
                             anchors.centerIn: parent
-                            text: "UP NEXT"
+                            text: I18n.tr("TIẾP THEO", "UP NEXT")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -905,7 +905,7 @@ Item {
                             Text {
                                 id: lyricsTxt
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "LYRICS"
+                                text: I18n.tr("LỜI BÀI HÁT", "LYRICS")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -945,7 +945,7 @@ Item {
                         Text {
                             id: relatedTxt
                             anchors.centerIn: parent
-                            text: "RELATED"
+                            text: I18n.tr("LIÊN QUAN", "RELATED")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -1018,14 +1018,14 @@ Item {
                                 spacing: 2
 
                                 Text {
-                                    text: "Playing from"
+                                    text: I18n.tr("Phát từ", "Playing from")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     color: Theme.textMuted
                                 }
 
                                 Text {
-                                    text: root.playingPlaylistTitle || "Automix Queue"
+                                    text: root.playingPlaylistTitle || I18n.tr("Hàng đợi tự động", "Automix Queue")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 14
                                     font.bold: true
@@ -1375,7 +1375,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.title || modelData.name || "Unknown"
+                                            text: modelData.title || modelData.name || I18n.tr("Không xác định", "Unknown")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 13
                                             font.bold: true
@@ -1385,7 +1385,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.artist || "Unknown Artist"
+                                            text: modelData.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 11
                                             color: Theme.textSecondary
@@ -1653,7 +1653,7 @@ Item {
                             spacing: 12
 
                             Text {
-                                text: "You might also like"
+                                text: I18n.tr("Có thể bạn sẽ thích", "You might also like")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 16
                                 font.bold: true
@@ -1750,7 +1750,7 @@ Item {
                             visible: root.relatedData && root.relatedData.recommended_playlists && root.relatedData.recommended_playlists.length > 0
 
                             Text {
-                                text: "Recommended playlists"
+                                text: I18n.tr("Danh sách phát đề xuất", "Recommended playlists")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 16
                                 font.bold: true
@@ -1912,7 +1912,7 @@ Item {
 
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: modelData.description || "Playlist"
+                                                        text: modelData.description || I18n.tr("Danh sách phát", "Playlist")
                                                         font.family: Theme.fontFamily
                                                         font.pixelSize: 10
                                                         color: Theme.textMuted
@@ -1941,7 +1941,7 @@ Item {
                             visible: root.relatedData && root.relatedData.similar_artists && root.relatedData.similar_artists.length > 0
 
                             Text {
-                                text: "Similar artists"
+                                text: I18n.tr("Nghệ sĩ tương tự", "Similar artists")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 16
                                 font.bold: true
@@ -2132,7 +2132,7 @@ Item {
 
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: modelData.subscribers || "Nghệ sĩ"
+                                                        text: modelData.subscribers || I18n.tr("Nghệ sĩ", "Artist")
                                                         font.family: Theme.fontFamily
                                                         font.pixelSize: 10
                                                         color: Theme.textMuted

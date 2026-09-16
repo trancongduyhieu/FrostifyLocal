@@ -124,7 +124,7 @@ Item {
                 }
 
                 Text {
-                    text: "Downloads & Queue"
+                    text: I18n.tr("Tải xuống & Hàng đợi", "Downloads & Queue")
                     font.family: Theme.fontFamily
                     font.pixelSize: 13
                     font.bold: true
@@ -143,7 +143,7 @@ Item {
                     Text {
                         id: actCountText
                         anchors.centerIn: parent
-                        text: root.activeTasks.length + " active"
+                        text: root.activeTasks.length + I18n.tr(" đang tải", " active")
                         font.family: Theme.fontFamily
                         font.pixelSize: 10
                         font.bold: true
@@ -161,7 +161,7 @@ Item {
                     color: folderH.hovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
                     HoverHandler { id: folderH }
                     ToolTip.visible: folderH.hovered
-                    ToolTip.text: "Mở thư mục tải xuống"
+                    ToolTip.text: I18n.tr("Mở thư mục tải xuống", "Open downloads folder")
                     ToolTip.delay: 300
 
                     AppIcon {
@@ -192,7 +192,7 @@ Item {
                     color: clearH.hovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
                     HoverHandler { id: clearH }
                     ToolTip.visible: clearH.hovered
-                    ToolTip.text: "Xóa danh sách đã tải xong"
+                    ToolTip.text: I18n.tr("Xóa danh sách đã tải xong", "Clear completed")
                     ToolTip.delay: 300
 
                     AppIcon {
@@ -219,7 +219,7 @@ Item {
                     color: closeH.hovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
                     HoverHandler { id: closeH }
                     ToolTip.visible: closeH.hovered
-                    ToolTip.text: "Đóng"
+                    ToolTip.text: I18n.tr("Đóng", "Close")
                     ToolTip.delay: 300
 
                     AppIcon {
@@ -269,7 +269,7 @@ Item {
                         Text {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
-                            text: "No active downloads"
+                            text: I18n.tr("Không có tác vụ tải xuống nào", "No active downloads")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -279,7 +279,7 @@ Item {
                         Text {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
-                            text: "Downloaded tracks are saved to ~/Music/Downloads_Phone"
+                            text: I18n.tr("Bài hát tải về được lưu tại ~/Music/Downloads_Phone", "Downloaded tracks are saved to ~/Music/Downloads_Phone")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Qt.rgba(1, 1, 1, 0.35)
@@ -293,7 +293,7 @@ Item {
                         visible: root.activeTasks.length > 0
 
                         Text {
-                            text: "DOWNLOADING (" + root.activeTasks.length + ")"
+                            text: I18n.tr("ĐANG TẢI XUỐNG (", "DOWNLOADING (") + root.activeTasks.length + ")"
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
@@ -347,7 +347,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.title || "Track"
+                                            text: modelData.title || I18n.tr("Bài hát", "Track")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             font.bold: true
@@ -442,7 +442,7 @@ Item {
                         visible: root.completedTasks.length > 0
 
                         Text {
-                            text: "RECENTLY COMPLETED (" + root.completedTasks.length + ")"
+                            text: I18n.tr("ĐÃ HOÀN THÀNH GẦN ĐÂY (", "RECENTLY COMPLETED (") + root.completedTasks.length + ")"
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
@@ -475,7 +475,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.title || "Track"
+                                            text: modelData.title || I18n.tr("Bài hát", "Track")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 11
                                             font.bold: true
@@ -485,7 +485,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.artist || "Downloaded"
+                                            text: modelData.artist || I18n.tr("Đã tải xong", "Downloaded")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 10
                                             color: Theme.textSecondary

@@ -63,6 +63,7 @@ Scope {
     property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop, 4: Anime MV Kinetic
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
+    property string currentLanguage: I18n.locale
     property bool showSidebar: true
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
@@ -1799,8 +1800,14 @@ Scope {
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
+            currentLanguage: win.currentLanguage
 
             onCloseRequested: settingsModal.visible = false
+            onSelectLanguageRequested: lang => {
+                win.currentLanguage = lang;
+                I18n.locale = lang;
+                win.saveSettings();
+            }
             onToggleSyncHistoryRequested: enabled => {
                 win.syncHistoryToGoogle = enabled;
                 win.saveSettings();
@@ -1970,7 +1977,13 @@ Scope {
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);
             if (obj.desktopLyricsCustomX !== undefined) win.desktopLyricsCustomX = Number(obj.desktopLyricsCustomX);
             if (obj.desktopLyricsCustomY !== undefined) win.desktopLyricsCustomY = Number(obj.desktopLyricsCustomY);
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
+            if (obj.language !== undefined && (obj.language === "vi" || obj.language === "en")) {
+                win.currentLanguage = obj.language;
+                I18n.locale = win.currentLanguage;
+            } else {
+                win.currentLanguage = I18n.locale;
+            }
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
         } catch(e) {}
     }
 
@@ -1986,7 +1999,8 @@ Scope {
             animatedCoverEnabled: win.animatedCoverEnabled,
             desktopLyricsPreset: win.desktopLyricsPreset,
             desktopLyricsCustomX: win.desktopLyricsCustomX,
-            desktopLyricsCustomY: win.desktopLyricsCustomY
+            desktopLyricsCustomY: win.desktopLyricsCustomY,
+            language: win.currentLanguage
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",

@@ -146,7 +146,7 @@ Item {
 
                         Text {
                             Layout.fillWidth: true
-                            text: (root.track && (root.track.title || root.track.name)) ? (root.track.title || root.track.name) : "Track"
+                            text: (root.track && (root.track.title || root.track.name)) ? (root.track.title || root.track.name) : I18n.tr("Bài hát", "Track")
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
@@ -156,7 +156,7 @@ Item {
 
                         Text {
                             Layout.fillWidth: true
-                            text: (root.track && root.track.artist) ? root.track.artist : "Unknown Artist"
+                            text: (root.track && root.track.artist) ? root.track.artist : I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
                             color: Theme.textSecondary
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
@@ -176,7 +176,7 @@ Item {
 
             // Action 1: Play next
             MenuItemButton {
-                text: "Play next"
+                text: I18n.tr("Phát tiếp theo", "Play next")
                 iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                 onClicked: {
                     var t = root.track;
@@ -187,7 +187,7 @@ Item {
 
             // Action 2: Add to queue
             MenuItemButton {
-                text: "Add to queue"
+                text: I18n.tr("Thêm vào hàng đợi", "Add to queue")
                 iconSource: "../assets/icons/view-queue-symbolic.svg"
                 onClicked: {
                     var t = root.track;
@@ -198,7 +198,7 @@ Item {
 
             // Action 3: Start radio
             MenuItemButton {
-                text: "Start radio"
+                text: I18n.tr("Phát Radio", "Start radio")
                 iconSource: "../assets/icons/radio-symbolic.svg"
                 onClicked: {
                     var t = root.track;
@@ -209,7 +209,7 @@ Item {
 
             // Action: Add to playlist
             MenuItemButton {
-                text: "Add to playlist"
+                text: I18n.tr("Thêm vào danh sách phát", "Add to playlist")
                 iconSource: "../assets/icons/folder-music-symbolic.svg"
                 onClicked: {
                     root.isPlaylistSubmenuOpen = !root.isPlaylistSubmenuOpen;
@@ -223,7 +223,7 @@ Item {
                 spacing: 2
 
                 MenuItemButton {
-                    text: "+ New Playlist"
+                    text: I18n.tr("+ Danh sách phát mới", "+ New Playlist")
                     iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                     textColor: root.accentColor
                     iconColor: root.accentColor
@@ -237,7 +237,7 @@ Item {
                 Repeater {
                     model: root.customPlaylists || []
                     delegate: MenuItemButton {
-                        text: modelData.title || modelData.name || "Playlist"
+                        text: modelData.title || modelData.name || I18n.tr("Danh sách phát", "Playlist")
                         iconSource: "../assets/icons/folder-music-symbolic.svg"
                         onClicked: {
                             var t = root.track;
@@ -252,7 +252,7 @@ Item {
             // Action: Go to artist
             MenuItemButton {
                 visible: !!(root.track && (root.track.artist || root.track.author))
-                text: "Go to artist"
+                text: I18n.tr("Đến trang nghệ sĩ", "Go to artist")
                 iconSource: "../assets/icons/folder-music-symbolic.svg"
                 onClicked: {
                     var t = root.track;
@@ -280,7 +280,7 @@ Item {
                 property bool isDownloading: (root.dlMgr && vid) ? !!root.dlMgr.isDownloading(vid) : false
                 property real progress: (root.dlMgr && vid) ? root.dlMgr.getProgress(vid) : -1
 
-                text: isLocal ? "Open containing folder" : (isDownloading ? ("Downloading (" + Math.max(0, Math.round(progress)) + "%)...") : "Download track")
+                text: isLocal ? I18n.tr("Mở thư mục chứa file", "Open containing folder") : (isDownloading ? (I18n.tr("Đang tải (", "Downloading (") + Math.max(0, Math.round(progress)) + "%)...") : I18n.tr("Tải bài hát", "Download track"))
                 iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : (isDownloading ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/download-symbolic.svg")
                 textColor: isDownloading ? root.accentColor : Theme.textPrimary
                 iconColor: isDownloading ? root.accentColor : Theme.textSecondary
@@ -309,7 +309,7 @@ Item {
             // Action 5: Remove from Custom Playlist
             MenuItemButton {
                 visible: typeof win !== "undefined" && win && win.currentView === "playlist" && win.activePlaylistId && win.activePlaylistId.startsWith("custom_pl_")
-                text: "Remove from playlist"
+                text: I18n.tr("Xóa khỏi danh sách phát", "Remove from playlist")
                 textColor: "#ff5252"
                 iconColor: "#ff5252"
                 iconSource: "../assets/icons/user-trash-symbolic.svg"
@@ -324,7 +324,7 @@ Item {
             // Action 6: Remove from Queue or Delete
             MenuItemButton {
                 visible: root.isQueueItem || (root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://")))
-                text: root.isQueueItem ? "Remove from queue" : "Delete from library"
+                text: root.isQueueItem ? I18n.tr("Xóa khỏi hàng đợi", "Remove from queue") : I18n.tr("Xóa khỏi thư viện", "Delete from library")
                 textColor: "#ff5252"
                 iconColor: "#ff5252"
                 iconSource: "../assets/icons/user-trash-symbolic.svg"

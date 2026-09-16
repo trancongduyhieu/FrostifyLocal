@@ -159,18 +159,18 @@ Item {
                             Text {
                                 id: badgeText
                                 anchors.centerIn: parent
-                                text: "Nghệ sĩ"
+                                text: I18n.tr("Nghệ sĩ", "Artist")
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: 10
                                 font.bold: true
-                                color: "#ffffff"
+                                color: root.accentColor
                             }
                         }
 
                         // Artist Name
                         Text {
                             Layout.fillWidth: true
-                            text: (root.artistData && root.artistData.metadata && root.artistData.metadata.name) ? root.artistData.metadata.name : (root.isLoading ? "Đang tải nghệ sĩ..." : "Nghệ sĩ")
+                            text: (root.artistData && root.artistData.metadata && root.artistData.metadata.name) ? root.artistData.metadata.name : (root.isLoading ? I18n.tr("Đang tải nghệ sĩ...", "Loading artist...") : I18n.tr("Nghệ sĩ", "Artist"))
                             font.family: Theme.fontFamily
                             font.pixelSize: 32
                             font.bold: true
@@ -184,13 +184,13 @@ Item {
                             text: {
                                 var s = "";
                                 if (root.artistData && root.artistData.metadata) {
-                                    if (root.artistData.metadata.subscribers) s += root.artistData.metadata.subscribers + " người đăng ký";
+                                    if (root.artistData.metadata.subscribers) s += root.artistData.metadata.subscribers + I18n.tr(" người đăng ký", " subscribers");
                                     if (root.artistData.metadata.views) {
                                         if (s) s += " • ";
                                         s += root.artistData.metadata.views;
                                     }
                                 }
-                                return s || "Nghệ sĩ âm nhạc";
+                                return s || I18n.tr("Nghệ sĩ âm nhạc", "Musical Artist");
                             }
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
@@ -198,7 +198,7 @@ Item {
                             elide: Text.ElideRight
                         }
 
-                        Item { Layout.preferredHeight: 4 }
+                        Item { Layout.fillHeight: true }
 
                         // 3 Action Buttons: Radio, Shuffle, Subscribe
                         RowLayout {
@@ -206,36 +206,34 @@ Item {
 
                             // Button 1: Radio
                             Rectangle {
-                                Layout.preferredHeight: 38
-                                Layout.preferredWidth: radioRow.implicitWidth + 28
-                                radius: 19
-                                color: radioBtnMouse.containsMouse ? "#2e2e34" : "#222226"
-                                border.color: Qt.rgba(1, 1, 1, 0.14)
-                                border.width: 1
+                                height: 36
+                                width: radRow.implicitWidth + 28
+                                radius: 18
+                                color: radMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
                                 RowLayout {
-                                    id: radioRow
+                                    id: radRow
                                     anchors.centerIn: parent
-                                    spacing: 8
+                                    spacing: 6
 
                                     AppIcon {
                                         source: "../assets/icons/radio-symbolic.svg"
-                                        iconSize: 16
-                                        color: "#ffffff"
+                                        iconSize: 15
+                                        color: "#0c0d10"
                                     }
 
                                     Text {
-                                        text: "Đài phát"
+                                        text: I18n.tr("Đài phát", "Radio")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
-                                        color: "#ffffff"
+                                        color: "#0c0d10"
                                     }
                                 }
 
                                 MouseArea {
-                                    id: radioBtnMouse
+                                    id: radMouse
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     hoverEnabled: true
@@ -274,7 +272,7 @@ Item {
                                     }
 
                                     Text {
-                                        text: "Xáo trộn"
+                                        text: I18n.tr("Xáo trộn", "Shuffle")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
@@ -317,7 +315,7 @@ Item {
                                     }
 
                                     Text {
-                                        text: root.isFollowed ? "Đã theo dõi" : "Theo dõi"
+                                        text: root.isFollowed ? I18n.tr("Đã theo dõi", "Following") : I18n.tr("Theo dõi", "Follow")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
                                         font.bold: true
@@ -376,7 +374,7 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.popular && root.artistData.popular.length > 0)
 
                 Text {
-                    text: "Phổ biến"
+                    text: I18n.tr("Phổ biến", "Popular")
                     font.family: Theme.fontFamily
                     font.pixelSize: 22
                     font.bold: true
@@ -555,7 +553,7 @@ Item {
 
                 // Header with title and pagination arrows
                 CarouselSectionHeader {
-                    title: "Albums"
+                    title: I18n.tr("Tuyển tập", "Albums")
                     targetFlickable: albumFlick
                     accentColor: root.accentColor
                 }
@@ -695,7 +693,7 @@ Item {
 
                 // Header with title and pagination arrows
                 CarouselSectionHeader {
-                    title: "Đĩa đơn & EPs"
+                    title: I18n.tr("Đĩa đơn & EPs", "Singles & EPs")
                     targetFlickable: singleFlick
                     accentColor: root.accentColor
                 }
@@ -802,7 +800,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: (modelData.year ? (modelData.year + " • ") : "") + "Đĩa đơn"
+                                        text: (modelData.year ? (modelData.year + " • ") : "") + I18n.tr("Đĩa đơn", "Single")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         color: Theme.textMuted
@@ -834,7 +832,7 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.videos && root.artistData.videos.length > 0)
 
                 CarouselSectionHeader {
-                    title: "Video âm nhạc"
+                    title: I18n.tr("Video âm nhạc", "Music Videos")
                     targetFlickable: videoFlick
                     accentColor: root.accentColor
                 }
@@ -938,7 +936,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.views || "Video âm nhạc"
+                                        text: modelData.views || I18n.tr("Video âm nhạc", "Music Video")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textMuted
@@ -979,7 +977,7 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.related && root.artistData.related.length > 0)
 
                 CarouselSectionHeader {
-                    title: "Nghệ sĩ liên quan"
+                    title: I18n.tr("Nghệ sĩ liên quan", "Fans Also Like")
                     targetFlickable: relFlick
                     accentColor: root.accentColor
                 }
@@ -1073,7 +1071,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.subscribers ? (modelData.subscribers + " subs") : "Nghệ sĩ"
+                                        text: modelData.subscribers ? (modelData.subscribers + I18n.tr(" người đăng ký", " subs")) : I18n.tr("Nghệ sĩ", "Artist")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textMuted
@@ -1106,7 +1104,7 @@ Item {
                 visible: !root.isLoading && (root.artistData && root.artistData.metadata && root.artistData.metadata.description)
 
                 Text {
-                    text: "Giới thiệu"
+                    text: I18n.tr("Giới thiệu", "About")
                     font.family: Theme.fontFamily
                     font.pixelSize: 22
                     font.bold: true
@@ -1142,7 +1140,7 @@ Item {
                         }
 
                         Text {
-                            text: parent.parent.isExpanded ? "Thu gọn ▲" : "Xem thêm ▼"
+                            text: parent.parent.isExpanded ? I18n.tr("Thu gọn ▲", "Show less ▲") : I18n.tr("Xem thêm ▼", "Show more ▼")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true

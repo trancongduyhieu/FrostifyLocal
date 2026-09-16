@@ -448,7 +448,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.track ? (root.track.title || root.track.name || "Now Playing") : "Now Playing"
+                    text: root.track ? (root.track.title || root.track.name || I18n.tr("Đang phát", "Now Playing")) : I18n.tr("Đang phát", "Now Playing")
                     font.family: Theme.fontFamily
                     font.pixelSize: 13
                     font.bold: true
@@ -469,7 +469,7 @@ Rectangle {
 
             Text {
                 Layout.leftMargin: 8
-                text: "Now Playing Details & Synced Lyrics"
+                text: I18n.tr("Chi tiết bài hát & Lời đồng bộ", "Now Playing Details & Synced Lyrics")
                 font.family: Theme.fontFamily
                 font.pixelSize: 14
                 font.bold: true
@@ -505,7 +505,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Lyrics"
+                            text: I18n.tr("Lời bài hát", "Lyrics")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: root.compactTab === "lyrics"
@@ -531,7 +531,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Artwork"
+                            text: I18n.tr("Ảnh bìa", "Artwork")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: root.compactTab === "art"
@@ -624,7 +624,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: root.track ? (root.track.title || root.track.name || "No track selected") : "No track selected"
+                            text: root.track ? (root.track.title || root.track.name || I18n.tr("Chưa chọn bài hát", "No track selected")) : I18n.tr("Chưa chọn bài hát", "No track selected")
                             font.family: Theme.fontFamily
                             font.pixelSize: 19
                             font.bold: true
@@ -637,7 +637,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: root.track ? (root.track.artist || "Unknown Artist") : "Unknown Artist"
+                            text: root.track ? (root.track.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             color: Qt.rgba(1, 1, 1, 0.72)
@@ -872,7 +872,7 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.top: parent.top
                             anchors.margins: 10
-                            text: "Nghệ sĩ"
+                            text: I18n.tr("Nghệ sĩ", "Artist")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -1136,7 +1136,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     text: {
                                         var d = (root.songDetails && (root.songDetails.dateText || root.songDetails.publishDate)) ? (root.songDetails.dateText || root.songDetails.publishDate) : ((root.track && root.track.year) ? root.track.year : "");
-                                        return d ? ("Phát hành lúc " + d) : "Đã phát hành";
+                                        return d ? (I18n.tr("Phát hành lúc ", "Released on ") + d) : I18n.tr("Đã phát hành", "Released");
                                     }
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
@@ -1146,7 +1146,7 @@ Rectangle {
                                 // 2. View Count
                                 Text {
                                     Layout.fillWidth: true
-                                    text: ((root.songDetails && root.songDetails.viewsStr && root.songDetails.viewsStr !== "--") ? root.songDetails.viewsStr : "0") + " lượt xem"
+                                    text: ((root.songDetails && root.songDetails.viewsStr && root.songDetails.viewsStr !== "--") ? root.songDetails.viewsStr : "0") + I18n.tr(" lượt xem", " views")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 16
                                     font.bold: true
@@ -1179,7 +1179,7 @@ Rectangle {
                                             }
 
                                             Text {
-                                                text: root.localLikesCount > 0 ? (root.songDetails && root.songDetails.likesStr ? root.songDetails.likesStr : "" + root.localLikesCount) + " thích" : "Thích"
+                                                text: root.localLikesCount > 0 ? (root.songDetails && root.songDetails.likesStr ? root.songDetails.likesStr : "" + root.localLikesCount) + I18n.tr(" thích", " likes") : I18n.tr("Thích", "Like")
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 11
                                                 font.bold: true
@@ -1216,7 +1216,7 @@ Rectangle {
                                             }
 
                                             Text {
-                                                text: root.localDislikesCount > 0 ? (root.songDetails && root.songDetails.dislikesStr ? root.songDetails.dislikesStr : "" + root.localDislikesCount) + " không thích" : "Không thích"
+                                                text: root.localDislikesCount > 0 ? (root.songDetails && root.songDetails.dislikesStr ? root.songDetails.dislikesStr : "" + root.localDislikesCount) + I18n.tr(" không thích", " dislikes") : I18n.tr("Không thích", "Dislike")
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 11
                                                 font.bold: true
@@ -1254,7 +1254,7 @@ Rectangle {
 
                                 // 4. Description Header
                                 Text {
-                                    text: "Mô tả"
+                                    text: I18n.tr("Mô tả", "Description")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -1265,7 +1265,7 @@ Rectangle {
                                 Text {
                                     id: descText
                                     Layout.fillWidth: true
-                                    text: (root.songDetails && root.songDetails.description) ? root.songDetails.description : "Không có mô tả cho bài hát này."
+                                    text: (root.songDetails && root.songDetails.description) ? root.songDetails.description : I18n.tr("Không có mô tả cho bài hát này.", "No description available for this track.")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     lineHeight: 1.3
@@ -1278,7 +1278,7 @@ Rectangle {
                                 // Expand / Collapse button
                                 Text {
                                     visible: descText.lineCount > 4 || (root.songDetails && root.songDetails.description && root.songDetails.description.length > 150)
-                                    text: infoDescCard.isExpanded ? "Thu gọn ▲" : "Xem thêm ▼"
+                                    text: infoDescCard.isExpanded ? I18n.tr("Thu gọn ▲", "Show less ▲") : I18n.tr("Xem thêm ▼", "Show more ▼")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1401,7 +1401,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: (root.track && root.track.isLocal) ? "Thư mục" : "Tải bài"
+                                    text: (root.track && root.track.isLocal) ? I18n.tr("Thư mục", "Folder") : I18n.tr("Tải bài", "Download")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1443,7 +1443,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "Radio"
+                                    text: I18n.tr("Phát Radio", "Radio")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1479,7 +1479,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "Sao chép"
+                                    text: I18n.tr("Sao chép", "Copy Link")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1715,7 +1715,7 @@ Rectangle {
                     // Empty Lyrics Fallback
                     Text {
                         anchors.centerIn: parent
-                        text: "Đang tải hoặc không có lời bài hát (Synced Lyrics) cho bài này."
+                        text: I18n.tr("Đang tải hoặc không có lời bài hát (Synced Lyrics) cho bài này.", "Loading or no synced lyrics available for this track.")
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         color: Theme.textSecondary

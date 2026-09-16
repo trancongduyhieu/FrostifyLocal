@@ -31,9 +31,58 @@ Rectangle {
 
     function getGreeting() {
         var h = new Date().getHours();
-        if (h >= 5 && h < 12) return "Good Morning";
-        if (h >= 12 && h < 18) return "Good Afternoon";
-        return "Good Evening";
+        if (h >= 5 && h < 12) return I18n.tr("Chào buổi sáng", "Good Morning");
+        if (h >= 12 && h < 18) return I18n.tr("Chào buổi chiều", "Good Afternoon");
+        return I18n.tr("Chào buổi tối", "Good Evening");
+    }
+
+    function formatMoodTitle(title) {
+        if (!title) return "";
+        var t = String(title).trim();
+        if (t === "All") return I18n.tr("Tất cả", "All");
+        if (t === "Relax") return I18n.tr("Thư giãn", "Relax");
+        if (t === "Sleep") return I18n.tr("Ngủ say", "Sleep");
+        if (t === "Energize") return I18n.tr("Tiếp năng lượng", "Energize");
+        if (t === "Sad") return I18n.tr("Tâm trạng", "Sad");
+        if (t === "Romance") return I18n.tr("Lãng mạn", "Romance");
+        if (t === "Party") return I18n.tr("Tiệc tùng", "Party");
+        if (t === "Commute") return I18n.tr("Di chuyển", "Commute");
+        if (t === "Feel good") return I18n.tr("Yêu đời", "Feel good");
+        if (t === "Focus") return I18n.tr("Tập trung", "Focus");
+        if (t === "Workout") return I18n.tr("Tập luyện", "Workout");
+        return t;
+    }
+
+    function formatSectionTitle(title) {
+        if (!title) return "";
+        var t = String(title).trim();
+        if (t === "Recommended for you") return I18n.tr("Được đề xuất cho bạn", "Recommended for you");
+        if (t === "Listen again") return I18n.tr("Nghe lại", "Listen again");
+        if (t === "Quick picks") return I18n.tr("Tuyển tập nhanh", "Quick picks");
+        if (t === "Mixed for you") return I18n.tr("Dành riêng cho bạn", "Mixed for you");
+        if (t === "Forgotten favorites") return I18n.tr("Giai điệu quen thuộc", "Forgotten favorites");
+        if (t === "Similar to") return I18n.tr("Tương tự như", "Similar to");
+        if (t === "From your library") return I18n.tr("Từ thư viện của bạn", "From your library");
+        if (t === "Trending") return I18n.tr("Thịnh hành", "Trending");
+        if (t === "New releases") return I18n.tr("Bản phát hành mới", "New releases");
+        if (t === "Community playlists") return I18n.tr("Danh sách phát cộng đồng", "Community playlists");
+        if (t === "Featured playlists for you") return I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you");
+        if (t === "Music videos") return I18n.tr("Video âm nhạc", "Music videos");
+        if (t.endsWith(" Playlists")) {
+            var moodPrefix = t.replace(" Playlists", "");
+            return root.formatMoodTitle(moodPrefix) + I18n.tr(" - Danh sách phát", " Playlists");
+        }
+        return t;
+    }
+
+    function formatSectionSubtitle(sub) {
+        if (!sub) return "";
+        var s = String(sub).trim().toUpperCase();
+        if (s === "LOADING") return I18n.tr("ĐANG TẢI", "LOADING");
+        if (s === "DISCOVER") return I18n.tr("KHÁM PHÁ", "DISCOVER");
+        if (s === "LET'S START WITH A RADIO") return I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO");
+        if (s === "START RADIO") return I18n.tr("BẮT ĐẦU ĐÀI PHÁT", "START RADIO");
+        return s;
     }
 
     // Dynamic feed sections model with fallbacks
@@ -43,23 +92,23 @@ Rectangle {
         }
         if (root.isLoading) {
             return [
-                { type: "skeleton_section", title: "Recommended for you", subtitle: "LOADING", items: [1, 2, 3, 4, 5, 6] },
-                { type: "skeleton_section", title: "Listen again", subtitle: "DISCOVER", items: [1, 2, 3, 4, 5, 6] }
+                { type: "skeleton_section", title: I18n.tr("Được đề xuất cho bạn", "Recommended for you"), subtitle: I18n.tr("ĐANG TẢI", "LOADING"), items: [1, 2, 3, 4, 5, 6] },
+                { type: "skeleton_section", title: I18n.tr("Nghe lại", "Listen again"), subtitle: I18n.tr("KHÁM PHÁ", "DISCOVER"), items: [1, 2, 3, 4, 5, 6] }
             ];
         }
         var fallbacks = [];
         if (root.quickPicks && root.quickPicks.length > 0) {
             fallbacks.push({
                 type: "fallback_quick_picks",
-                title: "Quick picks",
-                subtitle: "LET'S START WITH A RADIO",
+                title: I18n.tr("Tuyển tập nhanh", "Quick picks"),
+                subtitle: I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO"),
                 items: root.quickPicks
             });
         }
         if (root.featuredPlaylists && root.featuredPlaylists.length > 0) {
             fallbacks.push({
                 type: "fallback_playlists",
-                title: root.selectedMood === "All" ? "Featured playlists for you" : (root.selectedMood + " Playlists"),
+                title: root.selectedMood === "All" ? I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you") : (root.formatMoodTitle(root.selectedMood) + I18n.tr(" - Danh sách phát", " Playlists")),
                 items: root.featuredPlaylists
             });
         }
@@ -262,7 +311,7 @@ Rectangle {
                                     Text {
                                         id: pillTxt
                                         anchors.centerIn: parent
-                                        text: modelData.title
+                                        text: root.formatMoodTitle(modelData.title)
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
@@ -371,7 +420,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
-                            text: modelData.subtitle ? modelData.subtitle.toUpperCase() : ""
+                            text: root.formatSectionSubtitle(modelData.subtitle)
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -381,7 +430,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.title || ""
+                            text: root.formatSectionTitle(modelData.title)
                             font.family: Theme.fontFamily
                             font.pixelSize: 22
                             font.bold: true

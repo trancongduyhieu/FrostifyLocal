@@ -247,7 +247,7 @@ Item {
                     Text {
                         id: artistLabel
                         text: {
-                            if (!root.currentTrack) return "Ready to play";
+                            if (!root.currentTrack) return I18n.tr("Sẵn sàng phát", "Ready to play");
                             var raw = String(root.currentTrack.artist || "").trim();
                             var clean = raw.split(/\s*•\s*/)[0].replace(/\s*\d+([.,]\d+)?[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe).*/i, "").trim();
                             return clean || raw || "Nutsty Desktop";

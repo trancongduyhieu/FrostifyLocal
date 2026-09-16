@@ -28,12 +28,14 @@ Rectangle {
     property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur, 4: Anime MV Kinetic
     property int customX: -1
     property int customY: -1
+    property string currentLanguage: I18n.locale
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     // =========================================================================
     // Signals (100% preserved for shell.qml integration)
     // =========================================================================
     signal closeRequested()
+    signal selectLanguageRequested(string lang)
     signal connectRequested(string rawAuth)
     signal logoutRequested()
     signal launchBrowserLoginRequested()
@@ -102,7 +104,7 @@ Rectangle {
             if (root.currentTab === 1) {
                 return Math.min(540, root.height - 48);
             } else {
-                return root.isLoggedIn ? Math.min(320, root.height - 48) : Math.min(480, root.height - 48);
+                return root.isLoggedIn ? Math.min(380, root.height - 48) : Math.min(520, root.height - 48);
             }
         }
         anchors.centerIn: parent
@@ -157,7 +159,7 @@ Rectangle {
                 Layout.preferredHeight: 32
 
                 Text {
-                    text: "Cài đặt"
+                    text: I18n.tr("Cài đặt", "Settings")
                     font.family: Theme.fontFamily
                     font.pixelSize: 20
                     font.bold: true
@@ -214,7 +216,7 @@ Rectangle {
                         Text {
                             id: tab0Txt
                             anchors.centerIn: parent
-                            text: "Tài khoản"
+                            text: I18n.tr("Tài khoản", "Account")
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: root.currentTab === 0
@@ -240,7 +242,7 @@ Rectangle {
                         Text {
                             id: tab1Txt
                             anchors.centerIn: parent
-                            text: "Lời bài hát Desktop"
+                            text: I18n.tr("Lời bài hát Desktop", "Desktop Lyrics")
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: root.currentTab === 1
@@ -361,7 +363,7 @@ Rectangle {
                             width: parent.width - 56
 
                             Text {
-                                text: root.accountName ? root.accountName : "Tài khoản Google"
+                                text: root.accountName ? root.accountName : I18n.tr("Tài khoản Google", "Google Account")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 15
                                 font.bold: true
@@ -371,7 +373,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: root.accountEmail ? root.accountEmail : "Đã kết nối Cloud"
+                                text: root.accountEmail ? root.accountEmail : I18n.tr("Đã kết nối Cloud", "Connected to Cloud")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
                                 color: Theme.textSecondary
@@ -399,7 +401,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Đăng xuất"
+                            text: I18n.tr("Đăng xuất", "Log out")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true
@@ -438,7 +440,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: root.isProcessing ? "Đang chờ đăng nhập trên trình duyệt..." : "Đăng nhập Google qua Trình duyệt (1-Chạm)"
+                            text: root.isProcessing ? I18n.tr("Đang chờ đăng nhập trên trình duyệt...", "Waiting for browser login...") : I18n.tr("Đăng nhập Google qua Trình duyệt (1-Chạm)", "Sign in with Google via Browser (1-Click)")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -457,6 +459,112 @@ Rectangle {
                     }
                 }
 
+                // Language Selection Row (100% Frameless, Segmented Pill Pinned to Right)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: langSegmentedControl.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Ngôn ngữ giao diện", "Interface Language")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Toàn bộ ứng dụng hiển thị theo ngôn ngữ đã chọn", "All application UI displays in selected language")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Segmented Language Pill (Pinned to Right)
+                    Rectangle {
+                        id: langSegmentedControl
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 30
+                        width: 176
+                        radius: 15
+                        color: Qt.rgba(255, 255, 255, 0.07)
+                        border.color: Qt.rgba(255, 255, 255, 0.12)
+                        border.width: 1
+
+                        Row {
+                            anchors.fill: parent
+
+                            // Button Tiếng Việt
+                            Rectangle {
+                                width: parent.width / 2
+                                height: parent.height
+                                radius: 15
+                                color: I18n.locale === "vi" ? Qt.rgba(255, 255, 255, 0.18) : (viHover.hovered ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
+                                border.color: I18n.locale === "vi" ? Qt.rgba(255, 255, 255, 0.30) : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                HoverHandler { id: viHover }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Tiếng Việt"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: I18n.locale === "vi"
+                                    color: I18n.locale === "vi" ? "#ffffff" : Theme.textSecondary
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    preventStealing: false
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.selectLanguageRequested("vi")
+                                }
+                            }
+
+                            // Button English
+                            Rectangle {
+                                width: parent.width / 2
+                                height: parent.height
+                                radius: 15
+                                color: I18n.locale === "en" ? Qt.rgba(255, 255, 255, 0.18) : (enHover.hovered ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
+                                border.color: I18n.locale === "en" ? Qt.rgba(255, 255, 255, 0.30) : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                HoverHandler { id: enHover }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "English"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: I18n.locale === "en"
+                                    color: I18n.locale === "en" ? "#ffffff" : Theme.textSecondary
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    preventStealing: false
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.selectLanguageRequested("en")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Sync History to Google Toggle (Frameless Row, Toggle Pinned to Right)
                 Item {
                     Layout.fillWidth: true
@@ -470,7 +578,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: "Đồng bộ lịch sử nghe nhạc lên Cloud (YouTube Music)"
+                            text: I18n.tr("Đồng bộ lịch sử nghe nhạc lên Cloud (YouTube Music)", "Sync listening history to Cloud (YouTube Music)")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -478,7 +586,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Cập nhật lịch sử xem và gợi ý cá nhân hóa trên tài khoản Google"
+                            text: I18n.tr("Cập nhật lịch sử xem và gợi ý cá nhân hóa trên tài khoản Google", "Update watch history and personalized recommendations on Google Account")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -531,7 +639,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: "Bìa album động Apple Music (Animated Cover)"
+                            text: I18n.tr("Bìa album động Apple Music (Animated Cover)", "Apple Music Animated Album Artwork")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -539,7 +647,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Tự động phát video loop nghệ thuật từ Apple Music thay cho ảnh tĩnh"
+                            text: I18n.tr("Tự động phát video loop nghệ thuật từ Apple Music thay cho ảnh tĩnh", "Play artistic loop video from Apple Music instead of static artwork")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -587,7 +695,7 @@ Rectangle {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(255, 255, 255, 0.07) }
                     Text {
-                        text: "HOẶC NHẬP MÃ COOKIE DỰ PHÒNG"
+                        text: I18n.tr("HOẶC NHẬP MÃ COOKIE DỰ PHÒNG", "OR ENTER BACKUP COOKIE")
                         font.family: Theme.fontFamily
                         font.pixelSize: 10
                         font.bold: true
@@ -612,7 +720,7 @@ Rectangle {
 
                         TextArea {
                             id: authInput
-                            placeholderText: "Dán mã raw cookie (SAPISID=...; SSID=...) hoặc Request Headers tại đây..."
+                            placeholderText: I18n.tr("Dán mã raw cookie (SAPISID=...; SSID=...) hoặc Request Headers tại đây...", "Paste raw cookie (SAPISID=...; SSID=...) or Request Headers here...")
                             placeholderTextColor: "#555555"
                             font.family: "Monospace"
                             font.pixelSize: 11
@@ -641,7 +749,7 @@ Rectangle {
                         Text {
                             id: pasteTxt
                             anchors.centerIn: parent
-                            text: "Dán từ Clipboard"
+                            text: I18n.tr("Dán từ Clipboard", "Paste from Clipboard")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             color: Theme.textSecondary
@@ -671,7 +779,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Hủy"
+                            text: I18n.tr("Hủy", "Cancel")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             color: Theme.textSecondary
@@ -748,7 +856,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: "Hiển thị lời bài hát trên Desktop"
+                            text: I18n.tr("Hiển thị lời bài hát trên Desktop", "Desktop Lyrics Display")
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: true
@@ -756,7 +864,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland"
+                            text: I18n.tr("Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland", "Display floating lyrics directly on Wayland desktop wallpaper")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -795,7 +903,7 @@ Rectangle {
 
                 // Section Title
                 Text {
-                    text: "CHỌN MẪU GIAO DIỆN (PRESETS)"
+                    text: I18n.tr("CHỌN MẪU GIAO DIỆN (PRESETS)", "CHOOSE DISPLAY PRESETS")
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     font.bold: true
@@ -828,7 +936,7 @@ Rectangle {
                             width: 168
 
                             Text {
-                                text: "Mẫu 1: Gacha Pop"
+                                text: I18n.tr("Mẫu 1: Gacha Pop", "Preset 1: Gacha Pop")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -836,7 +944,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "1 dòng • Instrument Serif"
+                                text: I18n.tr("1 dòng • Instrument Serif", "1 line • Instrument Serif")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textSecondary
@@ -917,7 +1025,7 @@ Rectangle {
                             Row {
                                 spacing: 6
                                 Text {
-                                    text: "Mẫu 2: Apple Music"
+                                    text: I18n.tr("Mẫu 2: Apple Music", "Preset 2: Apple Music")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -931,7 +1039,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "MỚI"
+                                        text: I18n.tr("MỚI", "NEW")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 8
                                         font.bold: true
@@ -941,7 +1049,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "5 dòng • DoF quang học"
+                                text: I18n.tr("5 dòng • DoF quang học", "5 lines • Optical DoF")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textSecondary
@@ -1045,7 +1153,7 @@ Rectangle {
                             Row {
                                 spacing: 6
                                 Text {
-                                    text: "Mẫu 3: Tối giản lướt"
+                                    text: I18n.tr("Mẫu 3: Tối giản lướt", "Preset 3: Minimal Glide")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -1059,7 +1167,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "MỚI"
+                                        text: I18n.tr("MỚI", "NEW")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 8
                                         font.bold: true
@@ -1069,7 +1177,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "2 dòng • Motion Blur"
+                                text: I18n.tr("2 dòng • Motion Blur", "2 lines • Motion Blur")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textSecondary
@@ -1164,7 +1272,7 @@ Rectangle {
                             Row {
                                 spacing: 6
                                 Text {
-                                    text: "Mẫu 4: MV Kinetic"
+                                    text: I18n.tr("Mẫu 4: MV Kinetic", "Preset 4: MV Kinetic")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -1178,7 +1286,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "MỚI"
+                                        text: I18n.tr("MỚI", "NEW")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 8
                                         font.bold: true
@@ -1188,7 +1296,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Chữ khối • Bento Frame"
+                                text: I18n.tr("Chữ khối • Bento Frame", "Block text • Bento Frame")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textSecondary
@@ -1256,7 +1364,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: "Vị trí hiển thị trên màn hình"
+                            text: I18n.tr("Vị trí hiển thị trên màn hình", "Screen Display Position")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -1264,7 +1372,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: (root.customX >= 0 && root.customY >= 0) ? "Kéo thả trực tiếp trên Desktop để dời vị trí." : "Tự động căn theo tỷ lệ màn hình • Kéo thả trực tiếp trên Desktop."
+                            text: (root.customX >= 0 && root.customY >= 0) ? I18n.tr("Kéo thả trực tiếp trên Desktop để dời vị trí.", "Drag directly on Desktop to reposition.") : I18n.tr("Tự động căn theo tỷ lệ màn hình • Kéo thả trực tiếp trên Desktop.", "Auto-aligned to screen ratio • Drag directly on Desktop.")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -1298,7 +1406,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: "Đặt lại mặc định"
+                                text: I18n.tr("Đặt lại mặc định", "Reset Defaults")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true

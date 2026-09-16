@@ -4,6 +4,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "."
 
 PanelWindow {
     id: root
@@ -321,7 +322,7 @@ PanelWindow {
 
                 Text {
                     id: titleTxt
-                    text: (root.currentTrack && root.currentTrack.title) ? root.currentTrack.title : "No track playing"
+                    text: (root.currentTrack && root.currentTrack.title) ? root.currentTrack.title : I18n.tr("Chưa chọn bài hát", "No track playing")
                     font.family: "Inter Display, Inter, sans-serif"
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
