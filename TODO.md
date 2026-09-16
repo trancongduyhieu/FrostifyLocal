@@ -226,12 +226,28 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - Phát video loop HLS mượt mà trong thẻ Artwork của AmberolDetailView, có hiệu ứng phủ nền ambient mờ phía sau.
     - Tùy chọn Bật/Tắt "Bìa album động (Animated Cover)" trong `components/SettingsModal.qml`, lưu cấu hình vào `nutsty_settings.json`.
 
-- [ ] **26. Tinh Chỉnh Chiều Sâu Lời Bài Hát & Chuẩn Bo Góc Đồng Tâm (DoF Per-Character Bloom & Concentric Corners - Phần 2)**
-  - *Desktop Lyrics Preset 2 (`components/AppleMusicDesktopLyrics.qml`)*:
-    - Nâng cấp thuật toán phát quang chữ karaoke: Chiếu sáng bloom chuẩn xác theo từng ký tự dựa trên khoảng cách playhead ($1 - |\text{progress} - \text{charCentre}| / \text{reach}$).
-    - Hiệu ứng nhấn nốt ngân dài (held notes): Gia tăng tỷ lệ scale và độ bung sáng bloom khi gặp nốt ngân dài; mở rộng bounding box không giới hạn (unbounded blur) chống xén biên chữ.
-  - *Quy chuẩn Bo Góc Đồng Tâm Toàn App*:
-    - Chuẩn hóa toàn bộ card bài hát, thumbnail và icon theo công thức $R_{\text{inner}} = R_{\text{outer}} - \text{padding}$, xóa bỏ hoàn toàn hiện tượng lệch góc giữa khung ngoài và phần tử bên trong.
+- [x] **26. Tinh Chỉnh Chiều Sâu Lời Bài Hát & Syllable-Level Karaoke Sync (DoF Held Notes Bloom & Bento Settings - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Backend Bóc Tách Syllable Timestamps (`backend/lyrics_helper.py`)**:
+      - Hàm `parse_rich_sync_words`: Bóc tách thẻ `<mm:ss.xx>` chính xác từng từ/âm tiết, tính toán `start`, `end`, `duration` và nhận diện nốt ngân dài `isHeld: true` (thời lượng $\ge 0.85\text{s}$).
+      - Khai thác trọn vẹn kho 627 bài hát Rich Syllable có sẵn trong local database và định dạng Enhanced LRC; ưu tiên trả về trong 0.05s không độ trễ mạng.
+    - **Frontend QML Karaoke Chuẩn Xác Từng Mili-giây (`components/YTMusicNowPlayingView.qml`)**:
+      - Hàm `formatActiveLyricLine`: Chạy timeline theo từng mili-giây nhả chữ của ca sĩ khi `hasWords: true`.
+      - Hiệu ứng **SimpMusic / AMLL Flow Word Transform cho Held Notes**:
+        - Kiến trúc `Flow { Repeater { delegate: Item (wordItem) } }` tách biệt từng từ, khóa cứng `scale = 1.0` cấp câu, triệt tiêu hoàn toàn hiện tượng cả câu bị phình to gián đoạn.
+        - Giữ nguyên `Font.Bold` đồng bộ với cả câu, xóa bỏ hoàn toàn `Font.Black`.
+        - Công thức thở quang học chuẩn xác đã được chốt thực nghiệm:
+          $$\text{bump} = \sin(\pi \times \text{wordProgress})^{2.0}$$
+          $$\text{scale} = 1.0 + \text{bump} \times 0.008 \quad (+0.8\% / 1.008\text{x})$$
+          $$y = -\text{bump} \times 1.5\text{px} \quad (\text{nhấc nhẹ 1.5px})$$
+          Đạt hiệu ứng SimpMusic tự nhiên hoàn mỹ: không để ý thì không thấy phóng to dù thực tế từ ngân có thở nhẹ nhàng theo giọng ca sĩ.
+      - Tự động fallback mượt mà về thuật toán chia đều nội suy khi bài hát chỉ có LRC thường.
+    - **Tái Thiết Kế Toàn Diện Menu Cài Đặt (`components/SettingsModal.qml`)**: [ĐÃ HOÀN THÀNH]
+      - Phong cách CSS Shaded Frosted Glass & In-App Backdrop Blur: Tối ưu xuyên thấu và làm mờ chính giao diện bài hát bên dưới (`ShaderEffectSource` bắt `mainContentBackdrop` tại tọa độ hộp thoại, `MultiEffect` blur 0.85, blurMax 48, saturation 1.15), phủ lớp Shaded Tint gradient chuẩn CSS chống chói đạt tương phản WCAG AAA.
+      - Triệt tiêu 100% lỗi thị giác: Xóa bỏ thanh ngang specular sheen cắt ngang chữ "Tài khoản", khử hoàn toàn lỗi viền đen bậc thang, dọn sạch code demo.
+      - Sliding Capsule Pill: Viên nang kính chuyển tab mượt mà giữa "Tài khoản" và "Lời bài hát Desktop" ($R_{\text{con}} = 12 - 3 = 9\text{px}$).
+      - Bento Grid 2x2 cho 4 Presets: Mỗi ô có Live Hover Micro-interaction (rê chuột vào chữ tự động nảy/lướt nhẹ), viền phát quang theo `accentColor` khi được chọn.
+      - Tuân thủ nghiêm ngặt quy chuẩn bo góc đồng tâm $R_{\text{con}} = R_{\text{mẹ}} - \text{padding}$ và hệ thống lưới spacing 4px/8px theo `ui-layout-design-rules`.
 
 - [ ] **27. Bộ Phiên Âm Lời Bài Hát Đa Ngôn Ngữ (Multi-Language Lyrics Romanization Suite - Phần 3)**
   - *Mục tiêu*: Giúp người dùng dễ dàng hát theo các bài hát tiếng Nhật (Anime/J-pop), tiếng Hàn (K-pop) và tiếng Trung (C-pop) bằng chữ cái Latinh.
@@ -347,3 +363,19 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
   - *Đã hoàn thành*:
     - **Triệt tiêu hiện tượng tràn biên ra ảnh bìa & hình nền**: Khắc phục lỗi `clip: false` trên `moodFlickable` trong `components/YTMusicNowPlayingView.qml`. Thiết lập `clip: true` trên `moodFlickable`, `recPlFlickable`, `artFlickable` và `homeMoodFlickable`, bảo đảm 100% nội dung thanh Mood Chips và carousels khi cuộn/kéo sang hai bên luôn bị cắt gọt sắc nét tại mép vùng hiển thị của cột, tuyệt đối không bị đè hay lấn sang nửa màn hình bên trái (khối ảnh bìa bài hát).
     - **Sửa lỗi tính toán gia tốc ảo trong `DragHandler`**: Trong Qt Quick, `DragHandler.translation` là độ dịch chuyển tích lũy từ khi bắt đầu nhấn chuột chứ không phải delta từng frame. Loại bỏ công thức trừ trực tiếp `contentX - translation.x`, thay thế bằng cơ chế `startContentX` lưu mốc tọa độ ban đầu lúc `active`, tính toán chính xác `contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x))` giúp thao tác kéo chuột đạt độ phản hồi 1:1 chuẩn xác, mượt mà và dừng lại chuẩn xác tại giới hạn biên.
+
+- [x] **39. Hệ Thống Lời Bài Hát Động Học Anime MV & Cân Bằng Thị Giác Chữ Đông Á (Anime MV Kinetic Typography & Non-Latin Typography Balancing - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **10 Vũ Điệu Động Học Anime MV Kinetic (`components/AnimeMVKineticLyrics.qml`)**: Flanking đối xứng vạch ticks, Stack Equal thước đo L-bracket, Pyramid kim tự tháp kích thước, Vertical Stack cột chữ 3 từ, Architectural Bento đa tầng cột I, Vertical Letter Drop chữ rơi nảy lò xo, Single Giant Word tạo điểm nhấn, Compound Merge từ ghép đối xứng, Push-Left đẩy dạt sang trái từ tâm.
+    - **Quy Chuẩn Màu Sắc Phân Tầng Điện Ảnh**: Câu dài nhất (`PUSH_LEFT_FULL` từ 6 từ trở lên) cố định 100% Trắng Tinh Khiết (`#ffffff`), các kiểu còn lại kết hợp nhịp nhàng giữa màu Trắng và màu điểm nhấn hình nền (`colAccent`).
+    - **Động Cơ Khử Chớp Nháy Chuyển Câu (Anti-Flash Gate 35ms)**: Triệt tiêu hoàn toàn hiện tượng nháy hiện cả câu cũ/mới trong 1 frame đầu tiên khi chuyển câu.
+    - **Bộ Phân Tách Ngữ Nghĩa CJK Bunsetsu & Nhận Diện Không Phải La-tinh**: Tách dấu câu CJK, phân cụm Bunsetsu tiếng Nhật, nhóm từ 2-chữ tiếng Trung, tự động nhận diện tiếng Nhật, tiếng Trung và tiếng Hàn (`Hangul`).
+    - **Cân Bằng Kích Thước Chữ Đông Á Tăng +20%**: Tinh chỉnh tỉ lệ chuẩn xác tăng 20% cho chữ không phải La-tinh (Flanking 36px, Stack 31px, Pyramid 36/29/24px, Push-Left 31/26px, Bento Pillar 46px, Top 22px, Better 31px, Alone 36px, Giant Word 44px) bảo đảm chữ tiếng Nhật, Trung, Hàn rõ ràng, sắc nét, đẹp mắt và không bị tràn màn hình.
+
+- [x] **40. Tái Thiết Kế Hộp Thoại Cài Đặt Keo 502 & Bố Cục Phẳng Tối Giản (Frameless Layout & Keo 502 Underline Tab - ĐÃ HOÀN THÀNH)**
+  - *Đã hoàn thành*:
+    - **Chất Liệu Keo 502 Kính Lỏng (LiquidGlass Optical Resin)**: Tái hiện chuẩn xác kiến trúc Keo 502 từ `LIQUID_GLASS_SPEC.md` và `PlayerBarBottom.qml`: Bo góc SDF 20px, khúc xạ thấu kính lồi dẻo (`displacement: 18.0`, `bevelWidth: 24.0`), quang sai tán sắc (`u_aberration: 0.03`), phản quang sức căng bề mặt `keo502Gloss` kết hợp đổ bóng sâu điện ảnh `MultiEffect` (`#80000000`, blur 0.65).
+    - **Lớp Phủ Tương Phản Chống Rối Chữ (Shaded Tint 0.68)**: Làm dịu và làm chìm các chi tiết thẻ bài hát bên dưới, đảm bảo độ tương phản WCAG AAA cho văn bản bên trong hộp thoại.
+    - **Bộ Chuyển Tab Gạch Chân Underline (`___`)**: Xóa bỏ hoàn toàn viên nang cồng kềnh `tabCapsule`, chuyển sang 2 tab chữ phẳng (`Tài khoản` và `Lời bài hát Desktop`) kèm thanh gạch chân màu trắng `height: 2px` trượt mượt mà `Easing.OutCubic 200ms` trên đường kẻ hairline 1px.
+    - **Xóa Bỏ Triệt Để Hội Chứng "Hộp Trong Hộp" (100% Frameless Rows)**: Các dòng cài đặt ("Đồng bộ lịch sử nghe nhạc", "Bìa album động", "Hiển thị lời bài hát", "Vị trí hiển thị") được giải phóng khỏi các khối chữ nhật viền cứng, bố trí dạng danh sách phẳng thoáng đãng kèm Toggle Switch dạt sang bên phải.
+    - **Xóa Sạch Viền Xanh Lá Cây Ở Presets & Profile**: Thay thế viền màu gắt bằng viền trắng mờ thanh lịch `1.5px #ffffff` kết hợp huy hiệu checkmark đơn sắc đen-trắng cho mẫu Bento đang chọn.

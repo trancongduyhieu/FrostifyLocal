@@ -15,7 +15,7 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
-    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur
+    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Anime MV Kinetic Typography
     property int customX: -1
     property int customY: -1
 
@@ -127,13 +127,17 @@ PanelWindow {
         ? Math.round(root.height * 0.725)
         : ((root.lyricsPreset === 3)
             ? Math.round(root.height * 0.70)
-            : Math.round(root.height * 0.62))
+            : ((root.lyricsPreset === 4)
+                ? Math.round(root.height * 0.68)
+                : Math.round(root.height * 0.62)))
 
     readonly property int currentPresetMaxWidth: (root.lyricsPreset === 1)
         ? Math.min(740, Math.round(root.width * 0.45))
         : ((root.lyricsPreset === 3)
             ? Math.min(760, Math.round(root.width * 0.50))
-            : Math.min(880, Math.round(root.width * 0.55)))
+            : ((root.lyricsPreset === 4)
+                ? Math.min(960, Math.round(root.width * 0.65))
+                : Math.min(880, Math.round(root.width * 0.55))))
 
     onCustomXChanged: {
         containerBox.x = (customX >= 0) ? customX : defaultX;
@@ -164,7 +168,9 @@ PanelWindow {
             ? 120
             : ((root.lyricsPreset === 3)
                 ? (minimalistView.implicitHeight > 0 ? minimalistView.implicitHeight : 140)
-                : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300))
+                : ((root.lyricsPreset === 4)
+                    ? (animeMVView.implicitHeight > 0 ? animeMVView.implicitHeight : 260)
+                    : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)))
         visible: root.enabled && root.activeLyrics && root.activeLyrics.length > 0
 
         // Universal Full-Screen Drag Area (Shared across ALL presets)
@@ -233,6 +239,25 @@ PanelWindow {
             id: minimalistView
             anchors.fill: parent
             visible: root.lyricsPreset === 3
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            magicFontFamily: root.magicFontFamily
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colDeadText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
+        }
+
+        // =====================================================================
+        // Preset 4: Anime MV Kinetic Typography View Plugin
+        // =====================================================================
+        AnimeMVKineticLyrics {
+            id: animeMVView
+            anchors.fill: parent
+            visible: root.lyricsPreset === 4
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying

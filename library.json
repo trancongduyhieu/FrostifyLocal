@@ -955,6 +955,20 @@
   },
   {
     "id": 80,
+    "title": "Dù Cho Mai Về Sau (Acoustic Version) / buitruonglinh",
+    "name": "Dù Cho Mai Về Sau (Acoustic Version) / buitruonglinh",
+    "artist": "buitruonglinh",
+    "album": "",
+    "year": "2020",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/Dù Cho Mai Về Sau (Acoustic Version) ⧸ buitruonglinh.m4a",
+    "filename": "Dù Cho Mai Về Sau (Acoustic Version) ⧸ buitruonglinh.m4a",
+    "duration": "3:33",
+    "image": "/home/apple/.cache/nutsty/thumbnails/5edbc84797c2f3b3975079d6cc9ba474.jpg",
+    "mtime": 1789489037
+  },
+  {
+    "id": 81,
     "title": "Earrings",
     "name": "Earrings",
     "artist": "Malcolm Todd",
@@ -968,7 +982,21 @@
     "mtime": 1789119784
   },
   {
-    "id": 81,
+    "id": 82,
+    "title": "Không Buông",
+    "name": "Không Buông",
+    "artist": "Hngle, Ari",
+    "album": "Không Buông",
+    "year": "2025",
+    "source": "Downloads",
+    "path": "/home/apple/Music/Downloads_Phone/Không Buông.m4a",
+    "filename": "Không Buông.m4a",
+    "duration": "2:54",
+    "image": "/home/apple/.cache/nutsty/thumbnails/5b744a832e23488b533f766643d131fa.jpg",
+    "mtime": 1789551795
+  },
+  {
+    "id": 83,
     "title": "Làm Sao Để Em Tựa Vào | Sino ft. Khang Thanh (prod. MKM) | Animated MV",
     "name": "Làm Sao Để Em Tựa Vào | Sino ft. Khang Thanh (prod. MKM) | Animated MV",
     "artist": "SiNo studio",
@@ -982,7 +1010,7 @@
     "mtime": 1789424634
   },
   {
-    "id": 82,
+    "id": 84,
     "title": "Nếu Ngày Ấy (Lofi Ver.) - Andiez x Freak D | St. Nguyễn Đức Tùng",
     "name": "Nếu Ngày Ấy (Lofi Ver.) - Andiez x Freak D | St. Nguyễn Đức Tùng",
     "artist": "Freak D Music",
@@ -996,7 +1024,7 @@
     "mtime": 1789314419
   },
   {
-    "id": 83,
+    "id": 85,
     "title": "Overthink",
     "name": "Overthink",
     "artist": "Côngg, inari",
@@ -1010,7 +1038,7 @@
     "mtime": 1789461007
   },
   {
-    "id": 84,
+    "id": 86,
     "title": "Self Aware",
     "name": "Self Aware",
     "artist": "Temper City",
@@ -1024,7 +1052,7 @@
     "mtime": 1789388933
   },
   {
-    "id": 85,
+    "id": 87,
     "title": "Từng Quen (Lofi Ver.) - Wren Evans x Freak D",
     "name": "Từng Quen (Lofi Ver.) - Wren Evans x Freak D",
     "artist": "Freak D Music",
@@ -1038,7 +1066,7 @@
     "mtime": 1789388883
   },
   {
-    "id": 86,
+    "id": 88,
     "title": "NIGHT DANCER",
     "name": "NIGHT DANCER",
     "artist": "Will Stetson",
@@ -1052,7 +1080,7 @@
     "mtime": 1788945013
   },
   {
-    "id": 87,
+    "id": 89,
     "title": "giữ lấy làm gì",
     "name": "giữ lấy làm gì",
     "artist": "MONSTAR",
@@ -1066,7 +1094,7 @@
     "mtime": 1789221184
   },
   {
-    "id": 88,
+    "id": 90,
     "title": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "name": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "artist": "PHẠM KỲ OFFICIAL",
@@ -1080,7 +1108,7 @@
     "mtime": 1788945022
   },
   {
-    "id": 89,
+    "id": 91,
     "title": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "name": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "artist": "Trang Xinh Music",
@@ -1094,7 +1122,7 @@
     "mtime": 1788945014
   },
   {
-    "id": 90,
+    "id": 92,
     "title": "死神 / 米津玄師　- 梓川 (cover)",
     "name": "死神 / 米津玄師　- 梓川 (cover)",
     "artist": "Azusagawa",
@@ -1108,7 +1136,7 @@
     "mtime": 1789120436
   },
   {
-    "id": 91,
+    "id": 93,
     "title": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "name": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "artist": "htingale, Renard 狐",
@@ -1122,7 +1150,7 @@
     "mtime": 1789113873
   },
   {
-    "id": 92,
+    "id": 94,
     "title": "西楼别序 (prod.htingale)",
     "name": "西楼别序 (prod.htingale)",
     "artist": "htingale",

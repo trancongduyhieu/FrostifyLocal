@@ -762,8 +762,91 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
            - Endpoint resident daemon `/api/artist_shuffle` trả về JSON nhanh chóng; `shell.qml` nhận kết quả ngầm và mở rộng hàng đợi `win.currentTracks` mượt mà, bảo lưu bài hát đang phát ở vị trí đầu tiên.
            - Đồng bộ hoàn toàn cả nút Shuffle tại màn hình chi tiết nghệ sĩ (`ArtistDetailView.qml` - `onShuffleArtistRequested`).
 
----
+39. **Hệ Thống Lời Bài Hát Động Học Anime MV (Anime MV Kinetic Typography Engine - Preset 4)**:
+    - **Triết Lý Thiết Kế & Nguồn Cảm Hứng (Reference Video - Dua Lipa Break My Heart Anime Edit)**:
+      - Kế thừa trọn vẹn 10 phong cách chuyển động chữ (Kinetic Choreographies) từ video âm nhạc anime đỉnh cao:
+        1. *Flanking (2 từ đối xứng 2 mép biên)*: e.g. "OH ... NO", "AM ... I" kèm vạch góc L-ticks sắc nét.
+        2. *Stack Equal (2 từ xếp tầng trên dưới)*: e.g. "FALLING / IN" kèm thước đo L-bracket.
+        3. *Pyramid (3 từ kim tự tháp kích thước)*: e.g. "LOVE > WITH > ME" (44px > 34px > 26px).
+        4. *Vertical Stack (3 từ cột đứng đồng đều)*: e.g. "BUT / WHEN / YOU" (34px).
+        5. *Architectural Bento (Bố cục kiến trúc đa tầng)*: e.g. Cột chữ cái lớn "I" (56px) ôm trọn cụm "WAS DOING" (24px), tầng giữa "BETTER" (34px), tầng đáy "ALONE" (42px).
+        6. *Vertical Letter Drop (Cột chữ cái rơi nảy từng ký tự)*: e.g. "H-E-A-R-T" (24px, nảy lò xo `Easing.OutBounce`).
+        7. *Single Giant Word (1 từ khổng lồ tạo điểm nhấn)*: e.g. "SAID" (62px, Overshoot 1.15).
+        8. *Compound Merge (1 từ ghép 2 nửa đối xứng)*: e.g. "“HEL”" + "“LO”" -> "“HELLO”" (44px) kèm ngoặc kép `“ ”`.
+        9. *Kinetic Push-Left (Đẩy dạt sang trái từ tâm giữa - 4 đến 5 từ)*: e.g. "ONE THAT COULD BREAK MY" (36px).
+        10. *Full-Length Kinetic Push-Left (Câu dài toàn cảnh từ 6 từ trở lên)*: e.g. "I KNEW THAT WAS THE END OF ALL" (28px).
+    - **Quy Chuẩn Màu Sắc Phân Tầng Điện Ảnh (Selective Color Rule)**:
+      - *Câu dài nhất (`PUSH_LEFT_FULL` từ 6 từ trở lên)*: **Cố định 100% Trắng Tinh Khiết (`#ffffff`)** trên nền bóng đổ Cel Shadow đen sâu (`#000000`, 0% blur). Ngăn chặn hoàn toàn hiện tượng lốm đốm màu sắc hình nền xen kẽ gây rối mắt khi hát câu dài.
+      - *Toàn bộ 9 kiểu còn lại (Flanking, Stack Equal, Pyramid, Vertical Stack, Bento Column, Letter Drop, Giant Word, Compound Merge, Push-Left 4-5 từ)*: Kết hợp nhịp nhàng giữa màu Trắng tinh khiết (`#ffffff`) và **Màu Điểm Nhấn Hình Nền (`colAccent` trích xuất từ OKLAB / OKLCH `nutsty_palette.json`)** tạo độ bật thị giác nghệ thuật rực rỡ, độc đáo.
+    - **Động Cơ Khử Chớp Nháy Chuyển Câu (Anti-Flash Gate Engine)**:
+      - *Cơ chế*: Boolean flag `isSentenceTransitioning` kết hợp `transitionGateTimer` (35ms).
+      - Ngay khi `idx !== currentLyricIndex`, lập tức khóa `isSentenceTransitioning = true` và reset `lineProgress = 0.0` ngay trước khi bất kỳ ký tự nào được render.
+      - Trong lúc gate đóng, `isWordRevealed(i)` trả về `false` vô điều kiện và tạm ngắt toàn bộ `Behavior` animation.
+      - Sau khi cấu trúc hình học ổn định, gate tự động mở lại cho phép các từ xuất hiện tuần tự word-by-word mượt mà, triệt tiêu 100% lỗi nháy hiện cả câu cũ/mới trong 1 frame đầu tiên.
+    - **Chuẩn Hóa Kích Thước Tỉ Lệ Vàng Desktop (Proportional Halved Typography)**:
+      - Toàn bộ kích thước pixel chữ được tinh chỉnh giảm ~50% (câu dài 28px, chữ lớn 34-44px, cột Bento 24-56px), bảo đảm văn bản luôn nằm gọn gàng, trang nhã trong vùng hạ tiêu cự/tà váy nhân vật mà không bao giờ bị tràn biên màn hình.
+    - **Bộ Phân Tách Ngữ Nghĩa Đa Ngôn Ngữ & Cân Bằng Thị Giác Chữ Đông Á (CJK Bunsetsu Tokenizer & Adaptive Typography Balancing)**:
+      - *Nguyên nhân chữ tiếng Nhật / tiếng Trung bị khổng lồ trước đó*:
+        - Chữ Hán/Kanji/Kana không sử dụng dấu cách (` `) giữa các từ (ví dụ: `所以那就离开吧` hoặc `何回だってきっと`).
+        - Bộ tách từ cũ dùng `split(/\s+/)` chỉ tạo ra mảng có độ dài 1 từ duy nhất (`n === 1`).
+        - Bộ phân loại điều hướng toàn bộ câu 7-10 ký tự CJK vào kiểu `GIANT_WORD` với kích thước 62px. Vì ký tự CJK có tỉ lệ hình vuông toàn phần 1:1 (full em-width), câu trải dài > 400px gây choán ngợp toàn bộ màn hình.
+      - *Giải pháp triệt để*:
+        1. **Bộ Tokenizer Đa Tầng CJK Thông Minh (`tokenizeText`)**:
+           - Tách theo hệ thống dấu câu CJK phong phú: `[\s,，、。！？!?…~～·・—\-_()（）\[\]【】\"'“”‘’「」『』]+`.
+           - Đối với tiếng Nhật: Bóc tách theo cụm Bunsetsu (`[\u4e00-\u9fff]+[\u3040-\u309f]{0,2}|[\u30a0-\u30ff]+|[\u3040-\u309f]{1,3}|[a-zA-Z0-9]+`) kết hợp Kanji gốc với trợ từ Kana đi kèm, từ mượn Katakana và cụm Hiragana.
+           - Đối với chữ Hán (tiếng Trung): Gom thành các từ 2 chữ cái kinh điển (`k += 2`) hoặc cụm 3 chữ cái (`我爱你` $\rightarrow$ `['我', '爱', '你']`), biến câu 7 chữ `所以那就离开吧` thành 4 từ ngữ nghĩa (`['所以', '那就', '离开', '吧']`), tự động kích hoạt vũ điệu `BENTO_COLUMN` hoặc `PUSH_LEFT` mượt mà theo từng từ.
+        2. **Chuyển Đổi Font Stack Động (`displayFontFamily`)**:
+           - Tự động nhận diện `isCJK` qua regex `[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]`.
+           - Khi là tiếng Nhật/Trung/Hàn: Chuyển thẳng sang `Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans CJK KR, Montserrat, sans-serif` với trọng số `Font.Black` sắc nét, không để font Latinh `Impact` gây lỗi render ký tự CJK.
+        3. **Tỉ Lệ Kích Thước Chữ Thích Ứng (Adaptive Proportional Scaling - Tăng +20% Cho Ngôn Ngữ Đông Á)**:
+           - Tự động nhận diện chữ không phải La-tinh (tiếng Nhật, Trung, Hàn) qua Unicode regex `[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]`.
+           - Áp dụng hệ số co giãn tỉ lệ vàng tăng 20% giúp chữ Đông Á rõ ràng, sắc sảo mà không bị quá khổ:
+             - *Flanking / Pyramid 1 / Compound*: `root.isCJK ? 36 : 44` (tăng từ 30 lên 36px)
+             - *Stack Equal / Push-Left (4-5 từ)*: `root.isCJK ? 31 : 36` (tăng từ 26 lên 31px)
+             - *Push-Left Full (6+ từ)*: `root.isCJK ? 26 : 28` (tăng từ 22 lên 26px)
+             - *Bento Pillar*: `root.isCJK ? 46 : 56` (tăng từ 38 lên 46px)
+             - *Bento Top (Was/Doing)*: `root.isCJK ? 22 : 24` (tăng từ 18 lên 22px)
+             - *Bento Better*: `root.isCJK ? 31 : 34` (tăng từ 26 lên 31px)
+             - *Bento Alone*: `root.isCJK ? 36 : 42` (tăng từ 30 lên 36px)
+             - *Vertical Stack*: `root.isCJK ? 29 : 34` (tăng từ 24 lên 29px)
+             - *Giant Word (1 từ duy nhất thực sự)*: `root.isCJK ? 44 : 62` (tăng từ 36 lên 44px)
+           - Đảm bảo lời bài hát tiếng Nhật, tiếng Trung, tiếng Hàn và tiếng Anh hiển thị đồng đều, tinh tế, vừa vặn hoàn hảo trên desktop.
 
+26. **Động Cơ Syllable-Level Karaoke & Held Notes Elastic Scaling (Kế Thừa SimpMusic Footgun #217 & AMLL Architecture)**:
+    - **Backend Bóc Tách Syllable Timestamps (`backend/lyrics_helper.py`)**:
+      - Bóc tách thẻ `<mm:ss.xx>` chính xác từng từ/âm tiết, tính toán `start`, `end`, `duration` và nhận diện nốt ngân dài `isHeld: true` (thời lượng $\ge 0.85\text{s}$).
+      - Khai thác trọn vẹn 627 bài hát Rich Syllable có sẵn trong local database; ưu tiên trả về trong 0.05s không độ trễ mạng.
+    - **Frontend Flow Word Transform & SimpMusic Breath Curve (`YTMusicNowPlayingView.qml` & `AmberolDetailView.qml`)**:
+      - **Kiến trúc Flow tách biệt từng từ**: Thay thế chuỗi text đơn dòng bằng `Flow { Repeater { delegate: Item (wordItem) } }`. Khóa cứng `lyricRow.scale = 1.0` (cấp câu), chỉ áp dụng GPU transform (`scale`, `y`) lên riêng bounding box của từ ngân dài `isHeld`.
+      - **Độ dày font đồng nhất**: Giữ nguyên `font.weight: Font.Bold`, loại bỏ hoàn toàn `Font.Black` (900) để không làm vỡ nét hay dày cộm bất thường so với cả câu.
+      - **Công thức nhịp thở quang học đã chốt thực nghiệm (SimpMusic Organic Curve)**:
+        $$\text{bump} = \sin(\pi \times \text{wordProgress})^{2.0}$$
+        $$\text{scale} = 1.0 + \text{bump} \times 0.008 \quad (+0.8\% / 1.008\text{x})$$
+        $$y = -\text{bump} \times 1.5\text{px} \quad (\text{nhấc nhẹ 1.5px})$$
+        Biên độ $+0.8\%$ tương đương ~1px viền trên font 28px kết hợp lũy thừa bậc 2 làm mềm hoàn toàn khởi đầu và kết thúc của nốt ngân. Người nghe cảm nhận được sự sống động tự nhiên theo nhịp hát của ca sĩ mà không thấy bị giật nảy hay phóng to thô bạo.
+      - **Chống văng layout**: Bọc delegate trong `Item` cố định `width: wordTxt.implicitWidth` và `height: wordTxt.implicitHeight`, neo đáy `transformOrigin: Item.Bottom`, giúp transform chỉ diễn ra trên GPU raster layer mà không gây reflow layout xung quanh.
+      - Tự động fallback mượt mà về text thông thường khi bài hát chỉ có LRC line-level.
+
+27. **Hộp Thoại Cài Đặt CSS Shaded Frosted Glass & In-App Backdrop Blur (`components/SettingsModal.qml`)**:
+    - **Cơ chế In-App Backdrop Blur (Khử triệt để lỗi xuyên hình nền desktop)**:
+      - `ShaderEffectSource`: Bắt texture trực tiếp từ `mainContentBackdrop` (chứa toàn bộ HomeFeed cards, Music Videos, TopHeader, Playlists) tại đúng tọa độ hộp thoại (`sourceRect: Qt.rect(dialog.x, dialog.y, dialog.width, dialog.height)`).
+      - Hiệu năng GPU tối ưu: Chỉ render offscreen đúng kích thước hộp thoại (600x560 px), tự động tắt hoàn toàn khi modal đóng (`live: root.visible`), 0% lãng phí tài nguyên.
+      - `MultiEffect`: Làm mờ quang học 9-tap (`blur: 0.85`, `blurMax: 48`, `saturation: 1.15`) biến các card bài hát bên dưới thành phông nền màu sắc ambient mềm mại, sống động.
+    - **Lớp Phủ Shaded Tint Chuẩn CSS & Độ Tương Phản WCAG AAA**:
+      - Dựa trên đặc tả Compass CSS3 `.blurred-bg.shaded` kết hợp gradient 3 nấc: `linear-gradient(180deg, rgba(14,16,22,0.65), rgba(8,9,13,0.86))`.
+      - Bảo đảm mọi nhãn chữ, công tắc switch và badge đều đạt tỷ lệ tương phản > 7:1 (chuẩn AAA) dù thẻ bài hát bên dưới có màu sáng hay tối.
+    - **Khử Hoàn Toàn Các Lỗi Thị Giác & Bẫy Render**:
+      - Triệt tiêu 100% thanh ngang specular sheen từng cắt ngang chữ "Tài khoản".
+      - Xóa bỏ các khối chữ nhật drop shadow unblurred gây lỗi viền đen bậc thang.
+      - Hairline border siêu mảnh 1px `rgba(255, 255, 255, 0.22)` kết hợp Top Specular Rim Sheen `1px rgba(255, 255, 255, 0.32)`.
+    - **Sliding Capsule Pill & Bento Grid 2x2**:
+      - Viên nang kính chuyển tab mượt mà `Easing.OutCubic` 240ms giữa "Tài khoản" và "Lời bài hát Desktop" ($R_{\text{con}} = 12 - 3 = 9\text{px}$).
+      - Bento Grid 2x2 cho 4 Presets lời bài hát với Live Hover Micro-interaction (chữ tự động nảy/lướt nhẹ) và viền phát quang theo `accentColor`.
+    - **Tuân Thủ Tuyệt Đối `ui-layout-design-rules`**:
+      - Bo góc đồng tâm: Dialog ($R = 20$), Bento card ($R = 14$), Preview box ($R = 8$).
+      - Hệ thống lưới khoảng cách 4px/8px, 100% icon SVG trắng sáng (`fill="#ffffff"`), zero emoji.
+
+---
 
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 

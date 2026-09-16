@@ -56,9 +56,11 @@ Scope {
     property bool isAuthLoggedIn: false
     property string authAccountName: ""
     property string authAccountThumb: ""
+    property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
-    property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop
+    property bool animatedCoverEnabled: true
+    property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop, 4: Anime MV Kinetic
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property bool showSidebar: true
@@ -505,6 +507,7 @@ Scope {
                     win.isAuthLoggedIn = !!s.logged_in;
                     win.authAccountName = s.name || "";
                     win.authAccountThumb = s.thumb || "";
+                    win.authAccountEmail = s.email || "";
                 } catch(e) {}
             }
         }
@@ -1258,6 +1261,76 @@ Scope {
             }
         }
 
+        // =====================================================================
+        // Pure Nutsty App Surface (Isolated from Desktop Wallpaper)
+        // Used specifically for Modals & Dialogs (SettingsModal, etc.)
+        // Ensures the modal's Liquid Glass only blurs Nutsty UI & song cards,
+        // without desktop wallpaper bleeding in.
+        // =====================================================================
+        Item {
+            id: nutstyAppSurface
+            anchors.fill: parent
+            z: -998
+            opacity: 0.001
+
+            // 1. Dark Acrylic Window Foundation
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0.06, 0.07, 0.10, 0.96)
+            }
+
+            // 2. Active Song Atmosphere Aurora Glow (when playing)
+            Item {
+                anchors.fill: parent
+                opacity: (win.currentTrack && win.isPlaying) ? 0.70 : 0.0
+                Behavior on opacity {
+                    NumberAnimation { duration: 450; easing.type: Easing.InOutQuad }
+                }
+
+                Image {
+                    id: nutstySurfaceArtwork
+                    anchors.fill: parent
+                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    sourceSize: Qt.size(48, 48)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    visible: false
+                }
+
+                MultiEffect {
+                    anchors.fill: parent
+                    source: nutstySurfaceArtwork
+                    visible: nutstySurfaceArtwork.status === Image.Ready
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 64
+                    saturation: 1.40
+                    brightness: -0.20
+                }
+            }
+
+            // 3. Live UI Content Layer with Rich Frosted Bokeh Blur (MultiEffect blurMax: 64)
+            ShaderEffectSource {
+                id: liveContentRaw
+                anchors.fill: parent
+                sourceItem: mainContentBackdrop
+                live: true
+                hideSource: false
+                smooth: true
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: liveContentRaw
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 64
+                saturation: 1.20
+                brightness: -0.10
+            }
+        }
+
         // 1. Main Application Backdrop & Scrolling Content
         Item {
             id: mainContentBackdrop
@@ -1626,6 +1699,7 @@ Scope {
                     Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
                     track: win.currentTrack
+                    animatedCoverEnabled: win.animatedCoverEnabled
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration > 0 ? win.totalDuration : 1.0
                     isPlaying: win.isPlaying
@@ -1714,11 +1788,14 @@ Scope {
         // Google Account / Cloud Settings Modal
         SettingsModal {
             id: settingsModal
+            backgroundSourceItem: nutstyAppSurface
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
             accountThumb: win.authAccountThumb
+            accountEmail: win.authAccountEmail
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
+            animatedCoverEnabled: win.animatedCoverEnabled
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
@@ -1726,6 +1803,10 @@ Scope {
             onCloseRequested: settingsModal.visible = false
             onToggleSyncHistoryRequested: enabled => {
                 win.syncHistoryToGoogle = enabled;
+                win.saveSettings();
+            }
+            onToggleAnimatedCoverRequested: enabled => {
+                win.animatedCoverEnabled = enabled;
                 win.saveSettings();
             }
             onToggleDesktopLyricsRequested: enabled => {
@@ -1885,6 +1966,7 @@ Scope {
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
+            if (obj.animatedCoverEnabled !== undefined) win.animatedCoverEnabled = !!obj.animatedCoverEnabled;
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);
             if (obj.desktopLyricsCustomX !== undefined) win.desktopLyricsCustomX = Number(obj.desktopLyricsCustomX);
             if (obj.desktopLyricsCustomY !== undefined) win.desktopLyricsCustomY = Number(obj.desktopLyricsCustomY);
@@ -1901,6 +1983,7 @@ Scope {
             widgetX: win.widgetX,
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
+            animatedCoverEnabled: win.animatedCoverEnabled,
             desktopLyricsPreset: win.desktopLyricsPreset,
             desktopLyricsCustomX: win.desktopLyricsCustomX,
             desktopLyricsCustomY: win.desktopLyricsCustomY
@@ -2555,6 +2638,7 @@ Scope {
             win.handleDislikedTrack(win.currentTrack);
         }
         function openSettings() {
+            settingsModal.currentTab = 0;
             settingsModal.visible = true;
         }
         function openLyricsSettings() {

@@ -40,6 +40,17 @@ Item {
     property string lastMoodChipsVid: ""
     property bool highResFailed: false
 
+    property bool animatedCoverEnabled: true
+    property string animatedArtworkUrl: ""
+    property bool isLoadingAnimatedArtwork: false
+    onAnimatedCoverEnabledChanged: {
+        if (animatedCoverEnabled) {
+            fetchAnimatedArtwork();
+        } else {
+            animatedArtworkUrl = "";
+        }
+    }
+
     signal seekRequested(real seconds)
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
@@ -125,6 +136,7 @@ Item {
 
         fetchLyrics();
         fetchRelatedContent();
+        fetchAnimatedArtwork();
 
         if (!isAlreadyInQueue) {
             // New seed track selected from outside the current queue (Home / Downloads / Search):
@@ -236,6 +248,58 @@ Item {
                 root.activeTab = "up_next";
             }
         }
+    }
+
+    Process {
+        id: amArtworkProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var res = JSON.parse(data);
+                    if (res && res.found && res.video_url) {
+                        root.animatedArtworkUrl = res.video_url;
+                    } else {
+                        root.animatedArtworkUrl = "";
+                    }
+                } catch (e) {
+                    root.animatedArtworkUrl = "";
+                }
+                root.isLoadingAnimatedArtwork = false;
+            }
+        }
+        onExited: (code, status) => {
+            root.isLoadingAnimatedArtwork = false;
+        }
+    }
+
+    function fetchAnimatedArtwork() {
+        root.animatedArtworkUrl = "";
+        if (!root.animatedCoverEnabled || !root.track) {
+            root.isLoadingAnimatedArtwork = false;
+            return;
+        }
+        var songTitle = (root.track && (root.track.title || root.track.name)) ? (root.track.title || root.track.name) : "";
+        var songArtist = (root.track && root.track.artist) ? root.track.artist : "";
+        var dur = (root.track && root.track.duration) ? Math.round(root.track.duration) : (root.totalDuration > 1 ? Math.round(root.totalDuration) : 0);
+
+        if (!songTitle) {
+            root.isLoadingAnimatedArtwork = false;
+            return;
+        }
+
+        root.isLoadingAnimatedArtwork = true;
+        amArtworkProc.running = false;
+        amArtworkProc.command = [
+            "python3", "-u",
+            (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
+            "animated_artwork",
+            songTitle,
+            songArtist,
+            String(dur)
+        ];
+        amArtworkProc.running = true;
     }
 
     function updateActiveLyric(forceScroll) {
@@ -428,12 +492,12 @@ Item {
         }
     }
 
-
     // =========================================================================
     // MAIN 2-COLUMN SPLIT SCREEN (50% Left Artwork/Video | 50% Right Tabs)
     // =========================================================================
     RowLayout {
         anchors.fill: parent
+        z: 1
         anchors.leftMargin: root.width >= 1200 ? 48 : 24
         anchors.rightMargin: root.width >= 1200 ? 48 : 24
         anchors.topMargin: 12
@@ -502,8 +566,8 @@ Item {
                             anchors.fill: parent
                             source: {
                                 if (!root.track || !root.track.image) return "";
-                                if (root.highResFailed) return root.track.image;
-                                return root.getHighResImage(root.track.image);
+                                var img = root.highResFailed ? root.track.image : root.getHighResImage(root.track.image);
+                                return (img.startsWith("/") && !img.startsWith("file://")) ? ("file://" + img) : img;
                             }
                             fillMode: Image.PreserveAspectCrop
                             scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
@@ -520,9 +584,33 @@ Item {
                             }
                         }
 
+                        MediaPlayer {
+                            id: amPlayer
+                            source: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
+                            audioOutput: null
+                            loops: MediaPlayer.Infinite
+                            Component.onCompleted: {
+                                if (source !== "") play();
+                            }
+                            onSourceChanged: {
+                                if (source !== "") play();
+                                else stop();
+                            }
+                        }
+
+                        VideoOutput {
+                            id: amVideoOutput
+                            anchors.fill: parent
+                            fillMode: VideoOutput.PreserveAspectCrop
+                            visible: root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && amPlayer.playbackState === MediaPlayer.PlayingState
+                            opacity: visible ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+                            z: 1
+                        }
+
                         Rectangle {
                             anchors.fill: parent
-                            visible: bigCoverImg.status !== Image.Ready
+                            visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.animatedArtworkUrl === "")
                             color: "#18181b"
                             AppIcon {
                                 anchors.centerIn: parent
@@ -1352,6 +1440,7 @@ Item {
                     ListView {
                         id: lyricsView
                         anchors.fill: parent
+                        readonly property bool isUserScrolling: dragging || moving || flicking
                         anchors.leftMargin: 8
                         anchors.rightMargin: 8
                         clip: false
@@ -1382,20 +1471,21 @@ Item {
                             readonly property real duration: Math.max(0.6, nextTime - modelData.time)
                             readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
 
+                            HoverHandler { id: lineHover }
+                            readonly property bool isHovered: lineHover.hovered && !isCurrent
+
                             // SimpMusic & Apple Music Parametric Formulas
-                            // Farther lines dissolve into deep bokeh blur
-                            readonly property real targetBlur: isCurrent ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
-                            readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))
+                            // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
+                            readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
+                            readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
                             readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
 
-                            opacity: lineHover.hovered ? 0.95 : targetOpacity
-                            scale: (isCurrent || lineHover.hovered) ? 1.0 : 0.97
-                            Behavior on opacity { NumberAnimation { duration: 200 } }
-                            Behavior on scale { NumberAnimation { duration: 200 } }
+                            opacity: targetOpacity
+                            transformOrigin: Item.Left
+                            scale: isCurrent ? 1.0 : 0.97
+                            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
 
-                            HoverHandler { id: lineHover }
-
-                            layer.enabled: !lineHover.hovered && targetBlur > 0.01 && dist <= 4
+                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
                             layer.effect: MultiEffect {
                                 blurEnabled: true
                                 blur: lyricRow.targetBlur
@@ -1437,11 +1527,70 @@ Item {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
-                                implicitHeight: Math.max(36, lyricRow.isCurrent ? activeTxt.paintedHeight : nonActiveTxt.paintedHeight)
+                                implicitHeight: Math.max(36, lyricRow.isCurrent
+                                    ? (activeWordsFlow.visible ? activeWordsFlow.implicitHeight : activeFallbackTxt.paintedHeight)
+                                    : nonActiveTxt.paintedHeight)
 
+                                // SimpMusic AMLL Architecture: FlowRow of individual AnimatedWord Items
+                                Flow {
+                                    id: activeWordsFlow
+                                    visible: lyricRow.isCurrent && modelData.hasWords && modelData.words && modelData.words.length > 0
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 7
+
+                                    Repeater {
+                                        model: (modelData.hasWords && modelData.words) ? modelData.words : []
+                                        delegate: Item {
+                                            id: wordItem
+                                            width: wordTxt.implicitWidth
+                                            height: wordTxt.implicitHeight
+                                            transformOrigin: Item.Bottom
+
+                                            readonly property real wStart: modelData.start
+                                            readonly property real wEnd: modelData.end
+                                            readonly property real wDur: modelData.duration || 0.3
+                                            readonly property bool isHeld: modelData.isHeld || false
+                                            readonly property bool isPast: root.currentTime >= wEnd
+                                            readonly property bool isActive: root.currentTime >= wStart && root.currentTime < wEnd
+                                            readonly property real wordProgress: isActive ? Math.max(0.0, Math.min(1.0, (root.currentTime - wStart) / wDur)) : 0.0
+
+                                            // SimpMusic Organic Breath Curve: Nở siêu êm ái (+0.8% scale, nhấc 1.5px, exponent 2.0)
+                                            readonly property real bump: (isHeld && isActive) ? Math.pow(Math.sin(Math.PI * wordProgress), 2.0) : 0.0
+
+                                            // GPU Matrix Transform: Cực kỳ tinh tế (+0.8% scale ~ 1.008x, nhấc nhẹ 1.5px) chuẩn SimpMusic
+                                            scale: 1.0 + bump * 0.008
+                                            y: -bump * 1.5
+                                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                                            Behavior on y { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+
+                                            Text {
+                                                id: wordTxt
+                                                text: modelData.text
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 28
+                                                font.weight: Font.Bold
+                                                color: {
+                                                    if (isPast) return "#ffffff";
+                                                    if (isActive) {
+                                                        if (isHeld) return "#ffffff";
+                                                        var frac = wordProgress;
+                                                        var r = Math.round(180 + (255 - 180) * frac);
+                                                        var g = Math.round(185 + (255 - 185) * frac);
+                                                        var b = Math.round(195 + (255 - 195) * frac);
+                                                        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                                                    }
+                                                    return "#a0a4b2";
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Fallback: LRC thường không có syllable timestamps
                                 Text {
-                                    id: activeTxt
-                                    visible: lyricRow.isCurrent
+                                    id: activeFallbackTxt
+                                    visible: lyricRow.isCurrent && (!modelData.hasWords || !modelData.words || modelData.words.length === 0)
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     textFormat: Text.RichText
@@ -1462,7 +1611,7 @@ Item {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: lyricRow.targetFontSize
                                     font.weight: Font.Bold
-                                    color: lineHover.hovered ? "#ffffff" : "#c4c8d4"
+                                    color: "#c4c8d4"
                                     wrapMode: Text.Wrap
                                     lineHeight: 1.25
                                 }
@@ -2011,3 +2160,4 @@ Item {
         }
     }
 }
+

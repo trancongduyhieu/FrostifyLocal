@@ -29,6 +29,50 @@ def get_cache_path(title, artist=None):
         filename = f"{clean_t}.lrc"
     return os.path.join(CACHE_DIR, filename)
 
+def strip_rich_sync_tags(text):
+    if not text:
+        return ""
+    t = re.sub(r'<[0-9:.]+>', ' ', text)
+    return re.sub(r'\s+', ' ', t).strip()
+
+def parse_rich_sync_words(line_str, default_start=0.0):
+    if not line_str or "<" not in line_str or ">" not in line_str:
+        return []
+    
+    # Matches <mm:ss.xx> or <mm:ss.xxx> followed by word text until next < or end
+    pattern = re.compile(r'<(\d{1,2}):(\d{1,2}(?:\.\d+)?)>\s*([^<]*)')
+    matches = list(pattern.finditer(line_str))
+    if not matches:
+        return []
+    
+    words = []
+    for i, m in enumerate(matches):
+        mins = int(m.group(1))
+        secs = float(m.group(2))
+        start_t = round(mins * 60.0 + secs, 2)
+        txt = m.group(3).strip()
+        if not txt:
+            continue
+        
+        if i + 1 < len(matches):
+            next_mins = int(matches[i+1].group(1))
+            next_secs = float(matches[i+1].group(2))
+            end_t = round(next_mins * 60.0 + next_secs, 2)
+        else:
+            end_t = round(start_t + 0.5, 2)
+            
+        dur = max(0.08, round(end_t - start_t, 2))
+        is_held = (dur >= 0.85) # Held note threshold: 850ms+
+        
+        words.append({
+            "text": txt,
+            "start": start_t,
+            "end": end_t,
+            "duration": dur,
+            "isHeld": is_held
+        })
+    return words
+
 def parse_lrc(lrc_text):
     if not lrc_text:
         return []
@@ -50,20 +94,36 @@ def parse_lrc(lrc_text):
             continue
 
         last_match = matches[-1]
-        text = line[last_match.end():].strip()
-        text = re.sub(r'<[0-9:.]+>', '', text).strip()
+        raw_text = line[last_match.end():].strip()
+        clean_text = strip_rich_sync_tags(raw_text)
 
-        if not text:
+        if not clean_text:
             continue
+
+        syllable_words = parse_rich_sync_words(raw_text)
 
         for m in matches:
             mins = int(m.group(1))
             secs = float(m.group(2))
             total_sec = round(mins * 60.0 + secs, 2)
-            results.append({"time": total_sec, "text": text})
+            item = {
+                "time": total_sec,
+                "text": clean_text,
+                "hasWords": bool(syllable_words),
+                "words": syllable_words
+            }
+            results.append(item)
 
     results.sort(key=lambda x: x["time"])
     return results
+
+def clean_search_title(title):
+    if not title:
+        return ""
+    t = re.sub(r'\[.*?\]|\(.*?\)|\|.*?$', '', title)
+    t = re.sub(r'\b(official\s+video|official\s+audio|lyric\s+video|mv|vietsub)\b', '', t, flags=re.IGNORECASE)
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t or title
 
 def get_lyrics_from_local_db(title, video_id=None):
     p1 = os.path.expanduser('~/Music/Nutsty/extracted/Music Database')
@@ -82,26 +142,48 @@ def get_lyrics_from_local_db(title, video_id=None):
             if r and r[0]:
                 raw_lines = r[0]
 
-        if not raw_lines and title:
-            r = c.execute('''
-                SELECT l.lines FROM lyrics l
-                JOIN song s ON s.videoId = l.videoId
-                WHERE s.title = ? AND l.lines IS NOT NULL AND l.lines != ""
-                LIMIT 1
-            ''', (title,)).fetchone()
-            if r and r[0]:
-                raw_lines = r[0]
+        candidates = []
+        if title:
+            candidates.append(title.strip())
+            cleaned = clean_search_title(title)
+            if cleaned and cleaned.lower() != title.strip().lower():
+                candidates.append(cleaned)
 
-        if not raw_lines and title:
-            # Fuzzy match
+        for t_query in candidates:
+            if raw_lines:
+                break
+            # Exact match (case insensitive)
             r = c.execute('''
                 SELECT l.lines FROM lyrics l
                 JOIN song s ON s.videoId = l.videoId
-                WHERE s.title LIKE ? AND l.lines IS NOT NULL AND l.lines != ""
+                WHERE LOWER(s.title) = LOWER(?) AND l.lines IS NOT NULL AND l.lines != ""
                 LIMIT 1
-            ''', (f"%{title}%",)).fetchone()
+            ''', (t_query,)).fetchone()
             if r and r[0]:
                 raw_lines = r[0]
+                break
+
+            # LIKE match: song title contains query
+            r = c.execute('''
+                SELECT l.lines FROM lyrics l
+                JOIN song s ON s.videoId = l.videoId
+                WHERE LOWER(s.title) LIKE LOWER(?) AND l.lines IS NOT NULL AND l.lines != ""
+                LIMIT 1
+            ''', (f"%{t_query}%",)).fetchone()
+            if r and r[0]:
+                raw_lines = r[0]
+                break
+
+            # Reverse LIKE match: query contains song title (e.g. "As It Was (Official Video)" contains "As It Was")
+            r = c.execute('''
+                SELECT l.lines FROM lyrics l
+                JOIN song s ON s.videoId = l.videoId
+                WHERE LOWER(?) LIKE '%' || LOWER(s.title) || '%' AND LENGTH(s.title) >= 3 AND l.lines IS NOT NULL AND l.lines != ""
+                LIMIT 1
+            ''', (t_query,)).fetchone()
+            if r and r[0]:
+                raw_lines = r[0]
+                break
 
         if not raw_lines:
             return []
@@ -110,23 +192,30 @@ def get_lyrics_from_local_db(title, video_id=None):
         results = []
         for line in parsed:
             w = line.get('words', '').strip()
-            clean_w = re.sub(r'<[0-9:.]+>', '', w).strip()
+            clean_w = strip_rich_sync_tags(w)
             st = int(line.get('startTimeMs', 0))
             if clean_w:
-                results.append({'time': round(st / 1000.0, 2), 'text': clean_w})
+                syllable_words = parse_rich_sync_words(w, default_start=round(st / 1000.0, 2))
+                results.append({
+                    'time': round(st / 1000.0, 2),
+                    'text': clean_w,
+                    'hasWords': bool(syllable_words),
+                    'words': syllable_words
+                })
         return results
     except Exception:
         return []
 
-def clean_search_title(title):
-    t = re.sub(r'\[.*?\]|\(.*?\)|\|.*?$', '', title)
-    t = re.sub(r'\b(official\s+video|official\s+audio|lyric\s+video|mv|vietsub)\b', '', t, flags=re.IGNORECASE)
-    t = re.sub(r'\s+', ' ', t).strip()
-    return t or title
-
 def get_lyrics(title, artist=None, video_id=None, file_path=None):
     if not title:
         return []
+
+    # -------------------------------------------------------------------------
+    # TẦNG 0: Ưu tiên Local SQLite Database nếu có Rich Syllable Timestamps!
+    # -------------------------------------------------------------------------
+    db_lyrics = get_lyrics_from_local_db(title, video_id)
+    if db_lyrics and any(item.get("hasWords") for item in db_lyrics):
+        return db_lyrics
 
     # -------------------------------------------------------------------------
     # TẦNG 1: Local .lrc file & Persistent Cache
@@ -194,7 +283,7 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
     # -------------------------------------------------------------------------
     # TẦNG 3: Dự phòng cuối cùng (Local SQLite Database)
     # -------------------------------------------------------------------------
-    return get_lyrics_from_local_db(title, video_id)
+    return db_lyrics or get_lyrics_from_local_db(title, video_id)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

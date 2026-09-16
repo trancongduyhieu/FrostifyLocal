@@ -1517,6 +1517,7 @@ Rectangle {
                 ListView {
                     id: lyricsView
                     anchors.fill: parent
+                    readonly property bool isUserScrolling: dragging || moving || flicking
                     anchors.leftMargin: root.isCompact ? 8 : 16
                     anchors.rightMargin: root.isCompact ? 8 : 16
                     clip: false
@@ -1542,20 +1543,21 @@ Rectangle {
                         readonly property real duration: Math.max(0.6, nextTime - modelData.time)
                         readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
 
+                        HoverHandler { id: lineHover }
+                        readonly property bool isHovered: lineHover.hovered && !isCurrent
+
                         // SimpMusic & Apple Music Parametric Formulas
-                        // Farther lines dissolve into deep bokeh blur
-                        readonly property real targetBlur: isCurrent ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
-                        readonly property real targetOpacity: isCurrent ? 1.0 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))
+                        // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
+                        readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
+                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
                         readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
 
-                        opacity: lineHover.hovered ? 0.95 : targetOpacity
-                        scale: (isCurrent || lineHover.hovered) ? 1.0 : 0.97
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
-                        Behavior on scale { NumberAnimation { duration: 200 } }
+                        opacity: targetOpacity
+                        transformOrigin: Item.Left
+                        scale: isCurrent ? 1.0 : 0.97
+                        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
 
-                        HoverHandler { id: lineHover }
-
-                        layer.enabled: !lineHover.hovered && targetBlur > 0.01 && dist <= 4
+                        layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
                         layer.effect: MultiEffect {
                             blurEnabled: true
                             blur: lyricRow.targetBlur
@@ -1604,12 +1606,70 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            implicitHeight: lyricRow.isCurrent ? activeTxt.paintedHeight : nonActiveTxt.paintedHeight
+                            implicitHeight: Math.max(36, lyricRow.isCurrent
+                                ? (activeWordsFlow.visible ? activeWordsFlow.implicitHeight : activeFallbackTxt.paintedHeight)
+                                : nonActiveTxt.paintedHeight)
 
-                            // 1. Active word-by-word karaoke line
+                            // SimpMusic AMLL Architecture: FlowRow of individual AnimatedWord Items
+                            Flow {
+                                id: activeWordsFlow
+                                visible: lyricRow.isCurrent && modelData.hasWords && modelData.words && modelData.words.length > 0
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                spacing: 7
+
+                                Repeater {
+                                    model: (modelData.hasWords && modelData.words) ? modelData.words : []
+                                    delegate: Item {
+                                        id: wordItem
+                                        width: wordTxt.implicitWidth
+                                        height: wordTxt.implicitHeight
+                                        transformOrigin: Item.Bottom
+
+                                        readonly property real wStart: modelData.start
+                                        readonly property real wEnd: modelData.end
+                                        readonly property real wDur: modelData.duration || 0.3
+                                        readonly property bool isHeld: modelData.isHeld || false
+                                        readonly property bool isPast: root.currentTime >= wEnd
+                                        readonly property bool isActive: root.currentTime >= wStart && root.currentTime < wEnd
+                                        readonly property real wordProgress: isActive ? Math.max(0.0, Math.min(1.0, (root.currentTime - wStart) / wDur)) : 0.0
+
+                                        // SimpMusic Organic Breath Curve: Nở siêu êm ái (+0.8% scale, nhấc 1.5px, exponent 2.0)
+                                        readonly property real bump: (isHeld && isActive) ? Math.pow(Math.sin(Math.PI * wordProgress), 2.0) : 0.0
+
+                                        // GPU Matrix Transform: Cực kỳ tinh tế (+0.8% scale ~ 1.008x, nhấc nhẹ 1.5px) chuẩn SimpMusic
+                                        scale: 1.0 + bump * 0.008
+                                        y: -bump * 1.5
+                                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                                        Behavior on y { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+
+                                        Text {
+                                            id: wordTxt
+                                            text: modelData.text
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 28
+                                            font.weight: Font.Bold
+                                            color: {
+                                                if (isPast) return "#ffffff";
+                                                if (isActive) {
+                                                    if (isHeld) return "#ffffff";
+                                                    var frac = wordProgress;
+                                                    var r = Math.round(117 + (255 - 117) * frac);
+                                                    var g = Math.round(122 + (255 - 122) * frac);
+                                                    var b = Math.round(136 + (255 - 136) * frac);
+                                                    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                                                }
+                                                return "#757a88";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 1. Fallback Active word-by-word karaoke line (khi không có syllable timestamps)
                             Text {
-                                id: activeTxt
-                                visible: lyricRow.isCurrent
+                                id: activeFallbackTxt
+                                visible: lyricRow.isCurrent && (!modelData.hasWords || !modelData.words || modelData.words.length === 0)
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 textFormat: Text.RichText
@@ -1631,7 +1691,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: lyricRow.targetFontSize
                                 font.weight: Font.Bold
-                                color: lineHover.hovered ? "#ffffff" : "#d8dce8"
+                                color: "#d8dce8"
                                 wrapMode: Text.Wrap
                                 lineHeight: 1.28
                                 Behavior on font.pixelSize { NumberAnimation { duration: 180 } }

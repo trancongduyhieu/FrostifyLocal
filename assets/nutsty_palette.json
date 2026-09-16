@@ -1,11 +1,11 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_k8d276.jpg",
-  "meanLuminance": 0.256,
-  "brightRatio": 0.001,
+  "wallpaper": "/home/apple/Pictures/Wallpapers/Catppuccin_Mocha_forest_dark_winter.jpg",
+  "meanLuminance": 0.175,
+  "brightRatio": 0.045,
   "isLightArea": false,
-  "theme": "emerald",
+  "theme": "amethyst",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#c0cd78",
+  "highlightColor": "#bfbdf6",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"

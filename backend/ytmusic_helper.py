@@ -122,20 +122,23 @@ def get_ytmusic_client():
 
 def get_auth_status():
     if not os.path.exists(AUTH_FILE):
-        return {"logged_in": False, "name": "", "thumb": ""}
+        return {"logged_in": False, "name": "", "thumb": "", "email": ""}
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic(AUTH_FILE)
         user = yt.get_account_info()
         name = user.get("accountName") or user.get("name") or "Google User"
-        thumbs = user.get("thumbnails", [])
-        thumb = thumbs[-1].get("url") if thumbs else ""
-        return {"logged_in": True, "name": name, "thumb": thumb}
+        thumb = user.get("accountPhotoUrl") or ""
+        if not thumb:
+            thumbs = user.get("thumbnails", [])
+            thumb = thumbs[-1].get("url") if thumbs else ""
+        email = user.get("email") or user.get("channelHandle") or ""
+        return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
     except Exception:
         try:
             yt = YTMusic(AUTH_FILE)
             yt.get_home(limit=1)
-            return {"logged_in": True, "name": "YouTube Music Account", "thumb": ""}
+            return {"logged_in": True, "name": "YouTube Music Account", "thumb": "", "email": ""}
         except Exception as e:
             return {"logged_in": False, "error": str(e)}
 
@@ -2418,7 +2421,221 @@ def get_song_related_content(video_id, title="", artist=""):
         return res
     except Exception as e:
         sys.stderr.write(f"[get_song_related error for {clean_vid}]: {e}\n")
-        return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
+# ==============================================================================
+# APPLE MUSIC ANIMATED ALBUM ARTWORK EXTRACTION (Item 25)
+# ==============================================================================
+AM_TOKEN_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/am_token.json")
+ANIMATED_ARTWORK_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/animated_artworks.json")
+
+def get_am_token():
+    """Scrapes the public web-player bearer token (JWT) from music.apple.com."""
+    import base64
+    if os.path.exists(AM_TOKEN_CACHE_FILE):
+        try:
+            with open(AM_TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if time.time() - d.get("time", 0) < 43200:  # 12 hours
+                    return d.get("token")
+        except Exception:
+            pass
+
+    try:
+        req = urllib.request.Request("https://music.apple.com", headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+        html = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+        m = re.search(r"/assets/index~[^/\"]+\.js", html)
+        if not m:
+            return None
+        js_url = "https://music.apple.com" + m.group(0)
+        js_req = urllib.request.Request(js_url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+        js = urllib.request.urlopen(js_req, timeout=12).read().decode("utf-8", errors="ignore")
+        jwts = re.findall(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", js)
+        token = None
+        for j in jwts:
+            try:
+                p = j.split(".")[1]
+                pad = len(p) % 4
+                pay = base64.urlsafe_b64decode(p + "=" * (4 - pad if pad else 0)).decode("utf-8", errors="ignore")
+                if "AMPWebPlay" in pay:
+                    token = j
+                    break
+            except Exception:
+                pass
+        if not token and jwts:
+            token = jwts[0]
+
+        if token:
+            os.makedirs(os.path.dirname(AM_TOKEN_CACHE_FILE), exist_ok=True)
+            with open(AM_TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"token": token, "time": time.time()}, f)
+        return token
+    except Exception as e:
+        sys.stderr.write(f"[Apple Music Token Scrape Error]: {e}\n")
+        return None
+
+def select_am_rendition(master_url):
+    """
+    Parses HLS master playlist from Apple Music and selects optimal avc1 video rendition:
+    codec is decided before quality (avc1 over 10-bit HEVC), picking ~768x768 or resolution >= 720px.
+    """
+    if not master_url:
+        return ""
+    try:
+        import urllib.parse
+        req = urllib.request.Request(master_url, headers={"User-Agent": "Mozilla/5.0"})
+        content = urllib.request.urlopen(req, timeout=6).read().decode("utf-8", errors="ignore")
+        lines = content.splitlines()
+
+        variants = []
+        cur_inf = None
+        for line in lines:
+            line = line.strip()
+            if line.startswith("#EXT-X-STREAM-INF:"):
+                cur_inf = line
+            elif line and not line.startswith("#") and cur_inf:
+                codec_m = re.search(r'CODECS="([^"]+)"', cur_inf)
+                res_m = re.search(r'RESOLUTION=(\d+)x(\d+)', cur_inf)
+                bw_m = re.search(r'BANDWIDTH=(\d+)', cur_inf)
+                codec = codec_m.group(1) if codec_m else ""
+                w = int(res_m.group(1)) if res_m else 0
+                h = int(res_m.group(2)) if res_m else 0
+                bw = int(bw_m.group(1)) if bw_m else 0
+
+                v_url = line if line.startswith("http") else urllib.parse.urljoin(master_url, line)
+                variants.append({
+                    "url": v_url,
+                    "codec": codec,
+                    "width": w,
+                    "height": h,
+                    "bandwidth": bw
+                })
+                cur_inf = None
+
+        avc1_variants = [v for v in variants if "avc1" in v["codec"].lower()]
+        if not avc1_variants:
+            avc1_variants = variants
+
+        suitable = [v for v in avc1_variants if v["width"] >= 720]
+        if suitable:
+            suitable.sort(key=lambda x: (x["width"], x["bandwidth"]))
+            return suitable[0]["url"]
+        elif avc1_variants:
+            avc1_variants.sort(key=lambda x: -x["width"])
+            return avc1_variants[0]["url"]
+
+        return master_url
+    except Exception as e:
+        sys.stderr.write(f"[select_am_rendition error]: {e}\n")
+        return master_url
+
+def get_apple_music_animated_artwork(title, artist, duration_seconds=0):
+    """
+    Searches Apple Music catalog for an album's editorialVideo animated artwork.
+    Matches track duration and normalizes strings to pick the true album release.
+    """
+    if not title:
+        return {"found": False}
+    import urllib.parse
+    clean_title = re.sub(r"\(.*?\)|\[.*?\]", "", title).strip()
+    clean_artist = re.sub(r"\(.*?\)|\[.*?\]", "", artist).strip()
+    cache_key = f"{clean_title.lower()}_{clean_artist.lower()}"
+
+    cached_data = load_json(ANIMATED_ARTWORK_CACHE_FILE, {})
+    if cache_key in cached_data:
+        entry = cached_data[cache_key]
+        if time.time() - entry.get("timestamp", 0) < 86400 * 7:  # 7 days cache
+            return entry
+
+    token = get_am_token()
+    if not token:
+        return {"found": False, "error": "token_unavailable"}
+
+    try:
+        query = f"{clean_title} {clean_artist}".strip()
+        encoded_query = urllib.parse.quote(query)
+        search_url = (
+            f"https://amp-api-edge.music.apple.com/v1/catalog/us/search?"
+            f"term={encoded_query}&types=songs&include[songs]=albums&format[resources]=map&extend=editorialVideo&l=en-US&limit=5&platform=web"
+        )
+        req = urllib.request.Request(
+            search_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Origin": "https://music.apple.com",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=7) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+
+        albums = data.get("resources", {}).get("albums", {})
+        songs = data.get("resources", {}).get("songs", {})
+
+        found_video = None
+        matched_album_name = ""
+
+        target_album_ids = set()
+        for sid, s in songs.items():
+            s_attrs = s.get("attributes", {})
+            s_dur = (s_attrs.get("durationInMillis") or 0) / 1000.0
+            if duration_seconds > 0 and s_dur > 0 and abs(s_dur - duration_seconds) > 4.5:
+                continue
+            rel_albums = s.get("relationships", {}).get("albums", {}).get("data", [])
+            for a_ref in rel_albums:
+                target_album_ids.add(a_ref.get("id"))
+
+        for aid in target_album_ids:
+            if aid in albums:
+                a_data = albums[aid]
+                ev = a_data.get("attributes", {}).get("editorialVideo", {})
+                if ev:
+                    matched_album_name = a_data.get("attributes", {}).get("name", "")
+                    for k in ["motionSquareVideo1x1", "motionDetailSquare", "motionDetailTall", "motionTallVideo3x4"]:
+                        if k in ev and "video" in ev[k]:
+                            found_video = ev[k]["video"]
+                            break
+                    if not found_video:
+                        for k, v in ev.items():
+                            if isinstance(v, dict) and "video" in v:
+                                found_video = v["video"]
+                                break
+                    if found_video:
+                        break
+
+        if not found_video:
+            for aid, a_data in albums.items():
+                ev = a_data.get("attributes", {}).get("editorialVideo", {})
+                if ev:
+                    matched_album_name = a_data.get("attributes", {}).get("name", "")
+                    for k in ["motionSquareVideo1x1", "motionDetailSquare", "motionDetailTall", "motionTallVideo3x4"]:
+                        if k in ev and "video" in ev[k]:
+                            found_video = ev[k]["video"]
+                            break
+                    if not found_video:
+                        for k, v in ev.items():
+                            if isinstance(v, dict) and "video" in v:
+                                found_video = v["video"]
+                                break
+                    if found_video:
+                        break
+
+        if found_video:
+            rendition_url = select_am_rendition(found_video)
+            res = {
+                "found": True,
+                "video_url": rendition_url,
+                "master_url": found_video,
+                "album_name": matched_album_name,
+                "timestamp": time.time()
+            }
+        else:
+            res = {"found": False, "timestamp": time.time()}
+
+        cached_data[cache_key] = res
+        save_json(ANIMATED_ARTWORK_CACHE_FILE, cached_data)
+        return res
+    except Exception as e:
+        sys.stderr.write(f"[Apple Music Animated Artwork Error for {title}]: {e}\n")
+        return {"found": False, "error": str(e)}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -2558,6 +2775,13 @@ if __name__ == "__main__":
         name = sys.argv[2]
         browse_id = sys.argv[3] if len(sys.argv) > 3 else None
         res = get_artist_shuffle(name, browse_id)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "animated_artwork" and len(sys.argv) > 2:
+        title = sys.argv[2]
+        artist = sys.argv[3] if len(sys.argv) > 3 else ""
+        dur = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
+        res = get_apple_music_animated_artwork(title, artist, dur)
         print(json.dumps(res, ensure_ascii=False))
 
 
