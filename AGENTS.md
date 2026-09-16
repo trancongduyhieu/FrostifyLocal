@@ -43,6 +43,22 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 >      - Khi `I18n.locale === "vi"`: Toàn bộ giao diện phải hiển thị 100% tiếng Việt thuần túy (*Danh sách phát*, *Hàng đợi*, *Tải xuống*, *Phát tất cả*, *Cài đặt*, *Nghe lại*, *Tuyển tập nhanh*...). Cấm để sót tiếng Anh nửa nạc nửa mỡ.
 >      - Khi `I18n.locale === "en"`: Toàn bộ giao diện phải hiển thị 100% tiếng Anh chuẩn (*Playlists*, *Queue*, *Downloads*, *Play All*, *Settings*, *Listen again*, *Quick picks*...).
 >    - **Quy tắc khi tạo tính năng mới**: Bất cứ khi nào tạo component, thêm màn hình, modal hay cập nhật giao diện, AI **BẮT BUỘC** cung cấp đồng thời cả 2 bản dịch tại chỗ qua `I18n.tr(vi, en)`. Không được phép chỉ viết một thứ tiếng rồi để lại TODO.
+> 10. **QUY CHUẨN THIẾT KẾ MÀU SẮC NÚT BẤM (DYNAMIC CHROMATIC SALIENCE & MUTED ROSE SEMANTIC THEME - CẤM NÚT XÁM ĐEN)**:
+>    - **Tuyệt đối cấm**: Không bao giờ tạo các nút bấm, pill button, selector, popover menu hay interactive controls mang màu xám đen chết (`rgba(255, 255, 255, 0.06)`, `0.08`, `#18181b`, `#27272a`) vì làm vỡ giao diện Dark Glass, gây thô ráp và tối tăm.
+>    - **Chuẩn hóa màu sắc nút bấm và popover menu trên toàn bộ ứng dụng**:
+>      - **Nút tương tác / Selector / Utility Controls (Dynamic Chromatic Salience)**:
+>        - Hấp thụ màu sắc động `accentColor` trích xuất từ hình nền desktop / avatar bài hát đang phát (`root.accentColor` từ `nutsty_palette.json`).
+>        - *Trạng thái tĩnh*: Nền kính mờ hấp thụ accent `Qt.rgba(accent.r, accent.g, accent.b, 0.12)`, viền hairline siêu mảnh 1px `Qt.rgba(accent.r, accent.g, accent.b, 0.25)`, text trắng `#ffffff`, icon và chi tiết điểm nhấn mang màu `accent`.
+>        - *Trạng thái hover*: Nền sáng nhẹ `Qt.rgba(accent.r, accent.g, accent.b, 0.22)`, viền `Qt.rgba(accent.r, accent.g, accent.b, 0.45)`.
+>      - **Hộp thoại Popover Menu / Dropdown List**:
+>        - Nền kính sẫm hữu cơ hòa quyện sắc tố accent: `Qt.rgba(0.06 + accent.r * 0.08, 0.06 + accent.g * 0.08, 0.08 + accent.b * 0.12, 0.96)`, viền hairline đồng điệu `Qt.rgba(accent.r, accent.g, accent.b, 0.35)`.
+>        - Mục đang chọn (Selected Item): Nền `Qt.rgba(accent.r, accent.g, accent.b, 0.26)`, viền `Qt.rgba(accent.r, accent.g, accent.b, 0.45)`, text trắng sáng kèm icon checkmark `emblem-ok-symbolic.svg` màu `accent`.
+>        - Mục hover (Hovered Item): Nền `Qt.rgba(accent.r, accent.g, accent.b, 0.14)`, viền `Qt.rgba(accent.r, accent.g, accent.b, 0.25)`.
+>      - **Nút hành động nhạy cảm / Đăng xuất / Xóa (Destructive Muted Rose)**:
+>        - Mang sắc thái đỏ nhung tinh tế (chuẩn Dark Mode Human Interface):
+>        - *Trạng thái tĩnh*: Nền đỏ hoa hồng dịu `Qt.rgba(244, 63, 94, 0.12)`, viền mảnh `Qt.rgba(244, 63, 94, 0.26)`, text màu hồng đào `#fda4af`.
+>        - *Trạng thái hover*: Nền đỏ hoa hồng ấm `Qt.rgba(239, 68, 68, 0.24)`, viền `Qt.rgba(239, 68, 68, 0.48)`, text trắng hồng `#ffe4e6`.
+>    - **Quy Chuẩn Avatar Người Dùng**: Bắt buộc bo góc mượt mà bằng `MultiEffect` (`maskEnabled: true`), ảnh đại diện fill 100% diện tích không tạo viền đệm (moat/margin) trống gây lỗi render màu đen ở 4 góc, kết hợp viền hairline 1px trực tiếp trên mép ảnh theo công thức bo góc đồng tâm $R_{\text{trong}} = R_{\text{ngoài}} - \text{border.width}$.
 
 ---
 
@@ -851,6 +867,39 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Tuân Thủ Tuyệt Đối `ui-layout-design-rules`**:
       - Bo góc đồng tâm: Dialog ($R = 20$), Bento card ($R = 14$), Preview box ($R = 8$).
       - Hệ thống lưới khoảng cách 4px/8px, 100% icon SVG trắng sáng (`fill="#ffffff"`), zero emoji.
+
+28. **Hệ Thống Đa Ngôn Ngữ Song Ngữ Toàn Diện (Strict Bimodal Localization Engine - `I18n.qml`) & Quản Lý Tệp Chuyển Ngữ**:
+    - **Triết Lý Thiết Kế Singleton Trung Tâm (`components/I18n.qml`)**:
+      - Quản lý trạng thái ngôn ngữ toàn cục qua `property string locale: "vi"` (hoặc `"en"`), đồng bộ bền vững với `~/.config/noctalia/nutsty_settings.json`.
+      - Hàm dịch chuỗi tĩnh: `I18n.tr(vi, en)` — chuyển đổi tức thì không cần reload ứng dụng.
+      - Bộ lọc & từ điển YouTube Music động:
+        - `formatMoodChipTitle(title)`: Chuyển ngữ toàn bộ 30+ mood chips & thể loại (`Relax`, `Sleep`, `Energize`, `Sad`, `Romance`, `Focus`, `Party`, `Reading`, `Classical focus`, `Deep cuts`, `Popular`, `Down beat`, `Instrumental`, các thập niên `2000s`, `1990s`...).
+        - `formatSectionTitle(title)`: Chuyển ngữ các danh mục trang chủ (`Recommended for you`, `Listen again`, `Quick picks`, `Mixed for you`, `Long listens`, `Music video for you`, `Trending community playlists`, `Peaceful bedtime`, `Gentle piano`, `Sweetheart & romance`, `Classical for sleeping`, `Rain sounds`, `Deep focus`, `Power boost`, `Kicking back`...).
+        - Tự động bóc tách tiền tố/hậu tố động (`... Playlists` -> `... - Danh sách phát`, `Similar to ...` -> `Tương tự như ...`).
+    - **Bộ Chọn Ngôn Ngữ Dark Glass Tối Giản (`components/SettingsModal.qml`)**:
+      - Loại bỏ hoàn toàn outer border không cần thiết (`border.width: 0`), thiết kế phẳng tối giản phong cách Dark Glass.
+      - Hiển thị ngôn ngữ hiện tại dạng viên thuốc `[ Tiếng Việt  ▾ ]` với icon mũi tên xoay mượt mà `go-down-symbolic.svg`.
+      - Khi click: Mở Dropdown Popover Menu kính sẫm phủ sắc tố accent hữu cơ (`color: Qt.rgba(0.06 + accent.r * 0.08, ...)`), viền hairline đồng điệu, hiển thị danh sách ngôn ngữ động từ mảng `languages: [ { code: "vi", name: "Tiếng Việt" }, { code: "en", name: "English" } ]`.
+      - Highlight màu `accentColor` cho ngôn ngữ đang chọn, có icon checkmark `emblem-ok-symbolic.svg`, hover highlight accent mềm mại. Triệt tiêu 100% màu xám đen chết. Dễ dàng mở rộng thêm ngôn ngữ mới trong tương lai.
+    - **Tích Hợp Tên Tài Khoản Vào Lời Chào (`components/HomeFeedView.qml` & `shell.qml`)**:
+      - `HomeFeedView` nhận thuộc tính `property string accountName: ""` (truyền từ `win.authAccountName` trong `shell.qml`).
+      - Hàm `getGreeting()` tự động ghép tên tài khoản cùng khu vực lời chào ở đầu trang: *"Chào buổi sáng, Shiraori"*, *"Chào buổi chiều, Shiraori"*, *"Chào buổi tối, Shiraori"*.
+      - Hàm `formatSectionSubtitle(sub)`: Tự động kiểm tra và ẩn subtitle nếu trùng với tên tài khoản (`root.accountName`), loại bỏ hoàn toàn chữ `SHIRAORI` hiển thị lẻ loi bên trên section *"Nghe lại"*.
+    - **Khắc Phục Lỗi Đè Chữ Tab Trong `components/YTMusicNowPlayingView.qml`**:
+      - Chuyển cụm tab điều hướng từ `RowLayout` sang `Row` (`spacing: 28`). Trong QtQuick, các item con trong `RowLayout` thiếu `Layout.preferredWidth` sẽ bị layout engine coi `implicitWidth = 0`, khiến tab bị dồn đè lên nhau khi chữ tiếng Việt dài hơn. `Row` thuần túy sắp xếp tuần tự theo chiều rộng thực tế của từng tab, giải quyết triệt để lỗi visual overlap.
+    - **Danh Sách Các Tệp Đã Chuẩn Hóa Chuyển Ngữ (Dành Cho Việc Mở Rộng Thêm Ngôn Ngữ Sau Này Qua Git Diff)**:
+      1. `components/I18n.qml`: Core translation engine, mood dictionary, section title dictionary, dynamic pattern matcher.
+      2. `components/SettingsModal.qml`: Nhãn cài đặt, các tab Cài đặt, Bento Presets, bộ chọn ngôn ngữ dropdown.
+      3. `components/HomeFeedView.qml`: Lời chào theo buổi, chip moods, carousels, section titles & subtitles.
+      4. `components/YTMusicNowPlayingView.qml`: Cụm tabs (Tiếp theo, Lời bài hát, Liên quan), Up Next chips, các nhãn radio.
+      5. `components/PlayerBarBottom.qml`: Tooltips điều khiển, nguồn phát âm thanh (Local/YouTube), nhãn chế độ.
+      6. `components/NavSidebar.qml`: Nhãn Playlists, Queue, danh mục danh sách phát.
+      7. `components/DownloadQueuePopover.qml`: Tiêu đề hàng đợi tải xuống, trạng thái tiến độ, nút xóa, nút mở thư mục.
+      8. `components/AmberolDetailView.qml`: Thông tin bài hát, nút điều khiển Amberol, nhãn thời lượng.
+      9. `components/TrackContextMenu.qml`: Menu chuột phải (Phát tiếp theo, Thêm vào hàng đợi, Tải xuống, Xóa vĩnh viễn...).
+      10. `shell.qml`: Thông báo hệ thống, kết nối IPC và truyền prop `accountName`.
+      > [!TIP]
+      > Khi muốn bổ sung thêm ngôn ngữ mới (ví dụ: `ja`, `ko`, `zh`), chỉ cần chạy `git diff` trên danh sách 10 tệp trên hoặc kiểm tra tất cả các vị trí gọi `I18n.tr` và thêm mã ngôn ngữ vào mảng `languages` trong `SettingsModal.qml` kết hợp dictionary trong `I18n.qml`.
 
 ---
 

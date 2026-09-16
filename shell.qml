@@ -1490,6 +1490,7 @@ Scope {
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
                             accentColor: win.accentColor
+                            accountName: win.authAccountName
 
                             onMoodSelected: (title, params) => win.selectMood(title, params)
                             onTrackPlayRequested: trk => {

@@ -125,7 +125,7 @@ def clean_search_title(title):
     t = re.sub(r'\s+', ' ', t).strip()
     return t or title
 
-def get_lyrics_from_local_db(title, video_id=None):
+def get_lyrics_from_local_db(title, artist=None, video_id=None):
     p1 = os.path.expanduser('~/Music/Nutsty/extracted/Music Database')
     p2 = os.path.expanduser('~/Music/SimpMusic/extracted/Music Database')
     db_path = p1 if os.path.exists(p1) else p2
@@ -142,6 +142,8 @@ def get_lyrics_from_local_db(title, video_id=None):
             if r and r[0]:
                 raw_lines = r[0]
 
+        clean_artist = artist.strip().lower() if artist and artist.strip() else ""
+
         candidates = []
         if title:
             candidates.append(title.strip())
@@ -149,41 +151,26 @@ def get_lyrics_from_local_db(title, video_id=None):
             if cleaned and cleaned.lower() != title.strip().lower():
                 candidates.append(cleaned)
 
-        for t_query in candidates:
-            if raw_lines:
-                break
-            # Exact match (case insensitive)
-            r = c.execute('''
-                SELECT l.lines FROM lyrics l
-                JOIN song s ON s.videoId = l.videoId
-                WHERE LOWER(s.title) = LOWER(?) AND l.lines IS NOT NULL AND l.lines != ""
-                LIMIT 1
-            ''', (t_query,)).fetchone()
-            if r and r[0]:
-                raw_lines = r[0]
-                break
+        if not raw_lines:
+            for t_query in candidates:
+                if raw_lines:
+                    break
+                # Exact title match
+                rows = c.execute('''
+                    SELECT l.lines, s.artistName, s.title FROM lyrics l
+                    JOIN song s ON s.videoId = l.videoId
+                    WHERE LOWER(s.title) = LOWER(?) AND l.lines IS NOT NULL AND l.lines != ""
+                ''', (t_query,)).fetchall()
 
-            # LIKE match: song title contains query
-            r = c.execute('''
-                SELECT l.lines FROM lyrics l
-                JOIN song s ON s.videoId = l.videoId
-                WHERE LOWER(s.title) LIKE LOWER(?) AND l.lines IS NOT NULL AND l.lines != ""
-                LIMIT 1
-            ''', (f"%{t_query}%",)).fetchone()
-            if r and r[0]:
-                raw_lines = r[0]
-                break
-
-            # Reverse LIKE match: query contains song title (e.g. "As It Was (Official Video)" contains "As It Was")
-            r = c.execute('''
-                SELECT l.lines FROM lyrics l
-                JOIN song s ON s.videoId = l.videoId
-                WHERE LOWER(?) LIKE '%' || LOWER(s.title) || '%' AND LENGTH(s.title) >= 3 AND l.lines IS NOT NULL AND l.lines != ""
-                LIMIT 1
-            ''', (t_query,)).fetchone()
-            if r and r[0]:
-                raw_lines = r[0]
-                break
+                for r_lines, r_art, r_title in rows:
+                    if clean_artist:
+                        r_art_str = (r_art or "").lower()
+                        if clean_artist in r_art_str or r_art_str in clean_artist:
+                            raw_lines = r_lines
+                            break
+                    else:
+                        raw_lines = r_lines
+                        break
 
         if not raw_lines:
             return []
@@ -211,9 +198,9 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
         return []
 
     # -------------------------------------------------------------------------
-    # TẦNG 0: Ưu tiên Local SQLite Database nếu có Rich Syllable Timestamps!
+    # TẦNG 0: Ưu tiên Local SQLite Database nếu có Rich Syllable Timestamps (phải khớp nghệ sĩ)!
     # -------------------------------------------------------------------------
-    db_lyrics = get_lyrics_from_local_db(title, video_id)
+    db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
     if db_lyrics and any(item.get("hasWords") for item in db_lyrics):
         return db_lyrics
 
@@ -232,10 +219,11 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
             except Exception:
                 pass
 
-    cache_paths = [
-        get_cache_path(title, artist),
-        get_cache_path(title, None)
-    ]
+    cache_paths = []
+    if artist and artist.strip():
+        cache_paths.append(get_cache_path(title, artist))
+    cache_paths.append(get_cache_path(title, None))
+
     for cp in cache_paths:
         if os.path.exists(cp):
             try:
@@ -283,7 +271,7 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
     # -------------------------------------------------------------------------
     # TẦNG 3: Dự phòng cuối cùng (Local SQLite Database)
     # -------------------------------------------------------------------------
-    return db_lyrics or get_lyrics_from_local_db(title, video_id)
+    return db_lyrics or get_lyrics_from_local_db(title, artist, video_id)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

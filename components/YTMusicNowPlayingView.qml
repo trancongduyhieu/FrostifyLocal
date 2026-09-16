@@ -858,7 +858,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
 
-                RowLayout {
+                Row {
                     id: tabsRow
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
@@ -894,11 +894,12 @@ Item {
                     Item {
                         id: lyricsTabItem
                         height: 36
-                        width: lyricsTxt.implicitWidth + 8
+                        width: lyricsRow.implicitWidth + 8
                         opacity: root.hasLyrics ? 1.0 : (root.isLoadingLyrics ? 0.7 : 0.35)
                         enabled: root.hasLyrics || root.isLoadingLyrics
 
                         Row {
+                            id: lyricsRow
                             anchors.centerIn: parent
                             spacing: 6
 
@@ -1196,7 +1197,7 @@ Item {
                                             Text {
                                                 id: chipLabel
                                                 anchors.centerIn: parent
-                                                text: modelData.title || ""
+                                                text: I18n.formatMoodChipTitle(modelData.title || "")
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
                                                 font.weight: chipItem.isSelected ? Font.Bold : Font.DemiBold

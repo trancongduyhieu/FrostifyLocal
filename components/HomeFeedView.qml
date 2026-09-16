@@ -20,6 +20,7 @@ Rectangle {
     property bool isPlaying: false
     property Item backgroundSourceItem: null
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    property string accountName: ""
     property int arrowStylePreset: 1
     readonly property real accentLum: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
@@ -31,57 +32,36 @@ Rectangle {
 
     function getGreeting() {
         var h = new Date().getHours();
-        if (h >= 5 && h < 12) return I18n.tr("Chào buổi sáng", "Good Morning");
-        if (h >= 12 && h < 18) return I18n.tr("Chào buổi chiều", "Good Afternoon");
-        return I18n.tr("Chào buổi tối", "Good Evening");
+        var greet = "";
+        if (h >= 5 && h < 12) greet = I18n.tr("Chào buổi sáng", "Good Morning");
+        else if (h >= 12 && h < 18) greet = I18n.tr("Chào buổi chiều", "Good Afternoon");
+        else greet = I18n.tr("Chào buổi tối", "Good Evening");
+
+        if (root.accountName && root.accountName.trim() !== "") {
+            return greet + ", " + root.accountName.trim();
+        }
+        return greet;
     }
 
     function formatMoodTitle(title) {
-        if (!title) return "";
-        var t = String(title).trim();
-        if (t === "All") return I18n.tr("Tất cả", "All");
-        if (t === "Relax") return I18n.tr("Thư giãn", "Relax");
-        if (t === "Sleep") return I18n.tr("Ngủ say", "Sleep");
-        if (t === "Energize") return I18n.tr("Tiếp năng lượng", "Energize");
-        if (t === "Sad") return I18n.tr("Tâm trạng", "Sad");
-        if (t === "Romance") return I18n.tr("Lãng mạn", "Romance");
-        if (t === "Party") return I18n.tr("Tiệc tùng", "Party");
-        if (t === "Commute") return I18n.tr("Di chuyển", "Commute");
-        if (t === "Feel good") return I18n.tr("Yêu đời", "Feel good");
-        if (t === "Focus") return I18n.tr("Tập trung", "Focus");
-        if (t === "Workout") return I18n.tr("Tập luyện", "Workout");
-        return t;
+        return I18n.formatMoodChipTitle(title);
     }
 
     function formatSectionTitle(title) {
-        if (!title) return "";
-        var t = String(title).trim();
-        if (t === "Recommended for you") return I18n.tr("Được đề xuất cho bạn", "Recommended for you");
-        if (t === "Listen again") return I18n.tr("Nghe lại", "Listen again");
-        if (t === "Quick picks") return I18n.tr("Tuyển tập nhanh", "Quick picks");
-        if (t === "Mixed for you") return I18n.tr("Dành riêng cho bạn", "Mixed for you");
-        if (t === "Forgotten favorites") return I18n.tr("Giai điệu quen thuộc", "Forgotten favorites");
-        if (t === "Similar to") return I18n.tr("Tương tự như", "Similar to");
-        if (t === "From your library") return I18n.tr("Từ thư viện của bạn", "From your library");
-        if (t === "Trending") return I18n.tr("Thịnh hành", "Trending");
-        if (t === "New releases") return I18n.tr("Bản phát hành mới", "New releases");
-        if (t === "Community playlists") return I18n.tr("Danh sách phát cộng đồng", "Community playlists");
-        if (t === "Featured playlists for you") return I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you");
-        if (t === "Music videos") return I18n.tr("Video âm nhạc", "Music videos");
-        if (t.endsWith(" Playlists")) {
-            var moodPrefix = t.replace(" Playlists", "");
-            return root.formatMoodTitle(moodPrefix) + I18n.tr(" - Danh sách phát", " Playlists");
-        }
-        return t;
+        return I18n.formatSectionTitle(title);
     }
 
     function formatSectionSubtitle(sub) {
         if (!sub) return "";
-        var s = String(sub).trim().toUpperCase();
-        if (s === "LOADING") return I18n.tr("ĐANG TẢI", "LOADING");
-        if (s === "DISCOVER") return I18n.tr("KHÁM PHÁ", "DISCOVER");
-        if (s === "LET'S START WITH A RADIO") return I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO");
-        if (s === "START RADIO") return I18n.tr("BẮT ĐẦU ĐÀI PHÁT", "START RADIO");
+        var s = String(sub).trim();
+        if (root.accountName && s.toLowerCase() === root.accountName.trim().toLowerCase()) {
+            return "";
+        }
+        var upper = s.toUpperCase();
+        if (upper === "LOADING") return I18n.tr("ĐANG TẢI", "LOADING");
+        if (upper === "DISCOVER") return I18n.tr("KHÁM PHÁ", "DISCOVER");
+        if (upper === "LET'S START WITH A RADIO") return I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO");
+        if (upper === "START RADIO") return I18n.tr("BẮT ĐẦU ĐÀI PHÁT", "START RADIO");
         return s;
     }
 

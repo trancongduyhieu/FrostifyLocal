@@ -324,18 +324,35 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 14
 
-                        // User Avatar (Circular 42px)
+                        // User Avatar (Zero Black Artifacts Framed Squircle: 44x44, radius: 12)
                         Item {
-                            width: 42
-                            height: 42
+                            width: 44
+                            height: 44
 
+                            // Mask for the avatar image
                             Rectangle {
+                                id: avatarMask
                                 anchors.fill: parent
-                                radius: 21
-                                color: Qt.rgba(255, 255, 255, 0.08)
-                                border.color: Qt.rgba(255, 255, 255, 0.15)
-                                border.width: 1
-                                clip: true
+                                radius: 12
+                                color: "#ffffff"
+                                visible: false
+                                layer.enabled: true
+                            }
+
+                            // Inner Avatar Container with MultiEffect Mask (fills 100% of parent)
+                            Item {
+                                anchors.fill: parent
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: avatarMask
+                                    autoPaddingEnabled: false
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "#202024"
+                                }
 
                                 Image {
                                     anchors.fill: parent
@@ -354,13 +371,22 @@ Rectangle {
                                     visible: root.accountThumb === ""
                                 }
                             }
+
+                            // Concentric Hairline Outer Border directly framing the avatar edge
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: "transparent"
+                                border.color: Qt.rgba(255, 255, 255, 0.20)
+                                border.width: 1
+                            }
                         }
 
                         // Name & Email / Channel Handle
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: parent.width - 56
+                            width: parent.width - 60
 
                             Text {
                                 text: root.accountName ? root.accountName : I18n.tr("Tài khoản Google", "Google Account")
@@ -383,34 +409,33 @@ Rectangle {
                         }
                     }
 
-                    // Logout Button (Subtle Pill pinned to right)
+                    // Logout Button (Option 1: Destructive Ghost Action Button)
                     Rectangle {
                         id: logoutBtn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 30
-                        width: 86
-                        radius: 15
-                        color: logoutHover.hovered ? Qt.rgba(239, 68, 68, 0.20) : Qt.rgba(255, 255, 255, 0.07)
-                        border.color: logoutHover.hovered ? Qt.rgba(239, 68, 68, 0.40) : Qt.rgba(255, 255, 255, 0.12)
-                        border.width: 1
+                        height: 28
+                        width: logoutTxt.implicitWidth + 18
+                        radius: 6
+                        color: logoutMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
+                        border.width: 0
                         Behavior on color { ColorAnimation { duration: 120 } }
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                        HoverHandler { id: logoutHover }
 
                         Text {
+                            id: logoutTxt
                             anchors.centerIn: parent
                             text: I18n.tr("Đăng xuất", "Log out")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true
-                            color: logoutHover.hovered ? "#fca5a5" : Theme.textPrimary
+                            color: logoutMouse.containsMouse ? "#fda4af" : "#f87171"
+                            Behavior on color { ColorAnimation { duration: 120 } }
                         }
 
                         MouseArea {
+                            id: logoutMouse
                             anchors.fill: parent
-                            preventStealing: false
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.logoutRequested()
                         }
@@ -459,14 +484,18 @@ Rectangle {
                     }
                 }
 
-                // Language Selection Row (100% Frameless, Segmented Pill Pinned to Right)
+                // Language Selection Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
                 Item {
+                    id: langRowItem
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
+                    z: menuOpen ? 50 : 1
+
+                    property bool menuOpen: false
 
                     Column {
                         anchors.left: parent.left
-                        anchors.right: langSegmentedControl.left
+                        anchors.right: langDropdownBtn.left
                         anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
@@ -487,78 +516,135 @@ Rectangle {
                         }
                     }
 
-                    // Segmented Language Pill (Pinned to Right)
+                    // Dropdown Trigger (Option 1: Chromatic Ghost Action Button)
                     Rectangle {
-                        id: langSegmentedControl
+                        id: langDropdownBtn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 30
-                        width: 176
-                        radius: 15
-                        color: Qt.rgba(255, 255, 255, 0.07)
-                        border.color: Qt.rgba(255, 255, 255, 0.12)
-                        border.width: 1
+                        height: 28
+                        width: langBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (langBtnMouse.containsMouse || langRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
                         Row {
-                            anchors.fill: parent
+                            id: langBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
 
-                            // Button Tiếng Việt
-                            Rectangle {
-                                width: parent.width / 2
-                                height: parent.height
-                                radius: 15
-                                color: I18n.locale === "vi" ? Qt.rgba(255, 255, 255, 0.18) : (viHover.hovered ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                                border.color: I18n.locale === "vi" ? Qt.rgba(255, 255, 255, 0.30) : "transparent"
-                                border.width: 1
+                            Text {
+                                text: I18n.locale === "vi" ? "Tiếng Việt" : "English"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (langBtnMouse.containsMouse || langRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
                                 Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                HoverHandler { id: viHover }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Tiếng Việt"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: I18n.locale === "vi"
-                                    color: I18n.locale === "vi" ? "#ffffff" : Theme.textSecondary
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    preventStealing: false
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.selectLanguageRequested("vi")
-                                }
                             }
 
-                            // Button English
-                            Rectangle {
-                                width: parent.width / 2
-                                height: parent.height
-                                radius: 15
-                                color: I18n.locale === "en" ? Qt.rgba(255, 255, 255, 0.18) : (enHover.hovered ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                                border.color: I18n.locale === "en" ? Qt.rgba(255, 255, 255, 0.30) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: langRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
 
-                                HoverHandler { id: enHover }
+                        MouseArea {
+                            id: langBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: langRowItem.menuOpen = !langRowItem.menuOpen
+                        }
+                    }
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "English"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: I18n.locale === "en"
-                                    color: I18n.locale === "en" ? "#ffffff" : Theme.textSecondary
-                                }
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: langDropdownMenu
+                        visible: langRowItem.menuOpen
+                        anchors.top: langDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: langDropdownBtn.right
+                        width: 146
+                        height: langCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    preventStealing: false
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.selectLanguageRequested("en")
+                        Column {
+                            id: langCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var languages: [
+                                { code: "vi", name: "Tiếng Việt" },
+                                { code: "en", name: "English" }
+                            ]
+
+                            Repeater {
+                                model: langCol.languages
+                                delegate: Rectangle {
+                                    width: langCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 32
+                                    radius: 7
+                                    color: (I18n.locale === modelData.code)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (I18n.locale === modelData.code)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.name
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: I18n.locale === modelData.code
+                                            color: (I18n.locale === modelData.code) ? "#ffffff" : (langItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75))
+                                        }
+
+                                        AppIcon {
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: I18n.locale === modelData.code
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: langItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectLanguageRequested(modelData.code);
+                                            langRowItem.menuOpen = false;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1379,44 +1465,46 @@ Rectangle {
                         }
                     }
 
-                    // Reset Position Button (Pill button pinned to right)
                     Rectangle {
                         id: resetBtn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 30
-                        width: 136
-                        radius: 15
-                        color: resetHover.hovered ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
-                        border.color: resetHover.hovered ? Qt.rgba(255, 255, 255, 0.20) : Qt.rgba(255, 255, 255, 0.10)
-                        border.width: 1
+                        height: 28
+                        width: resetRow.implicitWidth + 16
+                        radius: 6
+                        color: resetMouse.containsMouse
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
                         Behavior on color { ColorAnimation { duration: 120 } }
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                        HoverHandler { id: resetHover }
-
-                        RowLayout {
+                        Row {
+                            id: resetRow
                             anchors.centerIn: parent
                             spacing: 6
 
                             AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
                                 source: "../assets/icons/media-playlist-repeat-symbolic.svg"
                                 iconSize: 12
-                                color: Theme.textPrimary
+                                color: root.accentColor
                             }
 
                             Text {
+                                anchors.verticalCenter: parent.verticalCenter
                                 text: I18n.tr("Đặt lại mặc định", "Reset Defaults")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
-                                color: Theme.textPrimary
+                                color: resetMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
                             }
                         }
 
                         MouseArea {
+                            id: resetMouse
                             anchors.fill: parent
-                            preventStealing: false
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.resetLyricsPositionRequested()
                         }
