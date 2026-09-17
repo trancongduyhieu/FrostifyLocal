@@ -27,6 +27,18 @@ if [ ! -f "$DIR/library.json" ] || [ "$1" == "--rescan" ]; then
     python3 "$DIR/backend/library.py"
 fi
 
-# Launch Nutsty with Quickshell
+# Memory allocator tuning: prevent jemalloc from using 2MB Transparent Huge Pages
+# and aggressively return unused dirty memory to the OS (vital for CachyOS/Arch Linux)
+export MALLOC_CONF="background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,thp:never,metadata_thp:disabled"
+
+# Launch Nutsty with Quickshell (with kernel THP disabled to prevent memory inflation)
 echo "Launching Nutsty..."
-exec /usr/bin/quickshell -p "$DIR/shell.qml"
+exec python3 -c '
+import ctypes, os, sys
+try:
+    # PR_SET_THP_DISABLE = 41
+    ctypes.CDLL(None).prctl(41, 1, 0, 0, 0)
+except Exception:
+    pass
+os.execvp("/usr/bin/quickshell", ["/usr/bin/quickshell", "-p", sys.argv[1]])
+' "$DIR/shell.qml"
