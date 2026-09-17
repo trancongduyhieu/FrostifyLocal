@@ -147,10 +147,13 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - `palette_extractor.py` chạy ngầm song song (`&`) ngay từ đầu để xuất `nutsty_palette.json` trong ~0.3s.
    - `~/.config/quickshell/noctalia-shell/Commons/Color.qml`: `frostifyPaletteWatcher` gọi `reload()` trước và dùng `delayedNutstyTimer` (200ms) để đọc dữ liệu khi đĩa đã nạp xong, giúp Waybar và Desktop Lyrics đổi màu đồng bộ 100% ngay từ lần đổi hình nền đầu tiên.
 8. **Cơ Chế Bảo Toàn Danh Sách Bài Hát Album Khi Chuyển Đổi Mood Chips (Preserved Album Queue on Mood Chips)**:
-   - File: `components/YTMusicNowPlayingView.qml`.
-   - Lưu trữ danh sách bài hát gốc `originalAlbumQueue` khi phát từ album hoặc danh sách phát cộng đồng (`playingPlaylistTitle !== "Queue"` && `!== "Home"`).
-   - Khi chuyển sang các tag phụ ("Khám phá", "Lãng mạn"...), nạp radio YouTube Music tương ứng với mood.
-   - Khi bấm quay lại tag "Tất cả" (`index 0`), hệ thống khôi phục ngay lập tức danh sách bài hát gốc của album vào `win.currentTracks` và phát tín hiệu `queueUpdated` mà không gọi API radio.
+   - File: `shell.qml` và `components/YTMusicNowPlayingView.qml`.
+   - **Tách bạch Browsing Title và Playing Source Title**: `win.mainSectionTitle` chỉ phục vụ giao diện duyệt (browsing), trong khi `win.playingSourceTitle` đại diện cho nguồn phát thực tế (chỉ gán khi thực sự bấm phát bài hát/album/playlist/ca sĩ). Tránh triệt để race condition khi người dùng vừa nghe album 1 vừa bấm xem album 2.
+   - **Cơ Chế Snapshot & Reset Queue An Toàn**:
+     - Khi bắt đầu phát một bài hát/album mới (`!isAlreadyInQueue` trong `onTrackChanged` hoặc `playingPlaylistTitle` đổi), `root.originalAlbumQueue` được reset về `[]` và `root.selectedMoodIndex = 0`.
+     - Ở tab "Tất cả" (`selectedMoodIndex === 0`), `originalAlbumQueue` tự động đồng bộ theo `queueTracks`.
+     - Khi người dùng bấm chuyển sang mood phụ ("Khám phá", "Lãng mạn"...), `loadQueueForChipIndex` tự động snapshot toàn bộ danh sách bài hát đang hiển thị ở mood 0 vào `originalAlbumQueue` trước khi gọi API nạp radio mood.
+     - Khi bấm quay lại tag "Tất cả" (`index 0`), hệ thống khôi phục ngay lập tức danh sách bài hát gốc của album vào `win.currentTracks` và phát tín hiệu `queueUpdated` mà không gọi API radio.
    - Chặn `moodChipsProc` tự động gọi `loadQueueForChipIndex` khi đang phát album/playlist để bảo đảm hàng đợi ban đầu không bị ghi đè.
 9. **Cơ Chế Xuyên Thấu Hình Nền Khi Tạm Dừng & Hòa Sắc Khi Phát Nhạc (Dynamic Translucent Backdrop & Wallpaper Transparency on Pause)**:
    - File: `shell.qml` và `components/MainTrackGrid.qml`.

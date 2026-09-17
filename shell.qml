@@ -46,6 +46,7 @@ Scope {
     property bool isLoadingHome: false
     property string activePlaylistId: ""
     property string playingPlaylistId: ""
+    property string playingSourceTitle: ""
     property bool isLoadingAudio: false
 
     property real trackChangeTimestamp: 0
@@ -766,6 +767,8 @@ Scope {
             return;
         }
         win.currentTracks = [trk];
+        win.playingPlaylistId = "";
+        win.playingSourceTitle = "";
         win.playOnlineTrack(trk, true);
     }
 
@@ -804,6 +807,7 @@ Scope {
             }
             win.currentTracks = [chosen].concat(rest);
             win.playingPlaylistId = "";
+            win.playingSourceTitle = aName;
             win.playOnlineTrack(chosen, false);
         }
 
@@ -1509,6 +1513,8 @@ Scope {
                             onPlaySectionRequested: trks => {
                                 if (!trks || trks.length === 0) return;
                                 win.currentTracks = trks.slice();
+                                win.playingPlaylistId = "";
+                                win.playingSourceTitle = "";
                                 win.startRadioFromTrack(trks[0]);
                             }
                             onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
@@ -1537,8 +1543,10 @@ Scope {
                                 win.currentTracks = mainGrid.sortedTracks.slice();
                                 if (win.currentView === "playlist") {
                                     win.playingPlaylistId = win.activePlaylistId;
+                                    win.playingSourceTitle = win.mainSectionTitle;
                                 } else {
                                     win.playingPlaylistId = "";
+                                    win.playingSourceTitle = (win.currentView === "artist") ? win.mainSectionTitle : "";
                                 }
                                 var first = win.currentTracks[0];
                                 if (first) {
@@ -1561,8 +1569,10 @@ Scope {
                                 }
                                 if (win.currentView === "playlist") {
                                     win.playingPlaylistId = win.activePlaylistId;
+                                    win.playingSourceTitle = win.mainSectionTitle;
                                 } else {
                                     win.playingPlaylistId = "";
+                                    win.playingSourceTitle = (win.currentView === "artist") ? win.mainSectionTitle : "";
                                 }
                                 if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                                     win.playOnlineTrack(trk, false);
@@ -1599,6 +1609,7 @@ Scope {
                                 if (win.isContextMenuActive) return;
                                 win.currentTracks = trackList.slice();
                                 win.playingPlaylistId = "";
+                                win.playingSourceTitle = (win.currentArtistData && win.currentArtistData.name) ? win.currentArtistData.name : "";
                                 if (trk) {
                                     if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
                                         win.playOnlineTrack(trk, false);
@@ -1648,6 +1659,7 @@ Scope {
                                     win.currentTracks = win.categorizedSearchData.songs;
                                 }
                                 win.playingPlaylistId = "";
+                                win.playingSourceTitle = "";
                                 if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                                     win.playOnlineTrack(trk, false);
                                 } else {
@@ -1716,7 +1728,7 @@ Scope {
                     totalDuration: win.totalDuration > 0 ? win.totalDuration : 1.0
                     isPlaying: win.isPlaying
                     queueTracks: win.currentTracks
-                    playingPlaylistTitle: win.mainSectionTitle || "Queue"
+                    playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
                     accentColor: win.accentColor
                     backgroundSourceItem: glassCompositeBackdrop
 
@@ -2412,8 +2424,10 @@ Scope {
         win.currentTracks = shuffled;
         if (win.currentView === "playlist") {
             win.playingPlaylistId = win.activePlaylistId;
+            win.playingSourceTitle = win.mainSectionTitle;
         } else {
             win.playingPlaylistId = "";
+            win.playingSourceTitle = "";
         }
         var firstTrk = shuffled[0];
         if (firstTrk && ((firstTrk.path && firstTrk.path.startsWith("ytdl://")) || firstTrk.videoId)) {

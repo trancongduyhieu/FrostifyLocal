@@ -45,26 +45,28 @@ Item {
     function isAlbumOrPlaylistSource() {
         if (!root.playingPlaylistTitle) return false;
         var t = String(root.playingPlaylistTitle).trim();
-        return t !== "Queue" && t !== "Home" && t !== "" && t !== "Search";
+        if (!t) return false;
+        if (t === "Queue" || t === "Hàng đợi" || t === I18n.tr("Hàng đợi", "Queue")) return false;
+        if (t === "Home" || t === "Trang chủ" || t === I18n.tr("Trang chủ", "Home")) return false;
+        if (t === "Downloads" || t === "Tải xuống" || t === I18n.tr("Tải xuống", "Downloads")) return false;
+        if (t.startsWith("Search") || t.startsWith("Tìm kiếm")) return false;
+        if (t === "Automix Queue" || t === "Hàng đợi tự động" || t === I18n.tr("Hàng đợi tự động", "Automix Queue")) return false;
+        return true;
     }
 
     onPlayingPlaylistTitleChanged: {
-        if (isAlbumOrPlaylistSource()) {
-            if (root.lastAlbumQueueTitle !== root.playingPlaylistTitle && root.queueTracks && root.queueTracks.length > 0) {
-                root.lastAlbumQueueTitle = root.playingPlaylistTitle;
-                root.originalAlbumQueue = root.queueTracks.slice();
-            }
-        } else {
-            root.lastAlbumQueueTitle = "";
-            root.originalAlbumQueue = [];
+        root.lastAlbumQueueTitle = root.playingPlaylistTitle;
+        root.originalAlbumQueue = [];
+        if (isAlbumOrPlaylistSource() && root.selectedMoodIndex === 0 && root.queueTracks && root.queueTracks.length > 0) {
+            root.originalAlbumQueue = root.queueTracks.slice();
         }
     }
 
     onQueueTracksChanged: {
         if (isAlbumOrPlaylistSource() && root.selectedMoodIndex === 0) {
-            if (!root.originalAlbumQueue || root.originalAlbumQueue.length === 0 || root.lastAlbumQueueTitle !== root.playingPlaylistTitle) {
-                root.lastAlbumQueueTitle = root.playingPlaylistTitle;
+            if (root.queueTracks && root.queueTracks.length > 0) {
                 root.originalAlbumQueue = root.queueTracks.slice();
+                root.lastAlbumQueueTitle = root.playingPlaylistTitle;
             }
         }
     }
@@ -168,10 +170,11 @@ Item {
         fetchAnimatedArtwork();
 
         if (!isAlreadyInQueue) {
-            // New seed track selected from outside the current queue (Home / Downloads / Search):
+            // New seed track selected from outside the current queue (Home / Downloads / Search / New Album):
             // Reset mood index, clear cached vid, and fetch fresh mood chips + queue!
             root.selectedMoodIndex = 0;
             root.lastMoodChipsVid = "";
+            root.originalAlbumQueue = [];
             fetchMoodChips();
         }
         // If already in queue: keep current queueTracks & selectedMoodIndex untouched!
@@ -462,10 +465,20 @@ Item {
 
     function loadQueueForChipIndex(index) {
         if (index < 0 || index >= root.moodChips.length) return;
+
+        // If currently at index 0 ("Tất cả") and playing an album/playlist,
+        // ALWAYS snapshot the current queue before switching away to another mood!
+        if (root.selectedMoodIndex === 0 && root.isAlbumOrPlaylistSource()) {
+            if (root.queueTracks && root.queueTracks.length > 0) {
+                root.originalAlbumQueue = root.queueTracks.slice();
+                root.lastAlbumQueueTitle = root.playingPlaylistTitle;
+            }
+        }
+
         root.selectedMoodIndex = index;
 
         // If user clicks back to index 0 ("Tất cả" / "All") while playing an album/playlist:
-        if (index === 0 && root.originalAlbumQueue && root.originalAlbumQueue.length > 0) {
+        if (index === 0 && root.isAlbumOrPlaylistSource() && root.originalAlbumQueue && root.originalAlbumQueue.length > 0) {
             root.isLoadingMoodQueue = false;
             moodQueueProc.running = false;
             root.queueUpdated(root.originalAlbumQueue);
@@ -473,14 +486,6 @@ Item {
                 win.currentTracks = root.originalAlbumQueue;
             }
             return;
-        }
-
-        // If switching away to a mood chip, ensure original album queue is preserved:
-        if (root.isAlbumOrPlaylistSource() && (!root.originalAlbumQueue || root.originalAlbumQueue.length === 0)) {
-            if (root.queueTracks && root.queueTracks.length > 0) {
-                root.originalAlbumQueue = root.queueTracks.slice();
-                root.lastAlbumQueueTitle = root.playingPlaylistTitle;
-            }
         }
 
         var chip = root.moodChips[index];
@@ -527,7 +532,7 @@ Item {
                         if (!root.isAlbumOrPlaylistSource()) {
                             root.loadQueueForChipIndex(selIdx);
                         } else {
-                            if ((!root.originalAlbumQueue || root.originalAlbumQueue.length === 0) && root.queueTracks && root.queueTracks.length > 0) {
+                            if (root.selectedMoodIndex === 0 && root.queueTracks && root.queueTracks.length > 0) {
                                 root.originalAlbumQueue = root.queueTracks.slice();
                                 root.lastAlbumQueueTitle = root.playingPlaylistTitle;
                             }
