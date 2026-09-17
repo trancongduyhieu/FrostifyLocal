@@ -272,6 +272,9 @@ Scope {
                 try {
                     var obj = JSON.parse(data);
                     if (obj && typeof obj === "object") {
+                        if (win.lastYTQuery && obj.query && obj.query.trim().toLowerCase() !== win.lastYTQuery.trim().toLowerCase()) {
+                            return;
+                        }
                         win.categorizedSearchData = obj;
                         var songs = obj.songs || [];
                         win.ytMusicTracks = songs;
@@ -301,6 +304,12 @@ Scope {
         }
         win.currentView = "search";
         win.lastYTQuery = q || "Trending";
+        if (q && q !== "Trending" && typeof searchView !== "undefined" && searchView) {
+            if (typeof searchView.addSearchHistory === "function") {
+                searchView.addSearchHistory(q);
+            }
+            searchView.searchInputText = q;
+        }
         mainGrid.sectionTitle = 'Results for "' + win.lastYTQuery + '"';
         ytSearchProc.running = false;
         ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "categorized_search", win.lastYTQuery];

@@ -152,6 +152,9 @@ Item {
         if (visible && root.track && (!root.moodChips || root.moodChips.length === 0)) {
             fetchMoodChips();
         }
+        if (visible && root.track && root.animatedCoverEnabled && (!root.animatedArtworkUrl || root.animatedArtworkUrl === "") && !root.isLoadingAnimatedArtwork) {
+            fetchAnimatedArtwork();
+        }
     }
 
     onCurrentTimeChanged: {
@@ -259,6 +262,7 @@ Item {
                 try {
                     var res = JSON.parse(data);
                     if (res && res.found && res.video_url) {
+                        console.log("[Nutsty] Found Apple Music Animated Artwork:", res.album_name, res.video_url);
                         root.animatedArtworkUrl = res.video_url;
                     } else {
                         root.animatedArtworkUrl = "";
@@ -282,7 +286,22 @@ Item {
         }
         var songTitle = (root.track && (root.track.title || root.track.name)) ? (root.track.title || root.track.name) : "";
         var songArtist = (root.track && root.track.artist) ? root.track.artist : "";
-        var dur = (root.track && root.track.duration) ? Math.round(root.track.duration) : (root.totalDuration > 1 ? Math.round(root.totalDuration) : 0);
+        var dur = 0;
+        if (root.track && root.track.durationMs && !isNaN(root.track.durationMs)) {
+            dur = Math.round(root.track.durationMs / 1000);
+        } else if (root.track && typeof root.track.duration === "number" && !isNaN(root.track.duration)) {
+            dur = Math.round(root.track.duration);
+        } else if (root.track && typeof root.track.duration === "string" && root.track.duration.indexOf(":") !== -1) {
+            var parts = root.track.duration.split(":");
+            if (parts.length === 2) {
+                dur = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+            } else if (parts.length === 3) {
+                dur = parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+            }
+        }
+        if (!dur || isNaN(dur)) {
+            dur = (root.totalDuration > 1) ? Math.round(root.totalDuration) : 0;
+        }
 
         if (!songTitle) {
             root.isLoadingAnimatedArtwork = false;
@@ -586,9 +605,16 @@ Item {
 
                         MediaPlayer {
                             id: amPlayer
+                            videoOutput: amVideoOutput
                             source: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
                             audioOutput: null
                             loops: MediaPlayer.Infinite
+                            onErrorOccurred: (error, errorString) => {
+                                console.log("[Nutsty] amPlayer error:", error, errorString);
+                            }
+                            onPlaybackStateChanged: {
+                                console.log("[Nutsty] amPlayer playbackState:", playbackState);
+                            }
                             Component.onCompleted: {
                                 if (source !== "") play();
                             }
@@ -598,12 +624,34 @@ Item {
                             }
                         }
 
+                        Connections {
+                            target: root
+                            function onIsPlayingChanged() {
+                                if (amPlayer.source !== "") {
+                                    if (root.isPlaying && root.visible) {
+                                        if (amPlayer.playbackState !== MediaPlayer.PlayingState) amPlayer.play();
+                                    } else {
+                                        if (amPlayer.playbackState === MediaPlayer.PlayingState) amPlayer.pause();
+                                    }
+                                }
+                            }
+                            function onVisibleChanged() {
+                                if (amPlayer.source !== "") {
+                                    if (root.visible && root.isPlaying) {
+                                        if (amPlayer.playbackState !== MediaPlayer.PlayingState) amPlayer.play();
+                                    } else {
+                                        if (amPlayer.playbackState === MediaPlayer.PlayingState) amPlayer.pause();
+                                    }
+                                }
+                            }
+                        }
+
                         VideoOutput {
                             id: amVideoOutput
                             anchors.fill: parent
                             fillMode: VideoOutput.PreserveAspectCrop
-                            visible: root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && amPlayer.playbackState === MediaPlayer.PlayingState
-                            opacity: visible ? 1.0 : 0.0
+                            visible: opacity > 0.01
+                            opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
                             z: 1
                         }
@@ -611,7 +659,7 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.animatedArtworkUrl === "")
-                            color: "#18181b"
+                            color: Qt.rgba(0.08, 0.08, 0.10, 0.85)
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/media-optical-audio-symbolic.svg"

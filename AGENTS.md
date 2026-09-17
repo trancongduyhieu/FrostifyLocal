@@ -897,9 +897,61 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
       7. `components/DownloadQueuePopover.qml`: Tiêu đề hàng đợi tải xuống, trạng thái tiến độ, nút xóa, nút mở thư mục.
       8. `components/AmberolDetailView.qml`: Thông tin bài hát, nút điều khiển Amberol, nhãn thời lượng.
       9. `components/TrackContextMenu.qml`: Menu chuột phải (Phát tiếp theo, Thêm vào hàng đợi, Tải xuống, Xóa vĩnh viễn...).
-      10. `shell.qml`: Thông báo hệ thống, kết nối IPC và truyền prop `accountName`.
-      > [!TIP]
-      > Khi muốn bổ sung thêm ngôn ngữ mới (ví dụ: `ja`, `ko`, `zh`), chỉ cần chạy `git diff` trên danh sách 10 tệp trên hoặc kiểm tra tất cả các vị trí gọi `I18n.tr` và thêm mã ngôn ngữ vào mảng `languages` trong `SettingsModal.qml` kết hợp dictionary trong `I18n.qml`.
+29. **Động Cơ Bìa Album Động Apple Music (Apple Music Animated Album Artwork Video Loop Suite - Item 25)**:
+    - **Kiến Trúc Tích Hợp Đa Tầng (SimpMusic Footgun #212 & Apple Music HLS Video Stream)**:
+      - *Mô hình hoạt động*: Kế thừa giải pháp kỹ thuật từ SimpMusic (`getAMAnimatedArtwork` trong `LyricsCanvasRepositoryImpl.kt` và `NowPlayingContentAppleMusic.kt`).
+      - *Backend Daemon (`backend/ytmusic_helper.py`)*:
+        - Hàm `get_apple_music_animated_artwork(title, artist, duration_seconds)`:
+        - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
+        - Truy vấn Search API Apple Music: `https://amp-api-edge.music.apple.com/v1/catalog/us/search?term=...&types=songs&include[songs]=albums&format[resources]=map&extend=editorialVideo`.
+        - So khớp chính xác bài hát dựa trên thời lượng (sai số $\le 4.5\text{s}$) và bóc tách thuộc tính `editorialVideo` từ album quan hệ (`relationships.albums.data`).
+        - Chọn rendition HLS video `.m3u8` chất lượng cao 768x768 AVC1 qua hàm `select_am_rendition(master_url)` và lưu đệm 7 ngày vào `~/.cache/nutsty/animated_artworks.json`.
+      - *Frontend Render Engine (`components/YTMusicNowPlayingView.qml`)*:
+        - **Khắc phục lỗi thiếu `videoOutput`**: Trong Qt 6 `QtMultimedia`, `MediaPlayer` bắt buộc phải khai báo thuộc tính `videoOutput: amVideoOutput`. Nếu thiếu thuộc tính này, `MediaPlayer` không thể truyền video frames tới `VideoOutput`, dẫn đến việc video không hiển thị.
+        - **Hoạt ảnh chuyển tiếp mượt mà (Smooth Crossfade)**:
+          - Khắc phục lỗi `visible: <boolean>` làm ngắt hoạt ảnh `opacity`. Sử dụng công thức chuẩn:
+            `visible: opacity > 0.01`
+            `opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0`
+            `Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }`
+          - Khi bài hát bắt đầu phát hoặc chưa tải xong video, ảnh tĩnh `bigCoverImg` hiển thị bên dưới. Khi video tải xong và phát, `VideoOutput` chuyển tiếp mượt mà 400ms đè lên ảnh tĩnh.
+        - **Đồng bộ hóa Play/Pause thông minh (`Connections`)**:
+          - Khi tạm dừng bài hát, `amPlayer.pause()` giữ nguyên khung hình hiện tại trên màn hình thay vì biến mất đột ngột.
+          - Khi đóng màn hình Now Playing hoặc ẩn cửa sổ (`root.visible === false`), tự động pause video để tiết kiệm 100% tài nguyên giải mã GPU.
+        - **Chuẩn hóa Duration Parsing**:
+          - Phân giải an toàn `root.track.durationMs / 1000` hoặc parse chuỗi `mm:ss` thành số giây thực tế, tránh truyền `NaN` vào tiến trình bóc tách Python.
+        - **Cơ chế Cold-Open Trigger**:
+          - Trong `onVisibleChanged`: Tự động kích hoạt `fetchAnimatedArtwork()` nếu người dùng mở màn hình Now Playing khi bài hát đã đang phát từ trước.
+
+30. **Hệ Thống Lịch Sử Tra Tìm Bài Hát Bền Vững (Persistent Search History & Minimalist Clean Dark Glass List - Item 27)**:
+    - **Lưu Trữ Bền Vững & Thuật Toán MRU**:
+      - Lưu trữ danh sách JSON tại: `~/.config/noctalia/nutsty_search_history.json`.
+      - Thuật toán Most Recently Used (MRU): Giới hạn tối đa 20 từ khóa gần nhất. Khi tìm kiếm từ khóa mới, tự động đưa lên đầu danh sách; nếu từ khóa đã tồn tại trong lịch sử (so khớp không phân biệt hoa thường), tự động di chuyển lên đầu danh sách và loại bỏ mục cũ.
+      - Chuẩn hóa khoảng trắng: Biểu thức `replace(/\s+/g, " ").trim()` tự động triệt tiêu khoảng trắng thừa, tab và ký tự ngắt dòng khi paste văn bản.
+      - Đồng bộ hóa 0ms qua Quickshell `FileView` và cơ chế ghi atomic bất đồng bộ qua Python `tempfile` + `os.replace`.
+      - **Cơ Chế Tự Bảo Vệ Chống Race Đĩa (Self-Reload Guard)**:
+        - Quản lý qua `lastSavedJson` và `lastSaveTime` (khung thời gian 600ms).
+        - Khi người dùng thao tác xóa/chọn liên tiếp, tín hiệu `onFileChanged` từ hệ thống tập tin đĩa trễ sẽ bị chặn, ngăn hoàn toàn tình trạng nạp lại dữ liệu cũ đè lên dữ liệu mới trong RAM.
+    - **Giao Diện Dark Glass Danh Sách Dòng Tối Giản (`components/CategorizedSearchView.qml`)**:
+      - Khi ô tìm kiếm trống (`searchText.trim().length === 0` và không có preeditText): Tự động hiển thị phân khu Lịch sử tìm kiếm thay cho màn hình trống.
+      - *Header Lịch sử*:
+        - Tiêu đề: `I18n.tr("Lịch sử tìm kiếm", "Search history")`.
+        - Nút hành động "Xóa tất cả" / "Clear all": Áp dụng chuẩn **Destructive Muted Rose** (nền đỏ hoa hồng dịu `rgba(244, 63, 94, 0.12)`, viền `rgba(244, 63, 94, 0.26)`, text `#fda4af`, hover sáng). Nút này tự động ẩn khi lịch sử trống.
+      - *Dòng Lịch Sử (History Row)*:
+        - Chiều cao 40px, bo góc 8px.
+        - Bên trái: Icon đồng hồ `assets/icons/document-open-recent-symbolic.svg`.
+        - Ở giữa: Text từ khóa (font 14px, màu trắng `#ffffff`, elided khi vượt quá độ dài, an toàn tuyệt đối khi modelData giải phóng).
+        - Bên phải: Nút xóa nhanh ✕ (`assets/icons/window-close-symbolic.svg`) tự động sáng rõ khi hover vào dòng hoặc khi dòng được highlight bằng bàn phím. Vùng bấm cảm ứng (hit target) mở rộng $38\times 38\text{px}$ qua `anchors.margins: -6` chống bấm nhầm trên màn hình cảm ứng.
+        - Hiệu ứng Highlight: Nền kính đổi màu thích ứng theo `accentColor` (`Qt.rgba(accent.r, accent.g, accent.b, 0.12)` khi hover chuột, `0.18` khi chọn bằng phím).
+        - Tương tác: Click vào dòng lịch sử sẽ tự động gán từ khóa vào ô tìm kiếm và kích hoạt tìm kiếm bài hát tức thì; click vào nút ✕ xóa riêng mục đó ngay lập tức.
+      - *Điều Hướng Bàn Phím Toàn Diện (Keyboard Navigation)*:
+        - `ArrowDown` / `ArrowUp`: Duyệt vệt sáng highlight qua các mục lịch sử, tự động chặn tràn biên và trở về -1 để lấy lại focus ô nhập liệu.
+        - Hàm `ensureHistoryVisible(idx)`: Tính toán hình học viewport ($44 + idx \times 46\text{px}$) tự động cuộn `historyFlickable.contentY` mượt mà khi di chuyển vượt quá mép khung nhìn.
+        - Phím `Enter`: Kích hoạt tìm kiếm ngay lập tức với từ khóa đang highlight và đưa lên đầu MRU.
+        - Phím `Delete`: Xóa tức thì mục đang highlight khỏi lịch sử mà không cần chuột.
+        - Phím `Escape`: Hủy chọn highlight đưa con trỏ về ô nhập liệu, hoặc xóa text, hoặc quay lại view trước.
+      - *Trạng Thái Trống (Empty State)*:
+        - Hiển thị thông điệp nhẹ nhàng `I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")` kèm phụ đề hướng dẫn căn giữa khung nhìn.
+      - *Tuân Thủ Toàn Diện*: 100% SVG icon, Zero Emoji, Bimodal Localization (`I18n.tr`), cú pháp `qmllint` 0 lỗi.
 
 ---
 

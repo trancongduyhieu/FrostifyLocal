@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Effects
+import Quickshell
+import Quickshell.Io
 import "."
 
 Rectangle {
@@ -19,6 +21,167 @@ Rectangle {
     property bool isPlaying: false
     property alias searchInputText: searchTextInput.text
     property Item backgroundSourceItem: null
+
+    // Persistent Search History (MRU max 20)
+    property var searchHistory: []
+    property int selectedHistoryIndex: -1
+    property string lastSavedJson: ""
+    property real lastSaveTime: 0
+    readonly property bool isSearchTextEmpty: {
+        var t = searchTextInput ? (searchTextInput.text ? searchTextInput.text.trim() : "") : "";
+        var dt = searchTextInput ? (searchTextInput.displayText ? searchTextInput.displayText.trim() : "") : "";
+        var pt = searchTextInput ? (searchTextInput.preeditText ? searchTextInput.preeditText.trim() : "") : "";
+        return t.length === 0 && dt.length === 0 && pt.length === 0;
+    }
+
+    FileView {
+        id: historyFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_search_history.json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            delayedHistoryTimer.restart();
+        }
+        onLoadedChanged: {
+            if (loaded) searchRoot.loadHistory();
+        }
+        Component.onCompleted: {
+            if (loaded) searchRoot.loadHistory();
+        }
+    }
+
+    Timer {
+        id: delayedHistoryTimer
+        interval: 100
+        repeat: false
+        onTriggered: searchRoot.loadHistory()
+    }
+
+    Timer {
+        id: initialHistoryTimer
+        interval: 150
+        repeat: false
+        running: true
+        onTriggered: {
+            if (!searchRoot.searchHistory || searchRoot.searchHistory.length === 0) {
+                searchRoot.loadHistory();
+            }
+        }
+    }
+
+    function loadHistory() {
+        try {
+            var raw = historyFileView.text();
+            if (searchRoot.lastSavedJson && raw && raw.trim() === searchRoot.lastSavedJson.trim()) {
+                return;
+            }
+            if (Date.now() - searchRoot.lastSaveTime < 600 && searchRoot.searchHistory && searchRoot.searchHistory.length > 0) {
+                return;
+            }
+            if (raw && raw.trim().length > 0) {
+                var parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    var sanitized = [];
+                    var lowerList = [];
+                    for (var i = 0; i < parsed.length; i++) {
+                        if (parsed[i] !== null && parsed[i] !== undefined) {
+                            var s = String(parsed[i]).replace(/\s+/g, " ").trim();
+                            var lower = s.toLowerCase();
+                            if (s.length > 0 && lowerList.indexOf(lower) === -1) {
+                                lowerList.push(lower);
+                                sanitized.push(s);
+                            }
+                        }
+                    }
+                    searchRoot.searchHistory = sanitized.slice(0, 20);
+                    return;
+                }
+            } else if (historyFileView.loaded) {
+                searchRoot.searchHistory = [];
+                return;
+            }
+        } catch(e) {}
+    }
+
+    function saveHistory(list) {
+        searchRoot.searchHistory = list;
+        var data = JSON.stringify(list, null, 2);
+        searchRoot.lastSavedJson = data;
+        searchRoot.lastSaveTime = Date.now();
+        Quickshell.execDetached(["python3", "-c",
+            "import sys, os, tempfile\np = os.path.expanduser('~/.config/noctalia/nutsty_search_history.json')\nd = os.path.dirname(p)\nos.makedirs(d, exist_ok=True)\ntmp = None\ntry:\n    with tempfile.NamedTemporaryFile('w', dir=d, delete=False, encoding='utf-8') as tf:\n        tf.write(sys.argv[1])\n        tmp = tf.name\n    os.replace(tmp, p)\nexcept Exception:\n    if tmp and os.path.exists(tmp):\n        try: os.remove(tmp)\n        except Exception: pass\n",
+            data
+        ]);
+    }
+
+    function addSearchHistory(query) {
+        if (!query) return;
+        var trimmed = String(query).replace(/\s+/g, " ").trim().slice(0, 150);
+        if (trimmed.length === 0) return;
+
+        var current = searchRoot.searchHistory ? searchRoot.searchHistory.slice(0) : [];
+        if (current.length > 0 && current[0] === trimmed) {
+            return;
+        }
+
+        var updated = [trimmed];
+        var targetLower = trimmed.toLowerCase();
+        for (var i = 0; i < current.length; i++) {
+            if (current[i] && String(current[i]).trim().toLowerCase() !== targetLower) {
+                updated.push(current[i]);
+            }
+        }
+        if (updated.length > 20) {
+            updated = updated.slice(0, 20);
+        }
+        searchRoot.saveHistory(updated);
+    }
+
+    function removeSearchHistoryItem(itemToRemove) {
+        if (!itemToRemove) return;
+        var current = searchRoot.searchHistory ? searchRoot.searchHistory.slice(0) : [];
+        var targetLower = String(itemToRemove).trim().toLowerCase();
+        var updated = [];
+        for (var i = 0; i < current.length; i++) {
+            if (current[i] && String(current[i]).trim().toLowerCase() !== targetLower) {
+                updated.push(current[i]);
+            }
+        }
+        if (searchRoot.selectedHistoryIndex >= updated.length) {
+            searchRoot.selectedHistoryIndex = Math.max(-1, updated.length - 1);
+        }
+        searchRoot.saveHistory(updated);
+    }
+
+    function clearSearchHistory() {
+        searchRoot.selectedHistoryIndex = -1;
+        searchRoot.saveHistory([]);
+    }
+
+    function selectHistoryItem(item) {
+        if (!item) return;
+        searchRoot.selectedHistoryIndex = -1;
+        searchRoot.viewMode = "results";
+        realtimeSuggestTimer.stop();
+        searchTextInput.text = item;
+        searchTextInput.cursorPosition = item.length;
+        searchRoot.addSearchHistory(item);
+        searchRoot.searchSubmitted(item);
+    }
+
+    function ensureHistoryVisible(idx) {
+        if (idx < 0 || !historyFlickable) return;
+        var itemY = 44 + idx * 46;
+        var itemBottom = itemY + 40;
+        var viewTop = historyFlickable.contentY;
+        var viewBottom = viewTop + historyFlickable.height;
+        if (itemY < viewTop) {
+            historyFlickable.contentY = Math.max(0, itemY - 10);
+        } else if (itemBottom > viewBottom) {
+            var maxScroll = Math.max(0, historyFlickable.contentHeight - historyFlickable.height);
+            historyFlickable.contentY = Math.min(maxScroll, itemBottom + 20 - historyFlickable.height);
+        }
+    }
 
     // State
     property string activeTab: "all" // "all", "songs", "albums", "community_playlists", "featured_playlists", "artists"
@@ -339,13 +502,16 @@ Rectangle {
                             if (searchRoot.viewMode !== "results") realtimeSuggestTimer.restart();
                         }
                         onTextEdited: {
+                            searchRoot.selectedHistoryIndex = -1;
                             searchRoot.viewMode = "suggestions";
                             realtimeSuggestTimer.restart();
                         }
                         onTextChanged: {
+                            if (text.length > 0) searchRoot.selectedHistoryIndex = -1;
                             if (searchRoot.viewMode !== "results") realtimeSuggestTimer.restart();
                         }
                         onPreeditTextChanged: {
+                            searchRoot.selectedHistoryIndex = -1;
                             searchRoot.viewMode = "suggestions";
                             realtimeSuggestTimer.restart();
                         }
@@ -355,18 +521,65 @@ Rectangle {
 
                         onAccepted: {
                             realtimeSuggestTimer.stop();
+                            if (searchRoot.isSearchTextEmpty) {
+                                if (searchRoot.selectedHistoryIndex >= 0 && searchRoot.selectedHistoryIndex < searchRoot.searchHistory.length) {
+                                    var itemToSelect = searchRoot.searchHistory[searchRoot.selectedHistoryIndex];
+                                    searchRoot.selectHistoryItem(itemToSelect);
+                                    return;
+                                }
+                            }
                             var q = searchRoot.getCurrentSearchQuery();
                             if (q.length > 0) {
+                                searchRoot.selectedHistoryIndex = -1;
+                                searchRoot.addSearchHistory(q);
                                 searchRoot.viewMode = "results";
                                 searchRoot.searchSubmitted(q);
                             }
                         }
 
-                        Keys.onEscapePressed: {
+                        Keys.onDownPressed: (event) => {
+                            if (searchRoot.isSearchTextEmpty && searchRoot.searchHistory && searchRoot.searchHistory.length > 0) {
+                                if (searchRoot.selectedHistoryIndex < searchRoot.searchHistory.length - 1) {
+                                    searchRoot.selectedHistoryIndex++;
+                                    searchRoot.ensureHistoryVisible(searchRoot.selectedHistoryIndex);
+                                }
+                                event.accepted = true;
+                            }
+                        }
+
+                        Keys.onUpPressed: (event) => {
+                            if (searchRoot.isSearchTextEmpty && searchRoot.searchHistory && searchRoot.searchHistory.length > 0) {
+                                if (searchRoot.selectedHistoryIndex > 0) {
+                                    searchRoot.selectedHistoryIndex--;
+                                    searchRoot.ensureHistoryVisible(searchRoot.selectedHistoryIndex);
+                                    event.accepted = true;
+                                } else if (searchRoot.selectedHistoryIndex === 0) {
+                                    searchRoot.selectedHistoryIndex = -1;
+                                    historyFlickable.contentY = 0;
+                                    event.accepted = true;
+                                }
+                            }
+                        }
+
+                        Keys.onDeletePressed: (event) => {
+                            if (searchRoot.isSearchTextEmpty && searchRoot.selectedHistoryIndex >= 0 && searchRoot.selectedHistoryIndex < searchRoot.searchHistory.length) {
+                                var itemToDelete = searchRoot.searchHistory[searchRoot.selectedHistoryIndex];
+                                searchRoot.removeSearchHistoryItem(itemToDelete);
+                                event.accepted = true;
+                            }
+                        }
+
+                        Keys.onEscapePressed: (event) => {
+                            if (searchRoot.selectedHistoryIndex >= 0) {
+                                searchRoot.selectedHistoryIndex = -1;
+                                event.accepted = true;
+                                return;
+                            }
                             if (searchRoot.getCurrentSearchQuery().length > 0) {
                                 text = "";
                                 searchRoot.suggestions = [];
                                 searchRoot.recommendedSuggestions = [];
+                                event.accepted = true;
                             } else {
                                 searchRoot.backRequested();
                             }
@@ -394,6 +607,7 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 searchTextInput.text = "";
+                                searchRoot.selectedHistoryIndex = -1;
                                 searchTextInput.forceActiveFocus();
                                 searchRoot.suggestions = [];
                                 searchRoot.recommendedSuggestions = [];
@@ -422,7 +636,7 @@ Rectangle {
         contentWidth: width
         contentHeight: suggestionsCol.height + 20
         clip: true
-        visible: searchRoot.viewMode === "suggestions" && ((searchRoot.suggestions && searchRoot.suggestions.length > 0) || (searchRoot.recommendedSuggestions && searchRoot.recommendedSuggestions.length > 0))
+        visible: !searchRoot.isSearchTextEmpty && searchRoot.viewMode === "suggestions" && ((searchRoot.suggestions && searchRoot.suggestions.length > 0) || (searchRoot.recommendedSuggestions && searchRoot.recommendedSuggestions.length > 0))
         boundsBehavior: Flickable.StopAtBounds
 
         Column {
@@ -532,8 +746,8 @@ Rectangle {
                             Text {
                                 Layout.fillWidth: true
                                 text: {
-                                    if (recEntityRow.isArtist) return modelData.subtitle || "Nghệ sĩ";
-                                    if (recEntityRow.isAlbum) return modelData.subtitle || "Album";
+                                    if (recEntityRow.isArtist) return modelData.subtitle || I18n.tr("Nghệ sĩ", "Artist");
+                                    if (recEntityRow.isAlbum) return modelData.subtitle || I18n.tr("Tuyển tập", "Album");
                                     return modelData.artist || modelData.subtitle || "";
                                 }
                                 font.family: Theme.fontFamily
@@ -653,11 +867,252 @@ Rectangle {
                         preventStealing: true
                         onClicked: {
                             realtimeSuggestTimer.stop();
+                            searchRoot.addSearchHistory(modelData);
                             searchRoot.viewMode = "results";
                             searchRoot.suggestionClicked(modelData);
                             searchTextInput.text = modelData;
                             searchRoot.searchSubmitted(modelData);
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // 1.5. SEARCH HISTORY VIEW (Dark Glass, MRU 20 items, Destructive Muted Rose)
+    // =========================================================================
+    Flickable {
+        id: historyFlickable
+        anchors.top: pinnedSearchBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.topMargin: 10
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        anchors.bottomMargin: 80
+        contentWidth: width
+        contentHeight: historyCol.height + 30
+        clip: true
+        visible: searchRoot.isSearchTextEmpty
+        boundsBehavior: Flickable.StopAtBounds
+
+        Column {
+            id: historyCol
+            width: parent.width
+            spacing: 6
+
+            // Header: Title & "Clear all" button
+            Item {
+                width: historyCol.width
+                height: 38
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+
+                    Text {
+                        text: I18n.tr("Lịch sử tìm kiếm", "Search history")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        color: Theme.textPrimary
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    // Nút "Xóa tất cả" / "Clear all" (Destructive Muted Rose)
+                    Rectangle {
+                        id: clearAllBtn
+                        Layout.preferredHeight: 28
+                        Layout.preferredWidth: clearAllLayout.implicitWidth + 22
+                        radius: 14
+                        visible: !!(searchRoot.searchHistory && searchRoot.searchHistory.length > 0)
+                        color: clearAllM.containsMouse 
+                            ? Qt.rgba(239/255, 68/255, 68/255, 0.24) 
+                            : Qt.rgba(244/255, 63/255, 94/255, 0.12)
+                        border.color: clearAllM.containsMouse 
+                            ? Qt.rgba(239/255, 68/255, 68/255, 0.48) 
+                            : Qt.rgba(244/255, 63/255, 94/255, 0.26)
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        RowLayout {
+                            id: clearAllLayout
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            AppIcon {
+                                source: "../assets/icons/edit-clear-all-symbolic.svg"
+                                iconSize: 13
+                                color: clearAllM.containsMouse ? "#ffe4e6" : "#fda4af"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            Text {
+                                text: I18n.tr("Xóa tất cả", "Clear all")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.weight: Font.Medium
+                                color: clearAllM.containsMouse ? "#ffe4e6" : "#fda4af"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: clearAllM
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: searchRoot.clearSearchHistory()
+                        }
+                    }
+                }
+            }
+
+            // History Items List
+            Repeater {
+                model: searchRoot.searchHistory
+
+                delegate: Rectangle {
+                    id: histRow
+                    width: historyCol.width
+                    height: 40
+                    radius: 8
+                    readonly property bool isSelected: searchRoot.isSearchTextEmpty && searchRoot.selectedHistoryIndex === index
+                    readonly property bool isHovered: histRowM.containsMouse || deleteBtnM.containsMouse
+                    readonly property bool isActiveHighlight: isHovered || isSelected
+                    color: isActiveHighlight 
+                        ? Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, isSelected && !isHovered ? 0.18 : 0.12) 
+                        : "transparent"
+                    border.color: isActiveHighlight 
+                        ? Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, isSelected && !isHovered ? 0.40 : 0.25) 
+                        : "transparent"
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                    // Row MouseArea to trigger search (covers full row with zero dead zones)
+                    MouseArea {
+                        id: histRowM
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered: searchRoot.selectedHistoryIndex = index
+                        onClicked: {
+                            if (modelData) searchRoot.selectHistoryItem(modelData);
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 10
+                        spacing: 12
+
+                        // Left: Clock Icon
+                        AppIcon {
+                            source: "../assets/icons/document-open-recent-symbolic.svg"
+                            iconSize: 15
+                            color: histRow.isActiveHighlight ? searchRoot.accentColor : Qt.rgba(1, 1, 1, 0.60)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+
+                        // Center: Search Keyword Text
+                        Text {
+                            Layout.fillWidth: true
+                            text: (typeof modelData !== "undefined" && modelData !== null) ? String(modelData) : ""
+                            font.family: (typeof Theme !== "undefined" && Theme.fontFamily) ? Theme.fontFamily : "Inter, sans-serif"
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                            color: histRow.isActiveHighlight ? "#ffffff" : Qt.rgba(1, 1, 1, 0.90)
+                            elide: Text.ElideRight
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                        }
+
+                        // Right: Fast Delete [ ✕ ] Button (z: 2 to capture delete click on top of row)
+                        Item {
+                            z: 2
+                            Layout.preferredWidth: 26
+                            Layout.preferredHeight: 26
+                            opacity: histRow.isActiveHighlight ? 1.0 : 0.0
+                            visible: opacity > 0.01
+                            Behavior on opacity { NumberAnimation { duration: 100 } }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 13
+                                color: deleteBtnM.containsMouse 
+                                    ? Qt.rgba(244/255, 63/255, 94/255, 0.20) 
+                                    : (histRow.isActiveHighlight ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                                border.color: deleteBtnM.containsMouse 
+                                    ? Qt.rgba(244/255, 63/255, 94/255, 0.35) 
+                                    : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 80 } }
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/window-close-symbolic.svg"
+                                iconSize: 11
+                                color: deleteBtnM.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.60)
+                                Behavior on color { ColorAnimation { duration: 80 } }
+                            }
+
+                            MouseArea {
+                                id: deleteBtnM
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                preventStealing: true
+                                onClicked: {
+                                    if (modelData) searchRoot.removeSearchHistoryItem(modelData);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Empty State (When searchHistory is empty, vertically centered in viewport)
+            Item {
+                width: historyCol.width
+                height: Math.max(280, historyFlickable.height - 80)
+                visible: !searchRoot.searchHistory || searchRoot.searchHistory.length === 0
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 12
+
+                    AppIcon {
+                        Layout.alignment: Qt.AlignHCenter
+                        source: "../assets/icons/document-open-recent-symbolic.svg"
+                        iconSize: 42
+                        color: Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.35)
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.weight: Font.DemiBold
+                        color: Theme.textSecondary
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: I18n.tr("Các từ khóa bạn đã tìm kiếm sẽ xuất hiện ở đây", "Your recent search queries will appear here")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: Theme.textMuted
                     }
                 }
             }
@@ -677,7 +1132,7 @@ Rectangle {
         anchors.rightMargin: 20
         anchors.bottomMargin: 76
         spacing: 12
-        visible: searchRoot.viewMode === "results"
+        visible: !searchRoot.isSearchTextEmpty && searchRoot.viewMode === "results"
 
         // Filter Chips Bar (Glossy Gel Capsules + Reset Filter Chip)
         Flickable {
@@ -1086,7 +1541,7 @@ Rectangle {
                                                             }
 
                                                             Text {
-                                                                text: topResultUnifiedCard.isArtist ? "Phát ngẫu nhiên" : "Phát ngay"
+                                                                text: topResultUnifiedCard.isArtist ? I18n.tr("Phát ngẫu nhiên", "Shuffle") : I18n.tr("Phát ngay", "Play")
                                                                 font.family: Theme.fontFamily
                                                                 font.pixelSize: 11
                                                                 font.weight: Font.Bold
@@ -1135,7 +1590,7 @@ Rectangle {
                                                             }
 
                                                             Text {
-                                                                text: topResultUnifiedCard.isArtist ? "Mix" : (topResultUnifiedCard.isAlbum ? "Xem album" : "Đài phát")
+                                                                text: topResultUnifiedCard.isArtist ? I18n.tr("Tuyển tập", "Mix") : (topResultUnifiedCard.isAlbum ? I18n.tr("Xem album", "View album") : I18n.tr("Đài phát", "Radio"))
                                                                 font.family: Theme.fontFamily
                                                                 font.pixelSize: 11
                                                                 font.weight: Font.Medium
@@ -1266,9 +1721,9 @@ Rectangle {
                                                                 text: {
                                                                     var parts = [];
                                                                     if (modelData.type === "album" || modelData.albumType) {
-                                                                        parts.push(modelData.albumType || "Album");
+                                                                        parts.push(modelData.albumType || I18n.tr("Tuyển tập", "Album"));
                                                                     } else {
-                                                                        parts.push("Bài hát");
+                                                                        parts.push(I18n.tr("Bài hát", "Song"));
                                                                     }
                                                                     if (modelData.duration) {
                                                                         parts.push(modelData.duration);
@@ -1540,7 +1995,7 @@ Rectangle {
 
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: modelData.author || modelData.artist || "Cộng đồng"
+                                                        text: modelData.author || modelData.artist || I18n.tr("Cộng đồng", "Community")
                                                         font.family: Theme.fontFamily
                                                         font.pixelSize: 10
                                                         color: Theme.textSecondary
@@ -1792,7 +2247,7 @@ Rectangle {
 
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: modelData.subscribers ? (modelData.subscribers + " fans") : "Nghệ sĩ"
+                                                        text: modelData.subscribers ? (modelData.subscribers + I18n.tr(" người hâm mộ", " fans")) : I18n.tr("Nghệ sĩ", "Artist")
                                                         font.family: Theme.fontFamily
                                                         font.pixelSize: 10
                                                         color: Theme.textSecondary
@@ -1836,7 +2291,7 @@ Rectangle {
                             height: 36
 
                             Text {
-                                text: searchRoot.isTabLoaded("songs") ? ("Toàn bộ bài hát (" + searchRoot.getTabItems("songs").length + ")") : "Toàn bộ bài hát"
+                                text: searchRoot.isTabLoaded("songs") ? (I18n.tr("Toàn bộ bài hát", "All Songs") + " (" + searchRoot.getTabItems("songs").length + ")") : I18n.tr("Toàn bộ bài hát", "All Songs")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 18
                                 font.weight: Font.Bold
@@ -2011,7 +2466,7 @@ Rectangle {
                             height: 36
 
                             Text {
-                                text: searchRoot.isTabLoaded("albums") ? ("Albums & Đĩa đơn (" + searchRoot.getTabItems("albums").length + ")") : "Albums & Đĩa đơn"
+                                text: searchRoot.isTabLoaded("albums") ? (I18n.tr("Tuyển tập & Đĩa đơn", "Albums & Singles") + " (" + searchRoot.getTabItems("albums").length + ")") : I18n.tr("Tuyển tập & Đĩa đơn", "Albums & Singles")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 18
                                 font.weight: Font.Bold
@@ -2085,7 +2540,7 @@ Rectangle {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: (modelData.albumType ? (modelData.albumType + " • ") : "Album • ") + (modelData.year ? (modelData.year + " • ") : "") + (modelData.artist || "")
+                                            text: (modelData.albumType ? (modelData.albumType + " • ") : (I18n.tr("Tuyển tập", "Album") + " • ")) + (modelData.year ? (modelData.year + " • ") : "") + (modelData.artist || "")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             color: Theme.textSecondary
@@ -2130,7 +2585,7 @@ Rectangle {
                             height: 36
 
                             Text {
-                                text: searchRoot.isTabLoaded("community_playlists") ? ("Danh sách phát cộng đồng (" + searchRoot.getTabItems("community_playlists").length + ")") : "Danh sách phát cộng đồng"
+                                text: searchRoot.isTabLoaded("community_playlists") ? (I18n.tr("Danh sách phát cộng đồng", "Community Playlists") + " (" + searchRoot.getTabItems("community_playlists").length + ")") : I18n.tr("Danh sách phát cộng đồng", "Community Playlists")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 18
                                 font.weight: Font.Bold
@@ -2202,7 +2657,7 @@ Rectangle {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: (modelData.author || modelData.artist || "Cộng đồng") + (modelData.itemCount ? (" • " + modelData.itemCount + " bài hát") : "")
+                                            text: (modelData.author || modelData.artist || I18n.tr("Cộng đồng", "Community")) + (modelData.itemCount ? (" • " + modelData.itemCount + I18n.tr(" bài hát", " tracks")) : "")
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
                                             color: Theme.textSecondary
@@ -2247,7 +2702,7 @@ Rectangle {
                             height: 36
 
                             Text {
-                                text: searchRoot.isTabLoaded("featured_playlists") ? ("Danh sách phát nổi bật (" + searchRoot.getTabItems("featured_playlists").length + ")") : "Danh sách phát nổi bật"
+                                text: searchRoot.isTabLoaded("featured_playlists") ? (I18n.tr("Danh sách phát nổi bật", "Featured Playlists") + " (" + searchRoot.getTabItems("featured_playlists").length + ")") : I18n.tr("Danh sách phát nổi bật", "Featured Playlists")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 18
                                 font.weight: Font.Bold
@@ -2364,7 +2819,7 @@ Rectangle {
                             height: 36
 
                             Text {
-                                text: searchRoot.isTabLoaded("artists") ? ("Nghệ sĩ liên quan (" + searchRoot.getTabItems("artists").length + ")") : "Nghệ sĩ liên quan"
+                                text: searchRoot.isTabLoaded("artists") ? (I18n.tr("Nghệ sĩ liên quan", "Related Artists") + " (" + searchRoot.getTabItems("artists").length + ")") : I18n.tr("Nghệ sĩ liên quan", "Related Artists")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 18
                                 font.weight: Font.Bold

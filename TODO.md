@@ -216,14 +216,17 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - **Vô hiệu hóa auto-fallback trong MPV daemon**: Trong `backend/player_daemon.py`, loại bỏ cơ chế tự nạp file cũ từ session khi MPV đang idle.
     - **Trạng thái trực quan trên thanh Player Bar**: Khi chưa chọn bài, nút Play, Prev, Next hiển thị mờ thanh lịch (opacity 0.65/0.4), con trỏ chuột dạng thường và khóa tương tác click.
 
-- [ ] **25. Bìa Album Động Apple Music (Apple Music Animated Album Artwork Suite - Phần 2)**
+- [x] **25. Bìa Album Động Apple Music (Apple Music Animated Album Artwork Suite - Phần 2 - ĐÃ HOÀN THÀNH)**
   - *Mục tiêu*: Tích hợp ảnh bìa động dạng video loop nghệ thuật từ Apple Music thay thế cho ảnh vuông tĩnh khi đang phát nhạc.
   - *Backend Bóc Tách (`backend/ytmusic_helper.py`)*:
     - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
-    - Truy vấn Apple Music Search API (`types=songs&include[songs]=albums&extend=editorialVideo` và `types=albums`) theo Tên bài + Nghệ sĩ + Thời lượng (sai số $\le 3\text{s}$).
-    - Lọc master playlist HLS `.m3u8` chọn luồng video AVC1 độ phân giải $\ge 720\text{px}$ tối ưu băng thông và giải mã mượt mà.
-  - *Giao diện QML (`components/AmberolDetailView.qml` & Cài đặt)*:
-    - Phát video loop HLS mượt mà trong thẻ Artwork của AmberolDetailView, có hiệu ứng phủ nền ambient mờ phía sau.
+    - Truy vấn Apple Music Search API (`types=songs&include[songs]=albums&extend=editorialVideo` và `types=albums`) theo Tên bài + Nghệ sĩ + Thời lượng.
+    - Lọc master playlist HLS `.m3u8` chọn luồng video AVC1 độ phân giải 768x768 (`select_am_rendition`) tối ưu băng thông và giải mã mượt mà.
+  - *Giao diện QML (`components/YTMusicNowPlayingView.qml` & Cài đặt)*:
+    - Sửa lỗi kết nối thiếu `videoOutput: amVideoOutput` trong Qt 6 `QtMultimedia MediaPlayer`.
+    - Sửa logic hiển thị `visible: opacity > 0.01` và `opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0` giúp chuyển cảnh mượt mà qua `NumberAnimation (400ms)`.
+    - Chuẩn hóa phân giải thời lượng bài hát `durationMs / 1000` hoặc parse chuỗi `mm:ss` chính xác thay vì để `Math.round()` sinh ra `NaN`.
+    - Kích hoạt cơ chế Cold-Open Trigger trong `onVisibleChanged` để tải video artwork ngay cả khi mở màn hình Now Playing lúc bài hát đã phát từ trước.
     - Tùy chọn Bật/Tắt "Bìa album động (Animated Cover)" trong `components/SettingsModal.qml`, lưu cấu hình vào `nutsty_settings.json`.
 
 - [x] **26. Tinh Chỉnh Chiều Sâu Lời Bài Hát & Syllable-Level Karaoke Sync (DoF Held Notes Bloom & Bento Settings - ĐÃ HOÀN THÀNH)**
@@ -379,3 +382,19 @@ Tài liệu quản lý tác vụ (Roadmap & Todo List) cho Nutsty. Đã được
     - **Bộ Chuyển Tab Gạch Chân Underline (`___`)**: Xóa bỏ hoàn toàn viên nang cồng kềnh `tabCapsule`, chuyển sang 2 tab chữ phẳng (`Tài khoản` và `Lời bài hát Desktop`) kèm thanh gạch chân màu trắng `height: 2px` trượt mượt mà `Easing.OutCubic 200ms` trên đường kẻ hairline 1px.
     - **Xóa Bỏ Triệt Để Hội Chứng "Hộp Trong Hộp" (100% Frameless Rows)**: Các dòng cài đặt ("Đồng bộ lịch sử nghe nhạc", "Bìa album động", "Hiển thị lời bài hát", "Vị trí hiển thị") được giải phóng khỏi các khối chữ nhật viền cứng, bố trí dạng danh sách phẳng thoáng đãng kèm Toggle Switch dạt sang bên phải.
     - **Xóa Sạch Viền Xanh Lá Cây Ở Presets & Profile**: Thay thế viền màu gắt bằng viền trắng mờ thanh lịch `1.5px #ffffff` kết hợp huy hiệu checkmark đơn sắc đen-trắng cho mẫu Bento đang chọn.
+
+- [x] **41. Lịch Sử Tra Tìm Bài Hát Bền Vững & Điều Hướng Bàn Phím Tối Giản (Persistent Search History & Minimalist Clean Dark Glass List - ĐÃ HOÀN THÀNH)**
+  - *Mục tiêu*: Tự động lưu trữ lịch sử các từ khóa tìm kiếm khi người dùng tìm kiếm bài hát, hiển thị danh sách trực quan khi ô tìm kiếm trống, hỗ trợ điều hướng bàn phím toàn diện (ArrowDown/Up, Enter, Delete, Escape), cho phép kích hoạt tìm kiếm lại nhanh, xóa từng mục hoặc xóa toàn bộ lịch sử.
+  - *Backend & Lưu Trữ Bền Vững*:
+    - Lưu danh sách mảng JSON vào `~/.config/noctalia/nutsty_search_history.json`.
+    - Giới hạn tối đa 20 mục gần nhất, thuật toán Most Recently Used (MRU) tự động đưa từ khóa vừa tìm lên đầu danh sách và khử trùng lặp không phân biệt hoa thường (case-insensitive deduplication).
+    - Chuẩn hóa khoảng trắng: Biểu thức `replace(/\s+/g, " ").trim()` tự động triệt tiêu khoảng trắng thừa, tab và ký tự ngắt dòng khi paste.
+    - Đồng bộ tức thì 0ms qua Quickshell `FileView` và cơ chế ghi atomic bất đồng bộ qua Python `tempfile` + `os.replace`.
+    - Cơ chế phòng vệ Self-Reload Guard (`lastSavedJson` và `lastSaveTime` 600ms) triệt tiêu race condition giữa tiến trình ghi đĩa và FileView reload khi thao tác dồn dập.
+  - *Giao diện QML (`components/CategorizedSearchView.qml`)*:
+    - Khi ô tìm kiếm trống (`searchText.trim() === ""` và không có preeditText): Hiển thị vùng Lịch sử tìm kiếm Dark Glass sạch sẽ thay vì màn hình trống.
+    - Dòng tiêu đề: "Lịch sử tìm kiếm" / "Search history" và nút "Xóa tất cả" / "Clear all" phong cách Destructive Muted Rose (`#fda4af` nền đỏ nhung `rgba(244, 63, 94, 0.12)`, viền hairline). Nút này tự động ẩn khi lịch sử trống.
+    - Mỗi dòng lịch sử: Icon đồng hồ `document-open-recent-symbolic.svg`, tên từ khóa elided, hover highlight kính đổi màu theo `accentColor`, và nút xóa nhanh ✕ (`window-close-symbolic.svg`) bên phải. Vùng bấm cảm ứng (hit target) mở rộng $38\times 38\text{px}$ qua `anchors.margins: -6` chống bấm nhầm trên màn hình cảm ứng.
+    - Click vào dòng lịch sử: Tự động điền vào ô tìm kiếm và kích hoạt tìm kiếm tức thì.
+    - Điều hướng bàn phím toàn diện: `ArrowDown`/`ArrowUp` duyệt highlight tuần tự kèm tự động cuộn khung nhìn `ensureHistoryVisible(idx)`, `Enter` tìm kiếm ngay lập tức với từ khóa đang highlight, `Delete` xóa mục đang chọn, `Escape` hủy chọn.
+    - Tuân thủ nghiêm ngặt: 100% SVG icon, Zero Emoji, Bimodal Localization (`I18n.tr`), kiểm tra `qmllint` 0 lỗi.
