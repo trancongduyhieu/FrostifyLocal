@@ -917,6 +917,7 @@ Scope {
 
     function loadAlbumDetails(alb) {
         if (!alb) return;
+        if (typeof alb === "string") alb = { browseId: alb };
         var albId = alb.browseId || alb.playlistId || alb.id || "";
         win.activePlaylistId = albId;
         if (win.currentView !== "search" && win.currentView !== "playlist") {
@@ -1082,7 +1083,7 @@ Scope {
             anchors.fill: parent
             z: 0
             visible: opacity > 0.001
-            opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
+            opacity: (win.isNowPlayingOpen && win.currentTrack) ? 1.0 : 0.0
             Behavior on opacity {
                 NumberAnimation {
                     duration: 450
@@ -2603,6 +2604,8 @@ Scope {
         function openContextMenuForTest(isQueue: bool, forceLocal: bool) { frostifyIpc.openContextMenuForTest(isQueue, forceLocal); }
         function closeContextMenu() { frostifyIpc.closeContextMenu(); }
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
+        function openAlbum(browseId: string) { frostifyIpc.openAlbum(browseId); }
+        function setSortByInAlbum(s: string) { frostifyIpc.setSortByInAlbum(s); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
         function playTrackObj(title: string, artist: string, image: string, path: string) { frostifyIpc.playTrackObj(title, artist, image, path); }
@@ -2700,6 +2703,14 @@ Scope {
         function openArtist(artistNameOrId: string) {
             win.visible = true;
             win.loadArtistDetails(artistNameOrId);
+        }
+        function openAlbum(browseId: string) {
+            win.visible = true;
+            win.isNowPlayingOpen = false;
+            win.loadAlbumDetails(browseId);
+        }
+        function setSortByInAlbum(s: string) {
+            mainGrid.sortBy = s;
         }
         function goBackFromArtist() {
             win.goBackFromArtist();

@@ -77,9 +77,11 @@ Rectangle {
     readonly property var sortedTracks: {
         if (!root.tracks || root.tracks.length === 0) return [];
         var list = root.tracks.slice();
-        if (!isDownloadsView) return list;
         if (sortBy === "recent") {
-            list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+            if (isDownloadsView) {
+                list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+            }
+            // For albums and playlists, "recent" maintains original tracklist sequence
         } else if (sortBy === "title") {
             list.sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));
         } else if (sortBy === "artist") {
@@ -449,15 +451,18 @@ Rectangle {
 
                     // Primary Play All Button (Emerald Green Solid)
                     Rectangle {
-                        height: 36
-                        width: playRow.implicitWidth + 24
+                        id: playBtn
+                        implicitHeight: 36
+                        implicitWidth: playRow.implicitWidth + 28
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
                         radius: 18
                         color: playH.hovered ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                         scale: playH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
                         Behavior on color { ColorAnimation { duration: 100 } }
 
-                        RowLayout {
+                        Row {
                             id: playRow
                             anchors.centerIn: parent
                             spacing: 8
@@ -465,6 +470,7 @@ Rectangle {
                             AppIcon {
                                 source: "../assets/icons/media-playback-start-symbolic.svg"
                                 iconSize: 15
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#0c0d10" : "#ffffff"
                             }
 
@@ -473,6 +479,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#0c0d10" : "#ffffff"
                             }
                         }
@@ -487,8 +494,11 @@ Rectangle {
 
                     // Shuffle Play Button (Secondary Glass Style)
                     Rectangle {
-                        height: 36
-                        width: shuffleRow.implicitWidth + 24
+                        id: shuffleBtn
+                        implicitHeight: 36
+                        implicitWidth: shuffleRow.implicitWidth + 28
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
                         radius: 18
                         color: shufH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
                         border.color: Qt.rgba(1, 1, 1, 0.15)
@@ -496,7 +506,7 @@ Rectangle {
                         scale: shufH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
-                        RowLayout {
+                        Row {
                             id: shuffleRow
                             anchors.centerIn: parent
                             spacing: 8
@@ -504,6 +514,7 @@ Rectangle {
                             AppIcon {
                                 source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                                 iconSize: 15
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
 
@@ -512,6 +523,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
                         }
@@ -526,8 +538,11 @@ Rectangle {
 
                     // Add All to Queue Button
                     Rectangle {
-                        height: 36
-                        width: queueRow.implicitWidth + 24
+                        id: queueBtn
+                        implicitHeight: 36
+                        implicitWidth: queueRow.implicitWidth + 28
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
                         radius: 18
                         visible: root.albumMetadata !== null || root.isPlaylistView
                         color: qH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
@@ -536,7 +551,7 @@ Rectangle {
                         scale: qH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
-                        RowLayout {
+                        Row {
                             id: queueRow
                             anchors.centerIn: parent
                             spacing: 8
@@ -544,6 +559,7 @@ Rectangle {
                             AppIcon {
                                 source: "../assets/icons/list-add-symbolic.svg"
                                 iconSize: 15
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
 
@@ -552,6 +568,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
                         }
@@ -566,8 +583,11 @@ Rectangle {
 
                     // Download Entire Album Button
                     Rectangle {
-                        height: 36
-                        width: dlAlbRow.implicitWidth + 24
+                        id: dlAlbBtn
+                        implicitHeight: 36
+                        implicitWidth: dlAlbRow.implicitWidth + 28
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
                         radius: 18
                         visible: root.albumMetadata !== null && (!root.albumMetadata.isLocal)
                         color: dlAlbH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
@@ -576,7 +596,7 @@ Rectangle {
                         scale: dlAlbH.hovered ? 1.03 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
-                        RowLayout {
+                        Row {
                             id: dlAlbRow
                             anchors.centerIn: parent
                             spacing: 8
@@ -584,6 +604,7 @@ Rectangle {
                             AppIcon {
                                 source: "../assets/icons/download-symbolic.svg"
                                 iconSize: 15
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
 
@@ -592,6 +613,7 @@ Rectangle {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
                                 color: "#ffffff"
                             }
                         }
@@ -608,32 +630,39 @@ Rectangle {
 
                     // Segmented Glass Sort Control (Unified 36px Height, SimpMusic / Apple Music Hi-Fi)
                     Rectangle {
-                        height: 36
-                        width: sortInnerRow.implicitWidth + 8
+                        id: sortControlBox
+                        implicitHeight: 36
+                        implicitWidth: sortInnerRow.implicitWidth + 16
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
                         radius: 18
                         color: Qt.rgba(1, 1, 1, 0.05)
                         border.color: Qt.rgba(1, 1, 1, 0.10)
                         border.width: 1
 
-                        RowLayout {
+                        Row {
                             id: sortInnerRow
                             anchors.centerIn: parent
-                            spacing: 3
+                            spacing: 4
 
                             Text {
-                                Layout.leftMargin: 8
-                                Layout.rightMargin: 2
+                                anchors.verticalCenter: parent.verticalCenter
                                 text: I18n.tr("Sắp xếp:", "Sort by:")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
                                 color: Theme.textMuted
+                                leftPadding: 6
+                                rightPadding: 2
                             }
 
                             // Pill: Mới nhất
                             Rectangle {
-                                height: 28
-                                width: sortRecentText.implicitWidth + 20
+                                implicitHeight: 28
+                                implicitWidth: sortRecentText.implicitWidth + 24
+                                width: implicitWidth
+                                height: implicitHeight
+                                anchors.verticalCenter: parent.verticalCenter
                                 radius: 14
                                 color: root.sortBy === "recent" ? Qt.rgba(1, 1, 1, 0.14) : (sortRecentH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
                                 border.color: root.sortBy === "recent" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
@@ -660,8 +689,11 @@ Rectangle {
 
                             // Pill: Tên A-Z
                             Rectangle {
-                                height: 28
-                                width: sortTitleText.implicitWidth + 20
+                                implicitHeight: 28
+                                implicitWidth: sortTitleText.implicitWidth + 24
+                                width: implicitWidth
+                                height: implicitHeight
+                                anchors.verticalCenter: parent.verticalCenter
                                 radius: 14
                                 color: root.sortBy === "title" ? Qt.rgba(1, 1, 1, 0.14) : (sortTitleH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
                                 border.color: root.sortBy === "title" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
@@ -688,8 +720,11 @@ Rectangle {
 
                             // Pill: Nghệ sĩ
                             Rectangle {
-                                height: 28
-                                width: sortArtistText.implicitWidth + 20
+                                implicitHeight: 28
+                                implicitWidth: sortArtistText.implicitWidth + 24
+                                width: implicitWidth
+                                height: implicitHeight
+                                anchors.verticalCenter: parent.verticalCenter
                                 radius: 14
                                 color: root.sortBy === "artist" ? Qt.rgba(1, 1, 1, 0.14) : (sortArtistH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
                                 border.color: root.sortBy === "artist" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"

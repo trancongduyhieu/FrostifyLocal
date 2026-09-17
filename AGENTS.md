@@ -951,7 +951,19 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
         - Phím `Escape`: Hủy chọn highlight đưa con trỏ về ô nhập liệu, hoặc xóa text, hoặc quay lại view trước.
       - *Trạng Thái Trống (Empty State)*:
         - Hiển thị thông điệp nhẹ nhàng `I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")` kèm phụ đề hướng dẫn căn giữa khung nhìn.
-      - *Tuân Thủ Toàn Diện*: 100% SVG icon, Zero Emoji, Bimodal Localization (`I18n.tr`), cú pháp `qmllint` 0 lỗi.
+39. **Chuẩn Hóa Kích Thước Bố Cục Toolbar, Bộ Lọc Sắp Xếp Toàn Diện & Khử Lớp Nền Trắng Bìa Album (Item 39)**:
+    - **Khắc Phục Đè Chữ Tiếng Việt Trong Thanh Công Cụ (`components/MainTrackGrid.qml`)**:
+      - *Nguyên nhân*: Các nút `Rectangle` con trong `RowLayout` chỉ khai báo `width` mà không khai báo `implicitWidth` hoặc `Layout.preferredWidth`. Khi chuyển sang tiếng Việt, chuỗi "Phát ngẫu nhiên" dài hơn nhiều so với "Shuffle", khiến `RowLayout` dùng `implicitWidth = 0` và đặt nút "Hàng đợi" đè lên chữ của nút trước.
+      - *Giải pháp*: Chuẩn hóa toàn bộ các nút con (`playBtn`, `shuffleBtn`, `queueBtn`, `dlAlbBtn`) khai báo tường minh `implicitHeight: 36`, `implicitWidth: row.implicitWidth + 28`, `Layout.preferredHeight: 36`, và `Layout.preferredWidth: implicitWidth`. Các hàng bên trong chuyển từ `RowLayout` sang `Row` với `anchors.centerIn: parent` và `spacing: 8` để QtQuick tự động tính toán kích thước tự nhiên chính xác 100%.
+    - **Kích Hoạt Sắp Xếp Toàn Diện & Sửa Lỗi Tràn Nút Nghệ Sĩ (`components/MainTrackGrid.qml`)**:
+      - *Tính năng Sắp xếp*: Gỡ bỏ điều kiện chặn `if (!isDownloadsView) return list;` trong `sortedTracks`. Cho phép sắp xếp mượt mà trên tất cả các chế độ xem:
+        - `recent` ("Mới nhất"): Sắp xếp theo `mtime` trên Downloads; giữ nguyên thứ tự tracklist gốc của album / playlist.
+        - `title` ("Tên A-Z"): Sắp xếp theo bảng chữ cái qua `localeCompare`.
+        - `artist` ("Nghệ sĩ"): Sắp xếp theo tên ca sĩ / nghệ sĩ qua `localeCompare`.
+      - *Sửa Lỗi Tràn Mép Phải*: Chuyển `sortInnerRow` sang `Row` với `spacing: 4`, padding 4px; container `sortControlBox` khai báo `implicitWidth: sortInnerRow.implicitWidth + 16` và `Layout.preferredWidth: implicitWidth`. Các pill con có `implicitWidth: text.implicitWidth + 24`, giúp căn lề hoàn hảo, nằm gọn gàng bên trong hộp kính và không bao giờ bị cắt chữ hay lòi sang phải.
+    - **Khử Lớp Nền Trắng Bìa Album Phủ Đè Lên Nền App (`shell.qml`)**:
+      - *Nguyên nhân*: `playingBackdropCover` vô tình bị đổi điều kiện kích hoạt thành `(win.currentTrack && win.isPlaying)`, khiến khi duyệt album/home trong lúc phát nhạc, ảnh bìa phóng to bị phủ đè lên toàn bộ cửa sổ. Với các bài hát có bìa nhiều mảng trắng như "RASEN", ảnh bìa tạo ra lớp nền trắng xám loang lổ đè lên lớp nền Dark Acrylic sâu thẳm của app.
+      - *Giải pháp*: Đưa điều kiện hiển thị về chuẩn thiết kế gốc: `(win.isNowPlayingOpen && win.currentTrack)`. Khi duyệt nhạc bình thường, nền của app luôn giữ 100% màu Dark Acrylic nguyên bản của Nutsty, xóa sạch hiện tượng 2 lớp nền và vệt trắng bao quanh.
 
 ---
 
