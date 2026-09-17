@@ -84,12 +84,12 @@ Scope {
     property var followedArtists: []
     property color wallpaperAccentColor: "#f4afb3"
     property color songAccentColor: "#f4afb3"
-    readonly property color effectiveAccentColor: win.currentTrack ? win.songAccentColor : win.wallpaperAccentColor
+    readonly property color effectiveAccentColor: (win.currentTrack && win.isPlaying) ? win.songAccentColor : win.wallpaperAccentColor
     property color accentColor: effectiveAccentColor
     Behavior on accentColor {
         ColorAnimation {
-            duration: 450
-            easing.type: Easing.OutQuad
+            duration: 400
+            easing.type: Easing.InOutQuad
         }
     }
     property string currentWallpaperPath: ""
@@ -1083,10 +1083,10 @@ Scope {
             anchors.fill: parent
             z: 0
             visible: opacity > 0.001
-            opacity: win.currentTrack ? 1.0 : 0.0
+            opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 450
+                    duration: 400
                     easing.type: Easing.InOutQuad
                 }
             }
@@ -1240,10 +1240,10 @@ Scope {
                         source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
-                        opacity: win.currentTrack ? 1.0 : 0.0
+                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
                         Behavior on opacity {
                             NumberAnimation {
-                                duration: 900
+                                duration: 400
                                 easing.type: Easing.InOutQuad
                             }
                         }
@@ -1293,9 +1293,9 @@ Scope {
             // 2. Active Song Atmosphere Aurora Glow (when playing)
             Item {
                 anchors.fill: parent
-                opacity: win.currentTrack ? 0.70 : 0.0
+                opacity: (win.currentTrack && win.isPlaying) ? 0.70 : 0.0
                 Behavior on opacity {
-                    NumberAnimation { duration: 450; easing.type: Easing.InOutQuad }
+                    NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
                 }
 
                 Image {

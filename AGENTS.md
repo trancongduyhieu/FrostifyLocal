@@ -151,11 +151,18 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - Khi chuyển sang các tag phụ ("Khám phá", "Lãng mạn"...), nạp radio YouTube Music tương ứng với mood.
    - Khi bấm quay lại tag "Tất cả" (`index 0`), hệ thống khôi phục ngay lập tức danh sách bài hát gốc của album vào `win.currentTracks` và phát tín hiệu `queueUpdated` mà không gọi API radio.
    - Chặn `moodChipsProc` tự động gọi `loadQueueForChipIndex` khi đang phát album/playlist để bảo đảm hàng đợi ban đầu không bị ghi đè.
-9. **Cơ Chế Duy Trì Màu Sắc & Phông Nền Động Khi Tạm Dừng (Persistent Backdrop Atmosphere & Song Accent on Pause)**:
+9. **Cơ Chế Xuyên Thấu Hình Nền Khi Tạm Dừng & Hòa Sắc Khi Phát Nhạc (Dynamic Translucent Backdrop & Wallpaper Transparency on Pause)**:
    - File: `shell.qml` và `components/MainTrackGrid.qml`.
-   - Ràng buộc `effectiveAccentColor`, `playingBackdropCover`, `fallbackPlayingImg`, và `nutstySurfaceArtwork` theo `win.currentTrack` thay vì phụ thuộc vào `win.isPlaying`.
-   - Khi người dùng bấm tạm dừng bài hát, toàn bộ màu accent điểm nhấn và lớp phông nền mờ aurora velvet của bài hát vẫn được duy trì nguyên vẹn, không bị mất màu hay chớp giật về hình nền desktop.
-   - Xóa bỏ khối gradient trắng 200px cục bộ khỏi `MainTrackGrid.qml` và tối ưu hóa dải scrim tối hữu cơ trong `shell.qml` để ngăn hiện tượng bìa album sáng màu bị lóa sương trắng.
+   - Ràng buộc cốt lõi:
+     - `effectiveAccentColor`: `(win.currentTrack && win.isPlaying) ? win.songAccentColor : win.wallpaperAccentColor`
+     - `playingBackdropCover.opacity`: `(win.currentTrack && win.isPlaying) ? 1.0 : 0.0` (với `duration: 400`, `Easing.InOutQuad`)
+     - `fallbackPlayingImg.opacity`: `(win.currentTrack && win.isPlaying) ? 1.0 : 0.0`
+     - `nutstySurfaceArtwork.opacity`: `(win.currentTrack && win.isPlaying) ? 0.70 : 0.0`
+   - **Hành vi trực quan chuẩn xác**:
+     - *Khi phát nhạc (`isPlaying === true`)*: Lớp backdrop tối `#0a0b0e` mờ dần hiện lên (opacity 1.0) che khuất hình nền desktop bên dưới, bung tỏa hiệu ứng velvet aurora blur từ bìa bài hát và đổi màu toàn bộ hệ thống theo `win.songAccentColor`.
+     - *Khi tạm dừng / Dừng phát (`isPlaying === false`)*: Toàn bộ lớp backdrop bài hát mờ dần về `0.0` trong 400ms, đưa cửa sổ ứng dụng về trạng thái kính mờ acrylic 58% (`masterContainer color: Qt.rgba(0.04, 0.04, 0.06, 0.58)`), nhìn xuyên thấu 100% hình nền desktop bên dưới; đồng thời accent color chuyển mượt mà về màu của hình nền (`win.wallpaperAccentColor`).
+   - **Bẫy lỗi tối thượng**: Tuyệt đối không được bỏ điều kiện `win.isPlaying` để thay bằng `win.currentTrack ? ... : ...`. Làm như vậy sẽ khóa chết ứng dụng ở trạng thái nền đen mờ đục và màu bài hát, làm mất tính năng xuyên thấu hình nền desktop khi tạm dừng.
+   - Xóa bỏ triệt để khối gradient trắng 200px cục bộ khỏi `MainTrackGrid.qml` để bảo đảm chế độ xem Album/Playlist không bị màng sương trắng (layer 2) đè lên.
 10. **Kho Mã Nguồn Tham Khảo Bên Ngoài (External Reference Repositories)**:
    - **Nutsty**: `/home/apple/Applications/Nutsty/`
      - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete), Playback Tracking (`videostatsPlaybackUrl`, `atrUrl`, `videostatsWatchtimeUrl`) và Return YouTube Dislike API.
