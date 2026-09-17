@@ -2527,17 +2527,78 @@ def select_am_rendition(master_url):
         sys.stderr.write(f"[select_am_rendition error]: {e}\n")
         return master_url
 
-def get_apple_music_animated_artwork(title, artist, duration_seconds=0):
+def clean_for_search(text):
+    if not text:
+        return ""
+    s = re.sub(r"\((feat\.|ft\.|cùng với|con|mukana|com|avec|official|mv|lyrics|audio).*?\)", "", text, flags=re.IGNORECASE)
+    s = re.sub(r"\[.*?\]", "", s)
+    s = re.sub(r"\((.*?)\)", r"\1", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def normalize_for_match(text):
+    if not text:
+        return ""
+    cleaned = "".join(c if c.isalnum() else " " for c in text.lower())
+    tokens = [w for w in cleaned.split() if w]
+    return " ".join(tokens)
+
+def match_key(text):
+    norm = normalize_for_match(text)
+    return norm if norm else text.strip().lower()
+
+def matches_loosely(a, b):
+    ka = match_key(a)
+    kb = match_key(b)
+    if not ka or not kb:
+        return False
+    if ka == kb or ka in kb or kb in ka:
+        return True
+    sa = set(ka.split())
+    sb = set(kb.split())
+    if sa and sb:
+        overlap = sa & sb
+        if len(overlap) / min(len(sa), len(sb)) >= 0.5:
+            return True
+    return False
+
+def artist_agrees(cand_artist, query_artist):
+    if not query_artist:
+        return True
+    if not cand_artist:
+        return False
+    return matches_loosely(cand_artist, query_artist)
+
+def match_score(candidate, subject):
+    c = match_key(candidate)
+    s = match_key(subject)
+    if not c or not s:
+        return None
+    if c == s:
+        return (0, 0)
+    if c.startswith(s):
+        return (1, len(c) - len(s))
+    if s in c:
+        return (2, len(c) - len(s))
+    if c in s:
+        return (3, len(s) - len(c))
+    return None
+
+def get_apple_music_animated_artwork(title, artist, duration_seconds=0, album_hint=""):
     """
     Searches Apple Music catalog for an album's editorialVideo animated artwork.
-    Matches track duration and normalizes strings to pick the true album release.
+    Strictly follows SimpMusic's pickSongMatch architecture:
+    1. Artist MUST agree (matches_loosely).
+    2. Song title MUST match closely (tiers 0-3: exact, prefix, substring, superstring).
+    3. EditorialVideo is ONLY inspected on albums directly associated with the MATCHED song candidate.
+    4. Arbitrary album fallback is strictly forbidden to prevent unrelated animated covers.
     """
     if not title:
         return {"found": False}
     import urllib.parse
-    clean_title = re.sub(r"\(.*?\)|\[.*?\]", "", title).strip()
-    clean_artist = re.sub(r"\(.*?\)|\[.*?\]", "", artist).strip()
-    cache_key = f"{clean_title.lower()}_{clean_artist.lower()}"
+    clean_title = clean_for_search(title)
+    clean_artist = clean_for_search(artist)
+    cache_key = f"{match_key(clean_title)}_{match_key(clean_artist)}"
 
     cached_data = load_json(ANIMATED_ARTWORK_CACHE_FILE, {})
     if cache_key in cached_data:
@@ -2551,88 +2612,135 @@ def get_apple_music_animated_artwork(title, artist, duration_seconds=0):
 
     try:
         query = f"{clean_title} {clean_artist}".strip()
-        encoded_query = urllib.parse.quote(query)
-        search_url = (
-            f"https://amp-api-edge.music.apple.com/v1/catalog/us/search?"
-            f"term={encoded_query}&types=songs&include[songs]=albums&format[resources]=map&extend=editorialVideo&l=en-US&limit=5&platform=web"
-        )
-        req = urllib.request.Request(
-            search_url,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Origin": "https://music.apple.com",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
-            }
-        )
-        with urllib.request.urlopen(req, timeout=7) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-
-        albums = data.get("resources", {}).get("albums", {})
-        songs = data.get("resources", {}).get("songs", {})
-
-        found_video = None
-        matched_album_name = ""
-
-        target_album_ids = set()
-        for sid, s in songs.items():
-            s_attrs = s.get("attributes", {})
-            s_dur = (s_attrs.get("durationInMillis") or 0) / 1000.0
-            if duration_seconds > 0 and s_dur > 0 and abs(s_dur - duration_seconds) > 4.5:
+        # Query storefront "vn" first (covers Vietnamese catalog and international releases), then "us"
+        for sf in ["vn", "us"]:
+            encoded_query = urllib.parse.quote(query)
+            search_url = (
+                f"https://amp-api-edge.music.apple.com/v1/catalog/{sf}/search?"
+                f"term={encoded_query}&types=songs&include[songs]=albums&format[resources]=map&extend=editorialVideo&limit=5&platform=web"
+            )
+            req = urllib.request.Request(
+                search_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Origin": "https://music.apple.com",
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            except Exception:
                 continue
-            rel_albums = s.get("relationships", {}).get("albums", {}).get("data", [])
-            for a_ref in rel_albums:
-                target_album_ids.add(a_ref.get("id"))
 
-        for aid in target_album_ids:
-            if aid in albums:
-                a_data = albums[aid]
-                ev = a_data.get("attributes", {}).get("editorialVideo", {})
-                if ev:
-                    matched_album_name = a_data.get("attributes", {}).get("name", "")
-                    for k in ["motionSquareVideo1x1", "motionDetailSquare", "motionDetailTall", "motionTallVideo3x4"]:
-                        if k in ev and "video" in ev[k]:
-                            found_video = ev[k]["video"]
-                            break
-                    if not found_video:
-                        for k, v in ev.items():
-                            if isinstance(v, dict) and "video" in v:
-                                found_video = v["video"]
+            albums = data.get("resources", {}).get("albums", {})
+            songs = data.get("resources", {}).get("songs", {})
+
+            candidates = []
+            for rank, (sid, s) in enumerate(songs.items()):
+                attrs = s.get("attributes", {})
+                cand_name = attrs.get("name", "")
+                cand_artist = attrs.get("artistName", "")
+
+                # 1. Artist MUST agree
+                if not artist_agrees(cand_artist, clean_artist):
+                    continue
+
+                # 2. Title MUST match
+                score = match_score(cand_name, clean_title)
+                if score is None:
+                    continue
+
+                cand_dur = (attrs.get("durationInMillis") or 0) / 1000.0
+                dur_misses = False
+                if duration_seconds > 0 and cand_dur > 0:
+                    if abs(cand_dur - duration_seconds) > 5.5:
+                        dur_misses = True
+
+                # 3. Check if any associated album of THIS SPECIFIC song has editorialVideo
+                rel_albums = s.get("relationships", {}).get("albums", {}).get("data", [])
+                has_artwork = False
+                matched_album_name = ""
+                found_video = None
+                album_hint_misses = False
+
+                for a_ref in rel_albums:
+                    aid = a_ref.get("id")
+                    if aid in albums:
+                        a_data = albums[aid]
+                        a_name = a_data.get("attributes", {}).get("name", "")
+                        if album_hint and a_name:
+                            alb_sc = match_score(a_name, album_hint)
+                            if not alb_sc or alb_sc[0] != 0:
+                                album_hint_misses = True
+
+                        ev = a_data.get("attributes", {}).get("editorialVideo", {})
+                        if ev:
+                            for k in ["motionSquareVideo1x1", "motionDetailSquare", "motionDetailTall", "motionTallVideo3x4"]:
+                                if k in ev and "video" in ev[k]:
+                                    found_video = ev[k]["video"]
+                                    break
+                            if not found_video:
+                                for k, v in ev.items():
+                                    if isinstance(v, dict) and "video" in v:
+                                        found_video = v["video"]
+                                        break
+                            if found_video:
+                                has_artwork = True
+                                matched_album_name = a_name
                                 break
-                    if found_video:
-                        break
 
-        if not found_video:
-            for aid, a_data in albums.items():
-                ev = a_data.get("attributes", {}).get("editorialVideo", {})
-                if ev:
-                    matched_album_name = a_data.get("attributes", {}).get("name", "")
-                    for k in ["motionSquareVideo1x1", "motionDetailSquare", "motionDetailTall", "motionTallVideo3x4"]:
-                        if k in ev and "video" in ev[k]:
-                            found_video = ev[k]["video"]
-                            break
-                    if not found_video:
-                        for k, v in ev.items():
-                            if isinstance(v, dict) and "video" in v:
-                                found_video = v["video"]
-                                break
-                    if found_video:
-                        break
+                # Penalty / Demote (SimpMusic formula: durationMisses=4, hintMisses=2, hasNoArtwork=1)
+                demote = (4 if dur_misses else 0) + (2 if album_hint_misses else 0) + (0 if has_artwork else 1)
+                tier, extra_len = score
+                candidates.append({
+                    "tier": tier,
+                    "extra_len": extra_len,
+                    "demote": demote,
+                    "rank": rank,
+                    "has_artwork": has_artwork,
+                    "album_name": matched_album_name,
+                    "video_url": found_video,
+                    "cand_name": cand_name,
+                    "cand_artist": cand_artist
+                })
 
-        if found_video:
-            rendition_url = select_am_rendition(found_video)
-            res = {
-                "found": True,
-                "video_url": rendition_url,
-                "master_url": found_video,
-                "album_name": matched_album_name,
-                "timestamp": time.time()
-            }
-        else:
-            res = {"found": False, "timestamp": time.time()}
+            if candidates:
+                # Rank candidates: tier -> extra_len -> demote -> rank
+                candidates.sort(key=lambda x: (x["tier"], x["extra_len"], x["demote"], x["rank"]))
+                best = candidates[0]
+                if best["has_artwork"] and best["video_url"]:
+                    rendition_url = select_am_rendition(best["video_url"])
+                    res = {
+                        "found": True,
+                        "video_url": rendition_url,
+                        "master_url": best["video_url"],
+                        "album_name": best["album_name"],
+                        "storefront": sf,
+                        "timestamp": time.time()
+                    }
+                    cached_data[cache_key] = res
+                    save_json(ANIMATED_ARTWORK_CACHE_FILE, cached_data)
+                    return res
+                else:
+                    # The genuine matched song's album has no animated artwork.
+                    # Do NOT fallback to random albums!
+                    res = {
+                        "found": False,
+                        "reason": "no_animated_artwork_on_album",
+                        "storefront": sf,
+                        "timestamp": time.time()
+                    }
+                    cached_data[cache_key] = res
+                    save_json(ANIMATED_ARTWORK_CACHE_FILE, cached_data)
+                    return res
 
+        # No candidate song matched across storefronts
+        res = {"found": False, "reason": "no_song_candidate_matched", "timestamp": time.time()}
         cached_data[cache_key] = res
         save_json(ANIMATED_ARTWORK_CACHE_FILE, cached_data)
         return res
+
     except Exception as e:
         sys.stderr.write(f"[Apple Music Animated Artwork Error for {title}]: {e}\n")
         return {"found": False, "error": str(e)}
@@ -2780,8 +2888,9 @@ if __name__ == "__main__":
     elif cmd == "animated_artwork" and len(sys.argv) > 2:
         title = sys.argv[2]
         artist = sys.argv[3] if len(sys.argv) > 3 else ""
-        dur = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
-        res = get_apple_music_animated_artwork(title, artist, dur)
+        dur = float(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 0.0
+        album_hint = sys.argv[5] if len(sys.argv) > 5 else ""
+        res = get_apple_music_animated_artwork(title, artist, dur, album_hint)
         print(json.dumps(res, ensure_ascii=False))
 
 

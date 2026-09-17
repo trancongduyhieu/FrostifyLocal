@@ -337,6 +337,15 @@ Item {
             return;
         }
 
+        var songAlbum = "";
+        if (root.track) {
+            if (root.track.album) {
+                songAlbum = (typeof root.track.album === "string") ? root.track.album : (root.track.album.name || "");
+            } else if (root.track.albumName) {
+                songAlbum = root.track.albumName;
+            }
+        }
+
         root.isLoadingAnimatedArtwork = true;
         amArtworkProc.running = false;
         amArtworkProc.command = [
@@ -345,7 +354,8 @@ Item {
             "animated_artwork",
             songTitle,
             songArtist,
-            String(dur)
+            String(dur),
+            songAlbum
         ];
         amArtworkProc.running = true;
     }
@@ -1417,60 +1427,96 @@ Item {
                             delegate: Rectangle {
                                 id: qRow
                                 width: queueListView.width
-                                height: 52
-                                radius: 8
+                                height: 48
+                                radius: 12
                                 readonly property bool isCurrent: root.track && (modelData.id === root.track.id || (modelData.videoId && modelData.videoId === root.track.videoId))
                                 color: isCurrent 
                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) 
-                                       : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
-                                border.color: isCurrent ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : "transparent"
+                                       : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(1, 1, 1, 0.02))
+                                border.color: isCurrent 
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                              : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07))
                                 border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 12
-                                    spacing: 12
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 10
+                                    spacing: 10
 
-                                    Rectangle {
+                                    Item {
                                         Layout.preferredWidth: 36
                                         Layout.preferredHeight: 36
-                                        radius: 6
-                                        color: "#222224"
-                                        clip: true
-
-                                        Image {
-                                            anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                        }
 
                                         Rectangle {
+                                            id: qCoverMask
                                             anchors.fill: parent
-                                            color: Qt.rgba(0, 0, 0, 0.55)
-                                            visible: qRow.isCurrent && root.isPlaying
+                                            radius: 6
+                                            color: "#ffffff"
+                                            visible: false
+                                            layer.enabled: true
+                                        }
 
-                                            Row {
-                                                anchors.centerIn: parent
-                                                spacing: 2
-                                                Repeater {
-                                                    model: 3
-                                                    Rectangle {
-                                                        width: 2.5
-                                                        height: 10 + (index % 2) * 5
-                                                        radius: 1.2
-                                                        color: root.accentColor
-                                                        SequentialAnimation on height {
-                                                            running: qRow.isCurrent && root.isPlaying
-                                                            loops: Animation.Infinite
-                                                            NumberAnimation { from: 4; to: 14; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
-                                                            NumberAnimation { from: 14; to: 4; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
+                                        Item {
+                                            anchors.fill: parent
+                                            layer.enabled: true
+                                            layer.effect: MultiEffect {
+                                                maskEnabled: true
+                                                maskSource: qCoverMask
+                                                autoPaddingEnabled: false
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: "#222224"
+                                            }
+
+                                            Image {
+                                                anchors.fill: parent
+                                                source: modelData.image || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                                                transformOrigin: Item.Center
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: Qt.rgba(0, 0, 0, 0.55)
+                                                visible: qRow.isCurrent && root.isPlaying
+
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 2
+                                                    Repeater {
+                                                        model: 3
+                                                        Rectangle {
+                                                            width: 2.5
+                                                            height: 10 + (index % 2) * 5
+                                                            radius: 1.2
+                                                            color: root.accentColor
+                                                            SequentialAnimation on height {
+                                                                running: qRow.isCurrent && root.isPlaying
+                                                                loops: Animation.Infinite
+                                                                NumberAnimation { from: 4; to: 14; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
+                                                                NumberAnimation { from: 14; to: 4; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        // 1px Hairline Border Overlay on top of cover image
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: "transparent"
+                                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                            border.width: 1
+                                            z: 2
                                         }
                                     }
 

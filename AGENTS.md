@@ -59,6 +59,7 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
 >        - *Trạng thái tĩnh*: Nền đỏ hoa hồng dịu `Qt.rgba(244, 63, 94, 0.12)`, viền mảnh `Qt.rgba(244, 63, 94, 0.26)`, text màu hồng đào `#fda4af`.
 >        - *Trạng thái hover*: Nền đỏ hoa hồng ấm `Qt.rgba(239, 68, 68, 0.24)`, viền `Qt.rgba(239, 68, 68, 0.48)`, text trắng hồng `#ffe4e6`.
 >    - **Quy Chuẩn Avatar Người Dùng**: Bắt buộc bo góc mượt mà bằng `MultiEffect` (`maskEnabled: true`), ảnh đại diện fill 100% diện tích không tạo viền đệm (moat/margin) trống gây lỗi render màu đen ở 4 góc, kết hợp viền hairline 1px trực tiếp trên mép ảnh theo công thức bo góc đồng tâm $R_{\text{trong}} = R_{\text{ngoài}} - \text{border.width}$.
+>    - **Quy Chuẩn Danh Sách Hàng Đợi Tiếp Theo (Queue Track Items)**: Tuân thủ công thức bo góc đồng tâm $R_{\text{con}} = R_{\text{mẹ}} - \text{Padding}$ ($R_{\text{mẹ}} = 12\text{px}$, Padding $6\text{px}$, $R_{\text{ảnh}} = 6\text{px}$) kết hợp viền Hairline Border 1px (`rgba(1, 1, 1, 0.07)` tĩnh, `0.18` hover, `accent 0.45` bài đang phát) cho toàn bộ bài hát trên tất cả các Mood chips, có viền hairline 1px mép ảnh bìa, không để các bài khác trôi nổi không viền.
 
 ---
 
@@ -919,10 +920,18 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
     - **Kiến Trúc Tích Hợp Đa Tầng (SimpMusic Footgun #212 & Apple Music HLS Video Stream)**:
       - *Mô hình hoạt động*: Kế thừa giải pháp kỹ thuật từ SimpMusic (`getAMAnimatedArtwork` trong `LyricsCanvasRepositoryImpl.kt` và `NowPlayingContentAppleMusic.kt`).
       - *Backend Daemon (`backend/ytmusic_helper.py`)*:
-        - Hàm `get_apple_music_animated_artwork(title, artist, duration_seconds)`:
+        - Hàm `get_apple_music_animated_artwork(title, artist, duration_seconds, album_hint)`:
         - Bóc tách token web player Apple Music từ `music.apple.com/assets/index~*.js`.
-        - Truy vấn Search API Apple Music: `https://amp-api-edge.music.apple.com/v1/catalog/us/search?term=...&types=songs&include[songs]=albums&format[resources]=map&extend=editorialVideo`.
-        - So khớp chính xác bài hát dựa trên thời lượng (sai số $\le 4.5\text{s}$) và bóc tách thuộc tính `editorialVideo` từ album quan hệ (`relationships.albums.data`).
+        - **Khắc phục triệt để lỗi gán nhầm bìa động (SimpMusic pickSongMatch Architecture - Zero False Positives)**:
+          - *Nguyên nhân lỗi cũ*: Search API của Apple Music trả về danh sách bài hát và album theo độ phổ biến (ranking) chứ không phải đáp án chính xác. Mã nguồn cũ trước đây không lọc tên bài hát và nghệ sĩ trên tập bài hát trả về, đồng thời có vòng lặp fallback duyệt qua toàn bộ `albums.items()` để lấy bất kỳ album nào có `editorialVideo`. Điều này khiến các bài hát như *"Anh Sai Rồi"* (Sơn Tùng) bị gán nhầm bìa *"Come My Way"*, và *"Em Của Ngày Hôm Qua"* bị gán nhầm bìa *"Show Của Đen"* (Đen Vâu).
+          - *Thuật toán bảo vệ đa tầng theo SimpMusic*:
+            1. `clean_for_search(text)`: Loại bỏ các thẻ phụ đề `(feat. ...)`, `[Official MV]`, `(Lyrics)`...
+            2. `normalize_for_match(text)`: Giữ lại toàn bộ ký tự chữ cái (hỗ trợ Unicode tiếng Việt đầy đủ) và số qua `c.isalnum()`, thay dấu câu bằng khoảng trắng.
+            3. `artist_agrees(cand_artist, query_artist)`: Kiểm tra độ đồng điệu của nghệ sĩ (`matches_loosely` và tập hợp từ $\ge 50\%$).
+            4. `match_score(candidate, subject)`: Phân cấp độ khớp tên bài hát thành 4 Tier (0: Trùng khớp tuyệt đối; 1: Bắt đầu bằng tiền tố; 2: Chứa chuỗi con; 3: Chuỗi cha). Nếu không thuộc 4 Tier này $\rightarrow$ Loại bỏ ngay lập tức.
+            5. `demote`: Phạt điểm nếu thời lượng lệch $> 5.5\text{s}$ (+4 điểm) hoặc không khớp `album_hint` (+2 điểm) hoặc album không có bìa động (+1 điểm).
+            6. **Chỉ kiểm tra `editorialVideo` trên album thuộc về bài hát được chọn**: Tuyệt đối không fallback sang các album trôi nổi khác trong response. Nếu bài hát trùng khớp không có bìa động $\rightarrow$ Trả về `{"found": false}` ngay lập tức để giao diện hiển thị ảnh bìa tĩnh mượt mà.
+            7. **Ưu tiên Storefront kép (`vn` $\rightarrow$ `us`)**: Truy vấn kho `vn` trước (đầy đủ ca khúc Việt Nam lẫn quốc tế chất lượng cao), nếu không có bài hát trùng khớp mới fallback sang `us`.
         - Chọn rendition HLS video `.m3u8` chất lượng cao 768x768 AVC1 qua hàm `select_am_rendition(master_url)` và lưu đệm 7 ngày vào `~/.cache/nutsty/animated_artworks.json`.
       - *Frontend Render Engine (`components/YTMusicNowPlayingView.qml`)*:
         - **Khắc phục lỗi thiếu `videoOutput`**: Trong Qt 6 `QtMultimedia`, `MediaPlayer` bắt buộc phải khai báo thuộc tính `videoOutput: amVideoOutput`. Nếu thiếu thuộc tính này, `MediaPlayer` không thể truyền video frames tới `VideoOutput`, dẫn đến việc video không hiển thị.
