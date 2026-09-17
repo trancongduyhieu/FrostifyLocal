@@ -90,18 +90,6 @@ Rectangle {
         return list;
     }
 
-    // Subtle top ambient gradient (clean acrylic SimpMusic style, no heavy purple)
-    Rectangle {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: 200
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(1.0, 1.0, 1.0, 0.03) }
-            GradientStop { position: 1.0; color: "transparent" }
-        }
-    }
-
     Flickable {
         id: scrollArea
         anchors.fill: parent

@@ -145,7 +145,18 @@ Tài liệu đặc tả toàn diện về kiến trúc, cấu trúc thư mục, 
    - File hook: `~/.config/noctalia/apply_theme.sh`.
    - `palette_extractor.py` chạy ngầm song song (`&`) ngay từ đầu để xuất `nutsty_palette.json` trong ~0.3s.
    - `~/.config/quickshell/noctalia-shell/Commons/Color.qml`: `frostifyPaletteWatcher` gọi `reload()` trước và dùng `delayedNutstyTimer` (200ms) để đọc dữ liệu khi đĩa đã nạp xong, giúp Waybar và Desktop Lyrics đổi màu đồng bộ 100% ngay từ lần đổi hình nền đầu tiên.
-8. **Kho Mã Nguồn Tham Khảo Bên Ngoài (External Reference Repositories)**:
+8. **Cơ Chế Bảo Toàn Danh Sách Bài Hát Album Khi Chuyển Đổi Mood Chips (Preserved Album Queue on Mood Chips)**:
+   - File: `components/YTMusicNowPlayingView.qml`.
+   - Lưu trữ danh sách bài hát gốc `originalAlbumQueue` khi phát từ album hoặc danh sách phát cộng đồng (`playingPlaylistTitle !== "Queue"` && `!== "Home"`).
+   - Khi chuyển sang các tag phụ ("Khám phá", "Lãng mạn"...), nạp radio YouTube Music tương ứng với mood.
+   - Khi bấm quay lại tag "Tất cả" (`index 0`), hệ thống khôi phục ngay lập tức danh sách bài hát gốc của album vào `win.currentTracks` và phát tín hiệu `queueUpdated` mà không gọi API radio.
+   - Chặn `moodChipsProc` tự động gọi `loadQueueForChipIndex` khi đang phát album/playlist để bảo đảm hàng đợi ban đầu không bị ghi đè.
+9. **Cơ Chế Duy Trì Màu Sắc & Phông Nền Động Khi Tạm Dừng (Persistent Backdrop Atmosphere & Song Accent on Pause)**:
+   - File: `shell.qml` và `components/MainTrackGrid.qml`.
+   - Ràng buộc `effectiveAccentColor`, `playingBackdropCover`, `fallbackPlayingImg`, và `nutstySurfaceArtwork` theo `win.currentTrack` thay vì phụ thuộc vào `win.isPlaying`.
+   - Khi người dùng bấm tạm dừng bài hát, toàn bộ màu accent điểm nhấn và lớp phông nền mờ aurora velvet của bài hát vẫn được duy trì nguyên vẹn, không bị mất màu hay chớp giật về hình nền desktop.
+   - Xóa bỏ khối gradient trắng 200px cục bộ khỏi `MainTrackGrid.qml` và tối ưu hóa dải scrim tối hữu cơ trong `shell.qml` để ngăn hiện tượng bìa album sáng màu bị lóa sương trắng.
+10. **Kho Mã Nguồn Tham Khảo Bên Ngoài (External Reference Repositories)**:
    - **Nutsty**: `/home/apple/Applications/Nutsty/`
      - Dùng để tham khảo logic Context Menu (Play Next, Add to Queue, Delete), Playback Tracking (`videostatsPlaybackUrl`, `atrUrl`, `videostatsWatchtimeUrl`) và Return YouTube Dislike API.
    - **SimpMusic**: `/home/apple/Applications/SimpMusic/` (Compose Multiplatform / Jetpack Compose / Skiko)

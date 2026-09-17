@@ -84,7 +84,7 @@ Scope {
     property var followedArtists: []
     property color wallpaperAccentColor: "#f4afb3"
     property color songAccentColor: "#f4afb3"
-    readonly property color effectiveAccentColor: (win.currentTrack && win.isPlaying) ? win.songAccentColor : win.wallpaperAccentColor
+    readonly property color effectiveAccentColor: win.currentTrack ? win.songAccentColor : win.wallpaperAccentColor
     property color accentColor: effectiveAccentColor
     Behavior on accentColor {
         ColorAnimation {
@@ -1083,7 +1083,7 @@ Scope {
             anchors.fill: parent
             z: 0
             visible: opacity > 0.001
-            opacity: (win.isNowPlayingOpen && win.currentTrack) ? 1.0 : 0.0
+            opacity: win.currentTrack ? 1.0 : 0.0
             Behavior on opacity {
                 NumberAnimation {
                     duration: 450
@@ -1128,17 +1128,17 @@ Scope {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.85) : Qt.rgba(0.02, 0.02, 0.04, 0.72)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.88) : Qt.rgba(0.02, 0.02, 0.04, 0.78)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.90) : Qt.rgba(0.01, 0.01, 0.02, 0.80)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.92) : Qt.rgba(0.01, 0.01, 0.02, 0.84)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.96) : Qt.rgba(0.01, 0.01, 0.02, 0.88)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.96) : Qt.rgba(0.01, 0.01, 0.02, 0.90)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }
@@ -1240,7 +1240,7 @@ Scope {
                         source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
-                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
+                        opacity: win.currentTrack ? 1.0 : 0.0
                         Behavior on opacity {
                             NumberAnimation {
                                 duration: 900
@@ -1293,7 +1293,7 @@ Scope {
             // 2. Active Song Atmosphere Aurora Glow (when playing)
             Item {
                 anchors.fill: parent
-                opacity: (win.currentTrack && win.isPlaying) ? 0.70 : 0.0
+                opacity: win.currentTrack ? 0.70 : 0.0
                 Behavior on opacity {
                     NumberAnimation { duration: 450; easing.type: Easing.InOutQuad }
                 }
@@ -2608,6 +2608,7 @@ Scope {
         function setSortByInAlbum(s: string) { frostifyIpc.setSortByInAlbum(s); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
+        function playBrowsingTrack(idx: int) { frostifyIpc.playBrowsingTrack(idx); }
         function playTrackObj(title: string, artist: string, image: string, path: string) { frostifyIpc.playTrackObj(title, artist, image, path); }
         function switchNowPlayingTab(tab: string) { frostifyIpc.switchNowPlayingTab(tab); }
         function selectNowPlayingMood(index: int) { frostifyIpc.selectNowPlayingMood(index); }
@@ -2719,6 +2720,11 @@ Scope {
             if (win.allTracks && idx >= 0 && idx < win.allTracks.length) {
                 win.currentTracks = win.allTracks;
                 win.playTrack(win.allTracks[idx]);
+            }
+        }
+        function playBrowsingTrack(idx: int) {
+            if (win.browsingTracks && idx >= 0 && idx < win.browsingTracks.length) {
+                mainGrid.trackPlayRequested(win.browsingTracks[idx]);
             }
         }
         function togglePlay() {
