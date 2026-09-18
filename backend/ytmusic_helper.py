@@ -2909,11 +2909,8 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
         clean_yt = fallback_url.split("?")[0]
         fallback_url = re.sub(r'(hqdefault|mqdefault|sddefault|default)\.jpg', 'maxresdefault.jpg', clean_yt)
 
-    res = {"url": fallback_url, "is_square": False, "match": "fallback"}
-    if cache_key:
-        _get_square_covers_cache()[cache_key] = res
-        _save_square_covers_cache()
-    return res
+    # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
+    return {"url": fallback_url, "is_square": False, "match": "fallback"}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

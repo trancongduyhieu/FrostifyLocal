@@ -241,6 +241,15 @@ Item {
         var tArtist = (trk.artist || "").trim();
         var tVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         var tImg = trk.image || "";
+
+        // If videoId is missing, extract it directly from YouTube image URL
+        if (!tVid && tImg && tImg.indexOf("i.ytimg.com") !== -1) {
+            var m = tImg.match(/vi\/([a-zA-Z0-9_-]{11})\//);
+            if (m && m[1]) {
+                tVid = m[1];
+            }
+        }
+
         var coverKey = (tVid ? tVid : (tTitle + "_" + tArtist));
 
         if (root.lastResolvedCoverKey === coverKey && root.resolvedSquareImage !== "") {
@@ -257,8 +266,8 @@ Item {
             return;
         }
 
-        // For local tracks: embedded art is typically already 1:1 square
-        if (trk.path && !trk.path.startsWith("ytdl://") && !tVid) {
+        // Local embedded artwork file (extracted jpg/png in local filesystem)
+        if (tImg && (tImg.startsWith("/") || tImg.startsWith("file://"))) {
             root.resolvedSquareImage = tImg;
             root.resolvedIsSquare = true;
             root.squareCoverResolved(tImg, true);
@@ -771,7 +780,7 @@ Item {
                             fillMode: Image.PreserveAspectCrop
                             scale: (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
                                    ? 1.0
-                                   : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0)
+                                   : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.25)) ? 1.48 : 1.0)
                             Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                             transformOrigin: Item.Center
                             asynchronous: true

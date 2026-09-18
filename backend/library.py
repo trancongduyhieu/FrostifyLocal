@@ -113,7 +113,10 @@ def scan_library():
                 if not t_title or not v_id:
                     continue
                 t_clean = t_title.strip().lower()
-                thumb_url = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+                thumb_url = thumb_json if (thumb_json and ("googleusercontent.com" in thumb_json or "ggpht.com" in thumb_json)) else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+                if "googleusercontent.com" in thumb_url or "ggpht.com" in thumb_url:
+                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
+                info = (thumb_url, v_id)
                 artists = []
                 if a_name:
                     try:
@@ -125,8 +128,8 @@ def scan_library():
                     except Exception:
                         artists = [a_name.strip().lower()]
                 for art in artists:
-                    title_artist_map[(t_clean, art)] = thumb_url
-                title_map[t_clean] = thumb_url
+                    title_artist_map[(t_clean, art)] = info
+                title_map[t_clean] = info
             conn.close()
         except Exception as e:
             print("DB read error:", e)
@@ -143,17 +146,18 @@ def scan_library():
             if (lower_t, sub_a) in title_artist_map:
                 return title_artist_map[(lower_t, sub_a)]
 
-        # 2. Exact title match ONLY when artist is generic/unknown
-        if lower_a in ("", "downloaded", "single", "unknown") and lower_t in title_map:
-            return title_map[lower_t]
+        # 2. Match by artist + loose title
+        for (m_title, m_art), val in title_artist_map.items():
+            if m_art == lower_a or m_art in lower_a or lower_a in m_art:
+                if m_title in lower_t or lower_t in m_title:
+                    return val
 
         # 3. Cleaned title match (without brackets/extra notes)
-        if lower_a in ("", "downloaded", "single", "unknown"):
-            c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
-            if c_title in title_map:
-                return title_map[c_title]
+        c_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', lower_t).strip()
+        if c_title in title_map:
+            return title_map[c_title]
 
-        return ""
+        return ("", "")
     
     # 1. Scan Nutsty local library
     if os.path.exists(LOCAL_DIR):
@@ -170,8 +174,9 @@ def scan_library():
                 # Priority 1: Real embedded album art inside file
                 thumb = extract_embedded_cover(full_path)
                 # Priority 2: DB thumbnail match
+                db_thumb, db_vid = find_thumbnail(title, artist)
                 if not thumb:
-                    thumb = find_thumbnail(title, artist)
+                    thumb = db_thumb
 
                 try:
                     mtime = int(os.path.getmtime(full_path))
@@ -191,6 +196,7 @@ def scan_library():
                     "filename": f,
                     "duration": dur,
                     "image": thumb,
+                    "videoId": db_vid,
                     "mtime": mtime
                 })
 
@@ -218,8 +224,9 @@ def scan_library():
                 # Priority 1: Real embedded album art inside file
                 thumb = extract_embedded_cover(full_path)
                 # Priority 2: DB thumbnail match
+                db_thumb, db_vid = find_thumbnail(title, artist)
                 if not thumb:
-                    thumb = find_thumbnail(title, artist)
+                    thumb = db_thumb
 
                 try:
                     mtime = int(os.path.getmtime(full_path))
@@ -242,6 +249,7 @@ def scan_library():
                     "filename": f,
                     "duration": dur,
                     "image": thumb,
+                    "videoId": db_vid,
                     "mtime": mtime
                 })
 
