@@ -386,15 +386,15 @@ class DownloadManager:
             "progress_hooks": [progress_hook],
         }
 
-        attempts = [base_opts]
-
-        # Tier 2: Try with exported cookies if user has authenticated
+        attempts = []
         cookie_file = self._get_exported_cookie_file()
         if cookie_file:
             auth_opts = dict(base_opts)
             auth_opts["cookiefile"] = cookie_file
             auth_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
             attempts.append(auth_opts)
+
+        attempts.append(base_opts)
 
         # Tier 3: Browser cookie extraction fallback
         for browser in ["firefox", "chrome", "chromium", "brave"]:

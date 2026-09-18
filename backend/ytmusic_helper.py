@@ -1929,6 +1929,29 @@ QUALITY_ITAG_PRIORITIES = {
     "low": [250, 251, 140, 141, 774]
 }
 
+def get_exported_cookie_file():
+    if not os.path.exists(AUTH_FILE):
+        return None
+    try:
+        data = load_json(AUTH_FILE, {})
+        raw_cookie = data.get("cookie", "")
+        if not raw_cookie:
+            return None
+        out_path = "/tmp/nutsty_yt_cookies.txt"
+        now = int(time.time()) + 365 * 86400
+        lines = ["# Netscape HTTP Cookie File\n"]
+        for item in raw_cookie.split(";"):
+            item = item.strip()
+            if not item or "=" not in item:
+                continue
+            k, v = item.split("=", 1)
+            lines.append(f".youtube.com\tTRUE\t/\tTRUE\t{now}\t{k.strip()}\t{v.strip()}\n")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        return out_path
+    except Exception:
+        return None
+
 def resolve_stream_url(video_id, quality=None):
     if not video_id:
         return None
@@ -1954,7 +1977,11 @@ def resolve_stream_url(video_id, quality=None):
     cache_key = f"{video_id}_{quality}"
 
     cache = load_json(STREAM_CACHE_FILE, {})
-    cached = cache.get(cache_key) or cache.get(video_id)
+    cached = cache.get(cache_key)
+    if not cached:
+        legacy = cache.get(video_id)
+        if legacy and legacy.get("quality") == quality:
+            cached = legacy
     now = time.time()
 
     if cached and (now - cached.get("timestamp", 0)) < 10800:
@@ -1963,11 +1990,16 @@ def resolve_stream_url(video_id, quality=None):
     try:
         import yt_dlp
 
+        cookie_file = get_exported_cookie_file()
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}
         }
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
+            ydl_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
+        else:
+            ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
