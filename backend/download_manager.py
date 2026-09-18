@@ -432,7 +432,7 @@ class DownloadManager:
                     self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
 
                 # Trigger library re-index so the new track appears in Nutsty 0ms
-                self._trigger_library_rescan()
+                self._trigger_library_rescan(downloaded_file, task.get("title", ""), task.get("artist", ""), video_id, task.get("thumbnail", ""))
                 return True
 
             except Exception as e:
@@ -462,7 +462,7 @@ class DownloadManager:
                     task["progress"] = 100.0
                     task["path"] = downloaded_file
                 self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
-                self._trigger_library_rescan()
+                self._trigger_library_rescan(downloaded_file, task.get("title", ""), task.get("artist", ""), video_id, task.get("thumbnail", ""))
                 return True
 
         with self.lock:
@@ -498,13 +498,28 @@ class DownloadManager:
         except Exception:
             pass
 
-    def _trigger_library_rescan(self):
-        try:
-            lib_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.py")
-            if os.path.exists(lib_script):
-                subprocess.run(["python3", lib_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
-        except Exception:
-            pass
+    def _trigger_library_rescan(self, audio_path="", title="", artist="", video_id="", image=""):
+        # 1. Instant single-track add into library.json (<5ms)
+        if audio_path and os.path.exists(audio_path):
+            try:
+                backend_dir = os.path.dirname(os.path.abspath(__file__))
+                if backend_dir not in sys.path:
+                    sys.path.insert(0, backend_dir)
+                import library
+                library.add_track(audio_path, title=title, artist=artist, video_id=video_id, image=image)
+                return
+            except Exception as e:
+                print(f"[DownloadManager] add_track error: {e}", file=sys.stderr)
+
+        # 2. Asynchronous full scan in background thread if single track add was not possible
+        def do_rescan():
+            try:
+                lib_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.py")
+                if os.path.exists(lib_script):
+                    subprocess.run(["python3", lib_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+            except Exception:
+                pass
+        threading.Thread(target=do_rescan, daemon=True).start()
 
 def run_daemon():
     """Run resident download daemon listening on Unix domain socket & printing stdout events"""

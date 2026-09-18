@@ -327,6 +327,69 @@ def delete_track(path="", filename="", title=""):
         print(json.dumps({"success": True, "deleted_files": deleted_files, "remaining_tracks": 0}))
         return True
 
+def add_track(audio_path, title="", artist="", video_id="", image=""):
+    """Instantly adds or updates a single downloaded track in library.json (0ms latency)."""
+    if not audio_path or not os.path.exists(audio_path):
+        return None
+
+    dur_str, _ = get_duration(audio_path)
+    meta = get_file_metadata(audio_path)
+    final_title = title or meta.get("title") or os.path.splitext(os.path.basename(audio_path))[0]
+    final_artist = artist or meta.get("artist") or "Unknown Artist"
+    cover = image or extract_embedded_cover(audio_path)
+    try:
+        mtime = int(os.path.getmtime(audio_path))
+    except Exception:
+        mtime = int(time.time())
+
+    tracks = []
+    if os.path.exists(OUT_JSON):
+        try:
+            with open(OUT_JSON, "r", encoding="utf-8") as f:
+                tracks = json.load(f)
+        except Exception:
+            tracks = []
+
+    # If track exists, update metadata
+    for t in tracks:
+        if t.get("path") == audio_path or t.get("filename") == os.path.basename(audio_path):
+            t["title"] = final_title
+            t["name"] = final_title
+            t["artist"] = final_artist
+            t["duration"] = dur_str
+            t["mtime"] = mtime
+            if cover:
+                t["image"] = cover
+            if video_id:
+                t["videoId"] = video_id
+            tmp_json = OUT_JSON + ".tmp"
+            with open(tmp_json, "w", encoding="utf-8") as f:
+                json.dump(tracks, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_json, OUT_JSON)
+            return t
+
+    new_track = {
+        "id": len(tracks) + 1,
+        "title": final_title,
+        "name": final_title,
+        "artist": final_artist,
+        "source": "Downloads",
+        "path": audio_path,
+        "filename": os.path.basename(audio_path),
+        "duration": dur_str,
+        "image": cover,
+        "videoId": video_id or "",
+        "mtime": mtime
+    }
+    tracks.insert(0, new_track)
+
+    tmp_json = OUT_JSON + ".tmp"
+    with open(tmp_json, "w", encoding="utf-8") as f:
+        json.dump(tracks, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_json, OUT_JSON)
+    print(f"Instantly indexed '{final_title}' into {OUT_JSON} (total {len(tracks)} tracks)")
+    return new_track
+
 def batch_delete_tracks(paths):
     deleted_files = []
     if not isinstance(paths, list):
@@ -434,6 +497,13 @@ if __name__ == "__main__":
         fn = sys.argv[3] if len(sys.argv) > 3 else ""
         t = sys.argv[4] if len(sys.argv) > 4 else ""
         delete_track(p, fn, t)
+    elif len(sys.argv) > 1 and sys.argv[1] == "add" and len(sys.argv) > 2:
+        audio_path = sys.argv[2]
+        title = sys.argv[3] if len(sys.argv) > 3 else ""
+        artist = sys.argv[4] if len(sys.argv) > 4 else ""
+        vid = sys.argv[5] if len(sys.argv) > 5 else ""
+        img = sys.argv[6] if len(sys.argv) > 6 else ""
+        add_track(audio_path, title, artist, vid, img)
     elif len(sys.argv) > 1 and sys.argv[1] == "batch_delete" and len(sys.argv) > 2:
         batch_delete_tracks(sys.argv[2])
     elif len(sys.argv) > 1 and sys.argv[1] == "albums":

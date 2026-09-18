@@ -37,9 +37,17 @@ def ensure_mpv():
     try:
         # Check if socket is active
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(0.6)
         s.connect(MPV_SOCKET)
         s.close()
         return True
+    except Exception:
+        pass
+
+    # If socket connection failed, clean up any zombie/stuck mpv with nutsty-audio
+    try:
+        subprocess.run(["pkill", "-f", "title=nutsty-audio"], capture_output=True)
+        time.sleep(0.1)
     except Exception:
         pass
 
@@ -80,11 +88,12 @@ def ensure_mpv():
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     # Wait for socket to appear
-    for _ in range(20):
+    for _ in range(25):
         time.sleep(0.1)
         if os.path.exists(MPV_SOCKET):
             try:
                 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(0.6)
                 s.connect(MPV_SOCKET)
                 s.close()
                 return True
@@ -97,7 +106,7 @@ def send_mpv_cmd(command_args):
     ensure_mpv()
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(0.5)
+        s.settimeout(1.5)
         s.connect(MPV_SOCKET)
         payload = json.dumps({"command": command_args}) + "\n"
         s.sendall(payload.encode("utf-8"))
@@ -277,6 +286,7 @@ def main():
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path)
+        send_mpv_cmd(["set_property", "pause", False])
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
@@ -365,14 +375,33 @@ def main():
                 print("MPV is idle and no track specified")
         else:
             is_paused = get_mpv_property("pause")
-            send_mpv_cmd(["set_property", "pause", not is_paused])
-            print("Toggled pause to:", not is_paused)
+            new_paused = not is_paused
+            send_mpv_cmd(["set_property", "pause", new_paused])
+            state_file = "/tmp/nutsty_playback_state.json"
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "paused" if new_paused else "playing", "timestamp": time.time()}, f)
+            except Exception:
+                pass
+            print("Toggled pause to:", new_paused)
 
     elif action == "pause":
         send_mpv_cmd(["set_property", "pause", True])
+        state_file = "/tmp/nutsty_playback_state.json"
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "paused", "timestamp": time.time()}, f)
+        except Exception:
+            pass
 
     elif action == "resume":
         send_mpv_cmd(["set_property", "pause", False])
+        state_file = "/tmp/nutsty_playback_state.json"
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "playing", "timestamp": time.time()}, f)
+        except Exception:
+            pass
 
     elif action == "stop":
         send_mpv_cmd(["stop"])
@@ -412,11 +441,12 @@ def main():
 
         is_loading = False
         state_file = "/tmp/nutsty_playback_state.json"
+        st = {}
         if os.path.exists(state_file):
             try:
                 with open(state_file, "r", encoding="utf-8") as f:
                     st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 10.0:
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 35.0:
                         is_loading = True
             except Exception:
                 pass
@@ -432,6 +462,12 @@ def main():
             is_loading = False
 
         has_file = bool(path and not idle) and not is_loading
+
+        # Self-healing unpause: if state was recently marked 'playing' (<25s), but MPV is paused during stream load
+        if st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 25.0:
+            if pause is True and (path and not idle):
+                send_mpv_cmd(["set_property", "pause", False])
+                pause = False
 
         status = {
             "is_playing": (pause is False) and has_file,

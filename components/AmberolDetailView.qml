@@ -244,9 +244,10 @@ Rectangle {
 
     function fetchAudioSpecs() {
         audioSpecsProc.running = false;
+        var daemonPath = (typeof win !== "undefined" && win.appDir) ? (win.appDir + "/backend/player_daemon.py") : (Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/player_daemon.py");
         audioSpecsProc.command = [
             "python3", "-u",
-            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/player_daemon.py",
+            daemonPath,
             "audio_specs"
         ];
         audioSpecsProc.running = true;

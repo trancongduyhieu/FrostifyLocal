@@ -1090,6 +1090,12 @@ Scope {
         onActivated: win.maximized = !win.maximized
     }
 
+    Shortcut {
+        sequence: "Space"
+        enabled: !((searchView && searchView.isInputActiveFocus) || (win.activeFocusItem && (win.activeFocusItem.hasOwnProperty("cursorPosition") || win.activeFocusItem.hasOwnProperty("selectedText"))))
+        onActivated: win.togglePlay()
+    }
+
     Component.onCompleted: {
         win.loadHomeFeed();
         win.checkAuthStatus();
@@ -1106,6 +1112,14 @@ Scope {
         border.color: "transparent"
         border.width: 0
         clip: true
+        focus: true
+
+        Keys.onSpacePressed: event => {
+            if (!((searchView && searchView.isInputActiveFocus) || (win.activeFocusItem && (win.activeFocusItem.hasOwnProperty("cursorPosition") || win.activeFocusItem.hasOwnProperty("selectedText"))))) {
+                win.togglePlay();
+                event.accepted = true;
+            }
+        }
 
         // =====================================================================
         // Dynamic Playing Backdrop Cover:
@@ -1508,7 +1522,6 @@ Scope {
                     mainGrid.downloadsSubTab = "tracks";
                     libLoader.reload();
                     win.browsingTracks = win.allTracks;
-                    if (mainGrid) mainGrid.tracks = win.browsingTracks;
                     win.mainSectionTitle = "Downloads";
                     mainGrid.sectionTitle = "Downloads";
                     win.refreshLocalAlbums();
@@ -2295,11 +2308,8 @@ Scope {
         onLoaded: {
             win.playlists = (libLoader.playlists || []).concat(win.customPlaylists || []);
             win.allTracks = libLoader.allTracks;
-            if (win.currentView === "library" || !win.browsingTracks || win.browsingTracks.length === 0) {
+            if (win.currentView === "library") {
                 win.browsingTracks = win.allTracks;
-            }
-            if (mainGrid && win.currentView === "library") {
-                mainGrid.tracks = win.browsingTracks;
             }
             // Do not auto-populate win.currentTracks with allTracks!
             // Queue remains empty until user explicitly clicks a track, album or playlist.
@@ -2833,15 +2843,22 @@ Scope {
                         // 1. Daemon says is_loading, OR
                         // 2. Not enough time elapsed (< 400ms), OR
                         // 3. MPV hasn't started playing positive time (time_pos <= 0)
-                        if ((s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) && elapsed < 12000) {
+                        if ((s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) && elapsed < 35000) {
                             win.currentTime = 0.0;
                             return;
                         }
                         // New track has begun streaming and playing!
                         win.isLoadingAudio = false;
-                        win.currentTime = s.time_pos;
+                        win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        if (s.time_pos && s.time_pos > 0) {
+                            win.isPlaying = true;
+                            if (s.is_paused) {
+                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                            }
+                        } else {
+                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        }
                     } else {
                         if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         if (s.time_pos !== undefined && s.time_pos > 0) {
@@ -2908,6 +2925,7 @@ Scope {
         function closeContextMenu() { frostifyIpc.closeContextMenu(); }
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
         function openAlbum(browseId: string) { frostifyIpc.openAlbum(browseId); }
+        function openPlaylist(pid: string, title: string) { frostifyIpc.openPlaylist(pid, title); }
         function setSortByInAlbum(s: string) { frostifyIpc.setSortByInAlbum(s); }
         function goBackFromArtist() { frostifyIpc.goBackFromArtist(); }
         function playTrackByIndex(idx: int) { frostifyIpc.playTrackByIndex(idx); }
@@ -3002,7 +3020,6 @@ Scope {
             win.currentView = "library";
             libLoader.reload();
             win.browsingTracks = win.allTracks;
-            if (mainGrid) mainGrid.tracks = win.browsingTracks;
             mainGrid.downloadsSubTab = "tracks";
             mainGrid.sectionTitle = "Downloads";
         }
@@ -3034,6 +3051,11 @@ Scope {
             win.visible = true;
             win.isNowPlayingOpen = false;
             win.loadAlbumDetails(browseId);
+        }
+        function openPlaylist(pid: string, title: string) {
+            win.visible = true;
+            win.isNowPlayingOpen = false;
+            win.loadPlaylistTracks({ id: pid, playlistId: pid, browseId: pid, title: title || "Playlist" });
         }
         function setSortByInAlbum(s: string) {
             mainGrid.sortBy = s;

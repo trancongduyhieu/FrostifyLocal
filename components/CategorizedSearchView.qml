@@ -20,6 +20,7 @@ Rectangle {
     property var currentTrack: null
     property bool isPlaying: false
     property alias searchInputText: searchTextInput.text
+    readonly property bool isInputActiveFocus: searchTextInput ? searchTextInput.activeFocus : false
     property Item backgroundSourceItem: null
 
     // Persistent Search History (MRU max 20)
