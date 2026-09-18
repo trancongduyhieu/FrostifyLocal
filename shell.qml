@@ -76,6 +76,9 @@ Scope {
     property bool showSidebar: true
     property var friendsNotes: []
     property var myLatestNote: null
+    property var listeningAlongFriend: null
+    property string toastMessage: ""
+    property bool toastVisible: false
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
@@ -681,15 +684,53 @@ Scope {
         }
     }
 
+    Process {
+        id: sendSocialEventProc
+    }
+
+    Process {
+        id: fetchSocialEventsProc
+        command: ["python3", "-u", win.appDir + "/backend/social_notes.py", "get_events"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var events = JSON.parse(data);
+                    if (Array.isArray(events)) {
+                        for (var i = 0; i < events.length; i++) {
+                            var ev = events[i];
+                            if (ev && ev.event === "leave") {
+                                var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
+                                win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
+                                if (win.listeningAlongFriend && (win.listeningAlongFriend.user_email === ev.from_email || win.listeningAlongFriend.user_name === ev.from_name)) {
+                                    win.listeningAlongFriend = null;
+                                }
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    Timer {
+        id: toastTimer
+        interval: 3200
+        onTriggered: win.toastVisible = false
+    }
+
     Timer {
         id: friendsNotesTimer
-        interval: 60000
+        interval: 30000
         repeat: true
         running: true
         triggeredOnStart: true
         onTriggered: {
             if (!fetchFriendsNotesProc.running) {
                 fetchFriendsNotesProc.running = true;
+            }
+            if (!fetchSocialEventsProc.running) {
+                fetchSocialEventsProc.running = true;
             }
         }
     }
@@ -819,7 +860,7 @@ Scope {
         var tImage = trk.image || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
 
-        // Pre-warm the next track's direct stream URL in background so switching is instant
+        // Pre-warm the next track after 4s delay so current track has 100% bandwidth to start
         if (win.currentTracks && win.currentTracks.length > 1) {
             var curIdx = -1;
             for (var ci = 0; ci < win.currentTracks.length; ci++) {
@@ -834,7 +875,8 @@ Scope {
                 ? (nextTrk.videoId || nextTrk.path.replace("ytdl://", ""))
                 : "";
             if (nextVid) {
-                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "prewarm", nextVid]);
+                prewarmTimer.targetVid = nextVid;
+                prewarmTimer.restart();
             }
         }
 
@@ -897,6 +939,49 @@ Scope {
         Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "add_friend", "friend@gmail.com"]);
         if (!fetchFriendsNotesProc.running) {
             fetchFriendsNotesProc.running = true;
+        }
+    }
+
+    function showToast(msg) {
+        if (!msg) return;
+        win.toastMessage = msg;
+        win.toastVisible = true;
+        toastTimer.restart();
+    }
+
+    function startListeningAlong(friend) {
+        if (!friend) return;
+        win.listeningAlongFriend = friend;
+        if (friend.track) {
+            var vid = friend.track.videoId || friend.track.id || friend.track.video_id || "";
+            var trk = {
+                id: vid || ("social_" + Date.now()),
+                videoId: vid,
+                title: friend.track.title || "Track",
+                artist: friend.track.artist || friend.user_name || "Artist",
+                image: friend.track.cover || friend.track.cover_url || friend.track.thumbnail || "",
+                cover: friend.track.cover || friend.track.cover_url || friend.track.thumbnail || "",
+                duration: friend.track.duration || 0,
+                path: vid ? ("ytdl://" + vid) : (friend.track.path || "")
+            };
+            win.playOnlineTrack(trk, false);
+        }
+        win.isNowPlayingOpen = true;
+        var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
+        win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
+    }
+
+    function exitListeningAlong() {
+        if (!win.listeningAlongFriend) return;
+        var friend = win.listeningAlongFriend;
+        var friendEmail = friend.user_email || "";
+        var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
+        win.listeningAlongFriend = null;
+        win.showToast(I18n.tr("Đã rời chế độ nghe cùng với " + friendName, "Left listen along with " + friendName));
+        if (friendEmail) {
+            sendSocialEventProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "send_event", "leave", friendEmail];
+            sendSocialEventProc.running = false;
+            sendSocialEventProc.running = true;
         }
     }
 
@@ -1743,6 +1828,7 @@ Scope {
                             onPostNoteRequested: postNoteModal.visible = true
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
+                            onOpenStoryRequested: (friendData, idx) => friendStoryModal.openWithIndex(idx)
                         }
 
                         MainTrackGrid {
@@ -1955,7 +2041,9 @@ Scope {
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
                     accentColor: win.accentColor
                     backgroundSourceItem: glassCompositeBackdrop
+                    listeningAlongFriend: win.listeningAlongFriend
 
+                    onExitListeningAlongRequested: win.exitListeningAlong()
                     onSeekRequested: sec => win.seekAudio(sec)
                     onPlayTrackRequested: (trk, index) => {
                         if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
@@ -1999,7 +2087,8 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(600, parent.width - 48)
+            width: Math.min(win.listeningAlongFriend ? 820 : 600, parent.width - 48)
+            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
             backgroundSourceItem: glassCompositeBackdrop
@@ -2019,6 +2108,7 @@ Scope {
             isSleepTimerActive: win.isSleepTimerActive
             sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
             accentColor: win.accentColor
+            listeningAlongFriend: win.listeningAlongFriend
 
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
@@ -2042,6 +2132,7 @@ Scope {
             }
             onSeekRequested: sec => win.seekAudio(sec)
             onReqVolumeChange: vol => win.setVolume(vol)
+            onExitListeningAlongRequested: win.exitListeningAlong()
             onSleepTimerClicked: {
                 if (sleepTimerPopover.isOpen) {
                     sleepTimerPopover.close();
@@ -2199,6 +2290,58 @@ Scope {
             }
             onCancelTimerRequested: () => {
                 win.cancelSleepTimer();
+            }
+        }
+
+        FriendStoryModal {
+            id: friendStoryModal
+            friendsNotes: win.friendsNotes
+            accentColor: win.accentColor
+            onListenAlongRequested: friendData => {
+                win.startListeningAlong(friendData);
+            }
+        }
+
+        // Floating Toast Notification
+        Rectangle {
+            id: toastNotification
+            z: 10000
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: win.toastVisible ? 24 : -50
+            opacity: win.toastVisible ? 1.0 : 0.0
+            visible: opacity > 0.01
+            height: 38
+            width: Math.min(480, toastRow.implicitWidth + 32)
+            radius: 19
+            color: Qt.rgba(0.08, 0.09, 0.12, 0.92)
+            border.color: Qt.rgba(win.accentColor.r, win.accentColor.g, win.accentColor.b, 0.45)
+            border.width: 1
+            clip: true
+
+            Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            Row {
+                id: toastRow
+                anchors.centerIn: parent
+                spacing: 8
+
+                Rectangle {
+                    width: 6; height: 6; radius: 3
+                    color: win.accentColor
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: win.toastMessage
+                    color: "#ffffff"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
             }
         }
     }
@@ -2495,6 +2638,7 @@ Scope {
     function playTrack(trk) {
         if (!trk) return;
         win.trackChangeTimestamp = Date.now();
+        win.postLoadGraceTimestamp = Date.now(); // Grace period bắt đầu ngay (bài local phát tức thì)
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.isLoadingAudio = false;
@@ -2922,6 +3066,18 @@ Scope {
     }
 
     Timer {
+        id: prewarmTimer
+        interval: 4000
+        repeat: false
+        property string targetVid: ""
+        onTriggered: {
+            if (targetVid) {
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "prewarm", targetVid]);
+            }
+        }
+    }
+
+    Timer {
         id: pollTimer
         interval: win.isPlaying ? 120 : (win.isLoadingAudio ? 200 : 400)
         running: true
@@ -2944,53 +3100,62 @@ Scope {
                     var elapsed = Date.now() - win.trackChangeTimestamp;
 
                     if (win.isLoadingAudio) {
-                        // If MPV is paused while loading, actively force unpause!
-                        if (s.is_paused) {
+                        // Chỉ thoát loading khi audio THỰC SỰ bắt đầu phát (time đang chạy HOẶC duration>0 + is_playing)
+                        var isStarted = Boolean(s.is_playing && (s.time_pos > 0 || s.duration > 0));
+
+                        // Nếu MPV đang paused nhưng đã có duration → nudge resume (trường hợp transient pause khi buffer)
+                        if (s.is_paused && s.duration > 0) {
                             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                         }
 
-                        // We only transition out of loading when audio has ACTUALLY started advancing or playing
-                        var isStarted = Boolean(!s.is_loading && (s.time_pos > 0 || (s.duration > 0 && s.is_playing)));
-
-                        if (!isStarted && elapsed < 40000) {
-                            win.currentTime = 0.0;
+                        if (!isStarted) {
+                            if (elapsed > 15000) {
+                                // Timeout an toàn nếu stream fail hoàn toàn
+                                win.isLoadingAudio = false;
+                                win.isPlaying = false;
+                            } else {
+                                win.currentTime = 0.0;
+                            }
                             return;
                         }
 
-                        // Audio is ACTUALLY streaming and playing now!
+                        // Audio đã bắt đầu phát thực sự!
                         win.isLoadingAudio = false;
-                        win.postLoadGraceTimestamp = Date.now();
+                        win.postLoadGraceTimestamp = Date.now(); // Đặt mốc grace period
+                        win.isPlaying = true;
                         win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                        win.isPlaying = true;
-                        if (s.is_paused) {
-                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
-                        }
                     } else {
                         var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
-                        // Grace period: during first 3500ms after audio finishes loading,
-                        // never let transient pause or buffering flip isPlaying to false
-                        if (postLoadElapsed < 3500) {
+
+                        // ── GRACE PERIOD (4s sau khi isLoadingAudio=false) ──────────────────────
+                        // MPV có thể brief-pause khi buffer stream URL mới (ngay cả bài đã cache).
+                        // Trong window này: không bao giờ tin vào is_playing=false từ MPV.
+                        // Nếu MPV báo paused → tự resume; luôn giữ isPlaying=true.
+                        // ────────────────────────────────────────────────────────────────────────
+                        if (postLoadElapsed < 4000) {
                             win.isPlaying = true;
                             if (s.is_paused) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                             }
                         } else {
+                            // Ngoài grace period: hoàn toàn tin vào MPV state
                             if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         }
+
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
                         }
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     }
 
-                    // Sync track from filename if playing (cold start recovery only when currentTrack is null)
+                    // Sync track từ filename khi cold-start recovery (chỉ khi currentTrack là null)
                     if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
                         var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
                         if (matched) win.currentTrack = matched;
                     }
 
-                    // High-precision fade trigger for end_of_track sleep timer
+                    // High-precision fade trigger cho sleep timer "end_of_track"
                     if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track" && win.totalDuration > 5) {
                         var remToEnd = win.totalDuration - win.currentTime;
                         if (remToEnd <= 5.0 && remToEnd > 0.6 && !win.sleepTimerFadeTriggered) {
@@ -2999,10 +3164,10 @@ Scope {
                         }
                     }
 
-                    // Auto-advance or Repeat at song end (only when actively playing)
-                    if (win.isPlaying && !win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
+                    // Auto-advance / Repeat khi hết bài (chỉ ngoài grace period để tránh false trigger)
+                    var graceCheck = Date.now() - win.postLoadGraceTimestamp;
+                    if (win.isPlaying && !win.isLoadingAudio && graceCheck > 4000 && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
                         if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
-                            // Sleep timer: End of track reached! Stop playback completely and cancel timer.
                             win.isSleepTimerActive = false;
                             win.sleepTimerFadeTriggered = false;
                             win.sleepTimerMode = "";
@@ -3065,13 +3230,23 @@ Scope {
         function closePostNoteModal() { frostifyIpc.closePostNoteModal(); }
         function openFriendNote(idx: int) { frostifyIpc.openFriendNote(idx); }
         function closeFriendNote() { frostifyIpc.closeFriendNote(); }
+        function testListenAlong() { frostifyIpc.testListenAlong(); }
+        function testExitListenAlong() { frostifyIpc.testExitListenAlong(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
-        function openFriendNote(idx: int) { homeView.openFriendNote(idx); }
-        function closeFriendNote() { homeView.closeFriendNote(); }
+        function openFriendNote(idx: int) { friendStoryModal.openWithIndex(idx); }
+        function closeFriendNote() { friendStoryModal.close(); }
+        function testListenAlong() {
+            if (win.friendsNotes && win.friendsNotes.length > 0) {
+                win.startListeningAlong(win.friendsNotes[0]);
+            }
+        }
+        function testExitListenAlong() {
+            win.exitListeningAlong();
+        }
         function openPostNoteModal() { postNoteModal.visible = true; }
         function closePostNoteModal() { postNoteModal.visible = false; }
         function toggleSleepTimer() {
@@ -3149,6 +3324,7 @@ Scope {
             mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {
+            win.isNowPlayingOpen = false;
             win.showAmberolDetails = false;
             win.currentView = "home";
             homeView.scrollToTop();
