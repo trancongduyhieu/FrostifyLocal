@@ -458,6 +458,17 @@ def main():
             ytmusic_helper.resolve_stream_url(vid)
 
     elif action == "status":
+        is_loading = False
+        state_file = "/tmp/frostify_playback_state.json"
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 10.0:
+                        is_loading = True
+            except Exception:
+                pass
+
         props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
         batch = get_mpv_properties_batch(props)
 
@@ -468,7 +479,9 @@ def main():
         path = batch.get("path") or ""
         vol = batch.get("volume") if batch.get("volume") is not None else 100
         idle = batch.get("idle-active")
-        has_file = bool(path and not idle)
+
+        # has_file=False khi is_loading để QML không thấy stale time_pos/is_playing
+        has_file = bool(path and not idle) and not is_loading
 
         status = {
             "is_playing": (pause is False) and has_file,
@@ -476,9 +489,11 @@ def main():
             "time_pos": round(time_pos, 1) if has_file else 0.0,
             "duration": round(duration, 1) if has_file else 0.0,
             "filename": filename if has_file else "",
-            "volume": vol
+            "volume": vol,
+            "is_loading": is_loading
         }
         print(json.dumps(status))
+
 
     elif action == "audio_specs":
         ensure_mpv()
