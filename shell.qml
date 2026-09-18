@@ -1136,29 +1136,37 @@ Scope {
                 color: "#0a0b0e"
             }
 
-            // Song Artwork Image - downscaled to 48x48 so high-contrast figures/dolls melt completely into smooth color fields
-            Image {
-                id: songAtmosphereImg
+            // Song Artwork Atmosphere Wrapper - clipped & zoomed 1.7x to push out YouTube pillarbox/letterbox black bars
+            Item {
+                id: songAtmosphereWrapper
                 anchors.fill: parent
-                source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
-                sourceSize: Qt.size(48, 48)
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
+                clip: true
                 visible: false
+
+                Image {
+                    id: songAtmosphereImg
+                    anchors.centerIn: parent
+                    width: parent.width * 1.75
+                    height: parent.height * 1.75
+                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    sourceSize: Qt.size(64, 64)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                }
             }
 
             // Ultra-diffuse Velvet MultiEffect Blur (blurMax: 64)
             MultiEffect {
                 id: songAtmosphereEffect
                 anchors.fill: parent
-                source: songAtmosphereImg
+                source: songAtmosphereWrapper
                 visible: songAtmosphereImg.status === Image.Ready
                 blurEnabled: true
                 blur: 1.0
                 blurMax: 64
                 saturation: 1.45
-                brightness: -0.22
-                opacity: 0.55
+                brightness: -0.15
+                opacity: 0.60
             }
 
             // Adaptive Dark Scrim (10% reduced opacity for subtle, comfortable ambient blur)
