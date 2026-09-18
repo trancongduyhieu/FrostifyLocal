@@ -1161,23 +1161,23 @@ Scope {
                 opacity: 0.55
             }
 
-            // Adaptive Dark Scrim (Comfortable brightness on Home/Downloads, deeper for Now Playing)
+            // Adaptive Dark Scrim (10% reduced opacity for subtle, comfortable ambient blur)
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.88) : Qt.rgba(0.02, 0.02, 0.04, 0.78)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.79) : Qt.rgba(0.02, 0.02, 0.04, 0.70)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.92) : Qt.rgba(0.01, 0.01, 0.02, 0.84)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.83) : Qt.rgba(0.01, 0.01, 0.02, 0.76)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.96) : Qt.rgba(0.01, 0.01, 0.02, 0.90)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.86) : Qt.rgba(0.01, 0.01, 0.02, 0.81)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }
