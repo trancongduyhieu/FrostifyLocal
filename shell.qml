@@ -3100,62 +3100,40 @@ Scope {
                     var elapsed = Date.now() - win.trackChangeTimestamp;
 
                     if (win.isLoadingAudio) {
-                        // Chỉ thoát loading khi audio THỰC SỰ bắt đầu phát (time đang chạy HOẶC duration>0 + is_playing)
-                        var isStarted = Boolean(s.is_playing && (s.time_pos > 0 || s.duration > 0));
-
-                        // Nếu MPV đang paused nhưng đã có duration → nudge resume (trường hợp transient pause khi buffer)
-                        if (s.is_paused && s.duration > 0) {
-                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
-                        }
-
-                        if (!isStarted) {
-                            if (elapsed > 15000) {
-                                // Timeout an toàn nếu stream fail hoàn toàn
-                                win.isLoadingAudio = false;
-                                win.isPlaying = false;
-                            } else {
-                                win.currentTime = 0.0;
-                            }
+                        // Giữ loading cho đến khi time_pos thực sự > 0 (bài đang phát)
+                        // HOẶC timeout 15s để tránh spinner treo vĩnh viễn
+                        if (elapsed > 15000) {
+                            win.isLoadingAudio = false;
+                            win.isPlaying = false;
                             return;
                         }
-
-                        // Audio đã bắt đầu phát thực sự!
+                        // Chưa có time_pos > 0 → chưa phát → giữ spinner
+                        if (!s.time_pos || s.time_pos <= 0) {
+                            win.currentTime = 0.0;
+                            return;
+                        }
+                        // time_pos > 0: bài đã thực sự bắt đầu phát!
                         win.isLoadingAudio = false;
-                        win.postLoadGraceTimestamp = Date.now(); // Đặt mốc grace period
+                        win.postLoadGraceTimestamp = Date.now();
                         win.isPlaying = true;
-                        win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
+                        win.currentTime = s.time_pos;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     } else {
-                        var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
-
-                        // ── GRACE PERIOD (4s sau khi isLoadingAudio=false) ──────────────────────
-                        // MPV có thể brief-pause khi buffer stream URL mới (ngay cả bài đã cache).
-                        // Trong window này: không bao giờ tin vào is_playing=false từ MPV.
-                        // Nếu MPV báo paused → tự resume; luôn giữ isPlaying=true.
-                        // ────────────────────────────────────────────────────────────────────────
-                        if (postLoadElapsed < 4000) {
-                            win.isPlaying = true;
-                            if (s.is_paused) {
-                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
-                            }
-                        } else {
-                            // Ngoài grace period: hoàn toàn tin vào MPV state
-                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
-                        }
-
+                        // Ngoài loading: tin hoàn toàn vào MPV
+                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
                         }
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     }
 
-                    // Sync track từ filename khi cold-start recovery (chỉ khi currentTrack là null)
+                    // Cold-start recovery
                     if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
                         var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
                         if (matched) win.currentTrack = matched;
                     }
 
-                    // High-precision fade trigger cho sleep timer "end_of_track"
+                    // High-precision fade trigger cho sleep timer
                     if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track" && win.totalDuration > 5) {
                         var remToEnd = win.totalDuration - win.currentTime;
                         if (remToEnd <= 5.0 && remToEnd > 0.6 && !win.sleepTimerFadeTriggered) {
@@ -3164,9 +3142,8 @@ Scope {
                         }
                     }
 
-                    // Auto-advance / Repeat khi hết bài (chỉ ngoài grace period để tránh false trigger)
-                    var graceCheck = Date.now() - win.postLoadGraceTimestamp;
-                    if (win.isPlaying && !win.isLoadingAudio && graceCheck > 4000 && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
+                    // Auto-advance / Repeat khi hết bài
+                    if (!win.isLoadingAudio && win.isPlaying && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
                         if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
                             win.isSleepTimerActive = false;
                             win.sleepTimerFadeTriggered = false;

@@ -316,10 +316,12 @@ def main():
         artist_arg = sys.argv[4] if len(sys.argv) > 4 else ""
         art_arg = sys.argv[5] if len(sys.argv) > 5 else ""
 
-        # Immediately stop previous track so old audio and progress cease instantly
+        # Stop current playback cleanly so old audio ceases immediately
+        # (dùng stop thay vì pause=True để MPV về idle state rõ ràng,
+        #  tránh QML polling bị confused khi poll thấy pause=True rồi thấy pause=False)
         send_mpv_cmd(["stop"])
 
-        state_file = "/tmp/nutsty_playback_state.json"
+        state_file = "/tmp/frostify_playback_state.json"
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump({"state": "loading", "path": file_path, "timestamp": time.time()}, f)
@@ -328,7 +330,7 @@ def main():
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path)
-        send_mpv_cmd(["set_property", "pause", False])
+
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
@@ -340,10 +342,11 @@ def main():
 
         try:
             with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": "starting", "path": file_path, "timestamp": time.time()}, f)
+                json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
         except Exception:
             pass
         print("Playing:", file_path)
+
 
     elif action == "next":
         send_mpv_cmd(["playlist-next"])
@@ -419,40 +422,16 @@ def main():
             is_paused = get_mpv_property("pause")
             new_paused = not is_paused
             send_mpv_cmd(["set_property", "pause", new_paused])
-            state_file = "/tmp/nutsty_playback_state.json"
-            try:
-                with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "paused" if new_paused else "playing", "timestamp": time.time()}, f)
-            except Exception:
-                pass
             print("Toggled pause to:", new_paused)
 
     elif action == "pause":
         send_mpv_cmd(["set_property", "pause", True])
-        state_file = "/tmp/nutsty_playback_state.json"
-        try:
-            with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": "paused", "timestamp": time.time()}, f)
-        except Exception:
-            pass
 
     elif action == "resume":
         send_mpv_cmd(["set_property", "pause", False])
-        state_file = "/tmp/nutsty_playback_state.json"
-        try:
-            with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": "playing", "timestamp": time.time()}, f)
-        except Exception:
-            pass
 
     elif action == "stop":
         send_mpv_cmd(["stop"])
-        state_file = "/tmp/nutsty_playback_state.json"
-        try:
-            with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": "stopped", "timestamp": time.time()}, f)
-        except Exception:
-            pass
 
     elif action == "seek" and len(sys.argv) > 2:
         sec = float(sys.argv[2])
@@ -479,18 +458,6 @@ def main():
             ytmusic_helper.resolve_stream_url(vid)
 
     elif action == "status":
-        state_file = "/tmp/nutsty_playback_state.json"
-        st = {}
-        is_loading = False
-        if os.path.exists(state_file):
-            try:
-                with open(state_file, "r", encoding="utf-8") as f:
-                    st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 45.0:
-                        is_loading = True
-            except Exception:
-                pass
-
         props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
         batch = get_mpv_properties_batch(props)
 
@@ -502,41 +469,14 @@ def main():
         vol = batch.get("volume") if batch.get("volume") is not None else 100
         idle = batch.get("idle-active")
         has_file = bool(path and not idle)
-        if time_pos and time_pos > 0:
-            is_loading = False
-
-        # Self-healing unpause: if state was marked 'playing' or 'loading', but MPV is paused with a loaded file
-        if st.get("state") in ["playing", "loading"] and (time.time() - st.get("timestamp", 0)) < 45.0:
-            if pause is True and has_file:
-                send_mpv_cmd(["set_property", "pause", False])
-                pause = False
-
-        effective_loading = is_loading or (has_file and (time_pos <= 0.0 and duration <= 0.0))
-        if st.get("state") in ["loading", "starting"] and (time.time() - st.get("timestamp", 0)) < 45.0 and not (time_pos and time_pos > 0):
-            effective_loading = True
-
-        # If audio has started advancing, mark state as 'playing'
-        if time_pos and time_pos > 0 and st.get("state") in ["loading", "starting"]:
-            try:
-                with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "playing", "path": path, "timestamp": time.time()}, f)
-            except Exception:
-                pass
-
-        is_actively_playing = (pause is False) and has_file and not effective_loading
-        # Grace period: during first 5s of 'playing' state with loaded file and unpaused, keep playing flag active
-        state_age = time.time() - st.get("timestamp", 0)
-        if not is_actively_playing and st.get("state") == "playing" and (pause is False) and has_file and state_age < 5.0 and not is_loading:
-            is_actively_playing = True
 
         status = {
-            "is_playing": is_actively_playing,
-            "is_paused": (pause is True) and has_file and not effective_loading,
-            "time_pos": round(time_pos, 1) if (has_file and not effective_loading) else 0.0,
-            "duration": round(duration, 1) if (has_file and not effective_loading) else 0.0,
+            "is_playing": (pause is False) and has_file,
+            "is_paused": (pause is True) and has_file,
+            "time_pos": round(time_pos, 1) if has_file else 0.0,
+            "duration": round(duration, 1) if has_file else 0.0,
             "filename": filename if has_file else "",
-            "volume": vol,
-            "is_loading": effective_loading
+            "volume": vol
         }
         print(json.dumps(status))
 
