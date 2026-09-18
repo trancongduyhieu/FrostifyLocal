@@ -1927,7 +1927,7 @@ QUALITY_ITAG_PRIORITIES = {
     "high_opus": [774, 141, 251, 140, 250],
     "high_aac": [141, 774, 140, 251, 250],
     "medium": [251, 140, 250, 141, 774],
-    "low": [250, 251, 140, 141, 774]
+    "low": [250, 249, 139, 251, 140, 141, 774]
 }
 
 def get_exported_cookie_file():
@@ -1997,7 +1997,7 @@ def resolve_stream_url(video_id, quality=None):
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}}
+            "extractor_args": {"youtube": {"player_client": ["android_music"]}}
         }
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
