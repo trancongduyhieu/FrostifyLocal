@@ -35,6 +35,7 @@ Rectangle {
     signal postNoteRequested()
     signal playFriendTrackRequested(var trk)
     signal addFriendRequested()
+    signal openStoryRequested(var friendData, int index)
 
     function getGreeting() {
         var h = new Date().getHours();
@@ -51,10 +52,6 @@ Rectangle {
 
     function openFriendNote(idx) {
         if (friendsPulseBar) friendsPulseBar.openFriendNote(idx);
-    }
-
-    function closeFriendNote() {
-        if (friendsPulseBar) friendsPulseBar.closePopover();
     }
 
     function scrollToTop() {
@@ -139,14 +136,6 @@ Rectangle {
         header: Item {
             width: feedListView.width
             height: headerCol.implicitHeight + 16
-            z: (friendsPulseBar && friendsPulseBar.isPopoverOpen) ? 1000 : 10
-
-            MouseArea {
-                anchors.fill: parent
-                z: 490
-                visible: friendsPulseBar && friendsPulseBar.isPopoverOpen
-                onClicked: friendsPulseBar.closePopover()
-            }
 
             ColumnLayout {
                 id: headerCol
@@ -166,15 +155,15 @@ Rectangle {
                     color: Theme.textPrimary
                 }
 
-                // Friends Pulse: 24h Ephemeral Music Notes Bar
+                // Friends Pulse: 24h Ephemeral Music Notes Bar (Stories Style)
                 FriendsPulseBar {
                     id: friendsPulseBar
                     Layout.fillWidth: true
-                    z: (friendsPulseBar && friendsPulseBar.isPopoverOpen) ? 500 : 1
                     friendsNotes: root.friendsNotes
                     myLatestNote: root.myLatestNote
                     accentColor: root.accentColor
                     onPostNoteClicked: root.postNoteRequested()
+                    onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
                     onPlayTrackRequested: track => root.playFriendTrackRequested(track)
                     onAddFriendClicked: root.addFriendRequested()
                 }

@@ -27,6 +27,7 @@ Item {
     property bool isScrubbingVolume: false
     property bool isLoadingAudio: false
     property bool isSleepTimerActive: false
+    property var listeningAlongFriend: null
     property int sleepTimerRemainingSeconds: 0
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
@@ -45,6 +46,7 @@ Item {
     signal queueClicked()
     signal openArtistRequested(string artistName, string channelId)
     signal sleepTimerClicked()
+    signal exitListeningAlongRequested()
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -213,7 +215,7 @@ Item {
 
                     Text {
                         id: titleText
-                        text: root.currentTrack ? root.currentTrack.name : "Nutsty Desktop"
+                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Desktop"
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
@@ -544,7 +546,7 @@ Item {
                 // Volume Bar
                 Item {
                     id: volSlider
-                    width: 52
+                    width: root.listeningAlongFriend ? 42 : 52
                     height: 18
                     anchors.verticalCenter: parent.verticalCenter
 
@@ -669,6 +671,99 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.openDetailsRequested()
+                }
+            }
+
+            // --- Listen Along Sync Indicator (Position 2: Bottom Player Bar) ---
+            Rectangle {
+                id: listenAlongBadge
+                visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+                anchors.verticalCenter: parent.verticalCenter
+                height: 22
+                width: Math.min(130, badgeRow.implicitWidth + 12)
+                radius: 11
+                color: Qt.rgba(16/255, 185/255, 129/255, 0.16)
+                border.color: Qt.rgba(16/255, 185/255, 129/255, 0.40)
+                border.width: 1
+                clip: true
+
+                Row {
+                    id: badgeRow
+                    anchors.centerIn: parent
+                    spacing: 5
+
+                    // Live Pulse Dot (Emerald 10B981)
+                    Rectangle {
+                        width: 5; height: 5; radius: 2.5
+                        color: "#10b981"
+                        anchors.verticalCenter: parent.verticalCenter
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.4; to: 1.0; duration: 900; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 1.0; to: 0.4; duration: 900; easing.type: Easing.InOutSine }
+                        }
+                    }
+
+                    // Mini Friend Avatar
+                    Rectangle {
+                        width: 14; height: 14; radius: 7
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                        anchors.verticalCenter: parent.verticalCenter
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            source: root.listeningAlongFriend ? (root.listeningAlongFriend.avatar_url || "") : ""
+                            fillMode: Image.PreserveAspectCrop
+                            visible: status === Image.Ready && source != ""
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.listeningAlongFriend && root.listeningAlongFriend.user_name ? root.listeningAlongFriend.user_name.charAt(0).toUpperCase() : "F"
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 8
+                            font.bold: true
+                            visible: !(root.listeningAlongFriend && root.listeningAlongFriend.avatar_url)
+                        }
+                    }
+
+                    // Friend Name
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.listeningAlongFriend ? (root.listeningAlongFriend.user_name || "Friend") : ""
+                        color: "#10b981"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 10
+                        font.bold: true
+                        elide: Text.ElideRight
+                        width: Math.min(50, implicitWidth)
+                    }
+
+                    // Leave Button [ ✕ ]
+                    Rectangle {
+                        width: 14; height: 14; radius: 7
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: exitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.30) : Qt.rgba(1, 1, 1, 0.08)
+                        border.color: exitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.50) : "transparent"
+                        border.width: 1
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/window-close-symbolic.svg"
+                            iconSize: 7
+                            color: exitMouse.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.7)
+                        }
+
+                        MouseArea {
+                            id: exitMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.exitListeningAlongRequested()
+                        }
+                    }
                 }
             }
         }

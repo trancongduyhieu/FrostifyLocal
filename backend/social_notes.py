@@ -217,9 +217,40 @@ def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]
                 pass
         return []
 
+def send_social_event(event_type: str, to_email: str, worker_url: Optional[str] = None) -> Dict[str, Any]:
+    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events"
+    user = get_current_user()
+    my_email = user.get("email", "")
+    my_name = user.get("name", "")
+    payload = {
+        "event": event_type,
+        "from_email": my_email,
+        "from_name": my_name,
+        "to_email": to_email
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def fetch_social_events(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
+    user = get_current_user()
+    my_email = user.get("email", "")
+    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events?user_email=" + urllib.parse.quote(my_email)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Nutsty-Desktop/1.0"})
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("events", [])
+    except Exception:
+        return []
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: social_notes.py [get | post <text> [track_json] | add_friend <email> | list_friends]")
+        print("Usage: social_notes.py [get | post <text> [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
@@ -242,6 +273,14 @@ def main():
             print(json.dumps({"success": ok, "friends": load_friends()}, ensure_ascii=False))
     elif cmd == "list_friends":
         print(json.dumps(load_friends(), ensure_ascii=False))
+    elif cmd == "send_event":
+        ev_type = sys.argv[2] if len(sys.argv) > 2 else "leave"
+        to_email = sys.argv[3] if len(sys.argv) > 3 else ""
+        res = send_social_event(ev_type, to_email)
+        print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "get_events":
+        events = fetch_social_events()
+        print(json.dumps(events, ensure_ascii=False))
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         sys.exit(1)

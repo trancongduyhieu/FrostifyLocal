@@ -1991,16 +1991,14 @@ def resolve_stream_url(video_id, quality=None):
     try:
         import yt_dlp
 
-        cookie_file = get_exported_cookie_file()
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
-            "extractor_args": {"youtube": {"player_client": ["android_music", "web_embedded"]}}
+            "noplaylist": True,
+            "extractor_args": {"youtube": {"player_client": ["android"]}}
         }
-        if cookie_file:
-            ydl_opts["cookiefile"] = cookie_file
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -2906,11 +2904,14 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
         except Exception as e:
             sys.stderr.write(f"[resolve_square_cover error]: {e}\n")
 
-    # Tier 2 Fallback: return current_image (or maxresdefault)
+    # Tier 2 Fallback: return current_image (safe hqdefault that exists 100% of the time)
     fallback_url = curr_img
-    if fallback_url and "i.ytimg.com" in fallback_url:
+    if not fallback_url and clean_vid:
+        fallback_url = f"https://i.ytimg.com/vi/{clean_vid}/hqdefault.jpg"
+    elif fallback_url and "i.ytimg.com" in fallback_url:
         clean_yt = fallback_url.split("?")[0]
-        fallback_url = re.sub(r'(hqdefault|mqdefault|sddefault|default)\.jpg', 'maxresdefault.jpg', clean_yt)
+        # Keep hqdefault.jpg to ensure no 404 errors for obscure or older YouTube tracks
+        fallback_url = clean_yt
 
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}

@@ -14,21 +14,13 @@ Item {
     property var myLatestNote: null
 
     signal postNoteClicked()
-    signal playTrackRequested(var track)
     signal addFriendClicked()
-
-    property var activePopoverNote: null
-    readonly property bool isPopoverOpen: notePopover.visible
-
-    function closePopover() {
-        notePopover.visible = false;
-    }
+    signal openStoryRequested(var friendData, int index)
+    signal playTrackRequested(var track)
 
     function openFriendNote(idx) {
-        if (root.friendsNotes && root.friendsNotes.length > idx) {
-            root.activePopoverNote = root.friendsNotes[idx];
-            notePopover.x = 96 + idx * 80;
-            notePopover.visible = true;
+        if (root.friendsNotes && idx >= 0 && idx < root.friendsNotes.length) {
+            root.openStoryRequested(root.friendsNotes[idx], idx);
         }
     }
 
@@ -94,51 +86,52 @@ Item {
             color: Qt.rgba(1, 1, 1, 0.08)
         }
 
-        // 2. HORIZONTAL LIST OF FRIENDS NOTES
+        // 2. HORIZONTAL LIST OF FRIENDS NOTES (Clean Avatar + Mini Thought Bubble)
         ListView {
             id: friendsListView
             Layout.fillWidth: true
             Layout.fillHeight: true
             orientation: ListView.Horizontal
-            spacing: 18
+            spacing: 16
             clip: false
             boundsBehavior: Flickable.StopAtBounds
 
             model: root.friendsNotes
 
             delegate: Item {
-                width: Math.max(100, Math.min(180, bubbleBox.width + 8))
+                width: Math.max(90, Math.min(140, bubbleBox.width + 12))
                 height: friendsListView.height
 
-                // SPEECH BUBBLE (24H NOTE)
+                // Mini Thought Bubble (Floating above avatar, no heavy pill clutter)
                 Rectangle {
                     id: bubbleBox
                     anchors.top: parent.top
-                    anchors.topMargin: 2
+                    anchors.topMargin: 4
                     anchors.horizontalCenter: avatarWrapper.horizontalCenter
-                    width: Math.max(80, Math.min(170, noteTextItem.implicitWidth + 24))
-                    height: 26
-                    radius: 13
-                    color: friendArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                    border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38)
+                    width: Math.max(76, Math.min(130, noteTextItem.implicitWidth + 22))
+                    height: 24
+                    radius: 12
+                    color: friendArea.containsMouse
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                    border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
                     border.width: 1
+                    scale: friendArea.containsMouse ? 1.05 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    // Bubble tail pointing down
+                    // Tiny bubble connector dots
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.bottom
-                        anchors.topMargin: -3
-                        width: 6; height: 6
-                        rotation: 45
+                        anchors.top: bubbleBox.bottom
+                        anchors.topMargin: -1
+                        width: 5; height: 5; radius: 2.5
                         color: bubbleBox.color
-                        border.color: bubbleBox.border.color
-                        border.width: 1
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
                         spacing: 4
 
                         AppIcon {
@@ -162,23 +155,23 @@ Item {
                     }
                 }
 
-                // AVATAR WRAPPER (48px circle with MultiEffect Masking)
+                // AVATAR WRAPPER (48px circle with breathing pulse ring if sharing track)
                 Item {
                     id: avatarWrapper
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 8
+                    anchors.bottomMargin: 14
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 48; height: 48
+                    scale: friendArea.containsMouse ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    // Outer Halo Ring
+                    // Outer Pulse Ring when music is attached
                     Rectangle {
                         anchors.fill: parent
                         radius: 24
                         color: "transparent"
-                        border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.16)
+                        border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
                         border.width: 1.5
-                        scale: friendArea.containsMouse ? 1.06 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 150 } }
                     }
 
                     // Avatar Inner Circle Image
@@ -190,11 +183,11 @@ Item {
                             id: avatarBg
                             anchors.fill: parent
                             radius: 22
-                            color: Qt.rgba(1, 1, 1, 0.08)
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
 
                             Text {
                                 anchors.centerIn: parent
-                                text: (modelData.user_name && modelData.user_name.length > 0) ? modelData.user_name.substring(0, 1).toUpperCase() : "U"
+                                text: (modelData.user_name && modelData.user_name.length > 0) ? modelData.user_name.substring(0, 1).toUpperCase() : "F"
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 16
@@ -243,7 +236,7 @@ Item {
                     anchors.topMargin: 2
                     anchors.horizontalCenter: avatarWrapper.horizontalCenter
                     text: modelData.user_name || "Friend"
-                    color: Qt.rgba(1, 1, 1, 0.55)
+                    color: friendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
                     font.family: Theme.fontFamily
                     font.pixelSize: 9
                     elide: Text.ElideRight
@@ -257,10 +250,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        root.activePopoverNote = modelData;
-                        var pt = avatarWrapper.mapToItem(root, 0, 0);
-                        notePopover.x = Math.max(16, Math.min(root.width - notePopover.width - 16, pt.x - (notePopover.width - avatarWrapper.width) / 2));
-                        notePopover.visible = true;
+                        root.openStoryRequested(modelData, index);
                     }
                 }
             }
@@ -272,7 +262,7 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.35)
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
-                visible: root.friendsNotes.length === 0
+                visible: !root.friendsNotes || root.friendsNotes.length === 0
             }
         }
 
@@ -282,8 +272,8 @@ Item {
             Layout.preferredHeight: 36
             Layout.alignment: Qt.AlignVCenter
             radius: 18
-            color: addFriendArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(1, 1, 1, 0.04)
-            border.color: Qt.rgba(1, 1, 1, 0.12)
+            color: addFriendArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(1, 1, 1, 0.04)
+            border.color: addFriendArea.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.12)
             border.width: 1
 
             AppIcon {
@@ -299,222 +289,6 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.addFriendClicked()
-            }
-        }
-    }
-
-    // INTERACTIVE NOTE POPOVER (LISTEN ALONG - Dynamic Chromatic Liquid Glass)
-    Rectangle {
-        id: notePopover
-        visible: false
-        z: 1000
-        width: 320
-        height: cardCol.implicitHeight + 32
-        x: 100
-        y: root.height + 4
-        radius: 16
-        color: Qt.rgba(0.06 + root.accentColor.r * 0.10, 0.06 + root.accentColor.g * 0.10, 0.08 + root.accentColor.b * 0.14, 0.96)
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38)
-        border.width: 1
-
-        MultiEffect {
-            anchors.fill: notePopover
-            source: notePopover
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.55)
-            shadowBlur: 0.6
-            shadowVerticalOffset: 6
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            // Prevent clicks inside popover from passing through to underlying elements
-        }
-
-        ColumnLayout {
-            id: cardCol
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 10
-
-            // Header: Friend Name & Close
-            RowLayout {
-                Layout.fillWidth: true
-                Column {
-                    spacing: 2
-                    Text {
-                        text: root.activePopoverNote ? (root.activePopoverNote.user_name || "Friend") : ""
-                        color: "#ffffff"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        font.bold: true
-                    }
-                    Text {
-                        text: root.activePopoverNote ? (root.activePopoverNote.user_email || "") : ""
-                        color: Qt.rgba(1, 1, 1, 0.5)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                    }
-                }
-                Item { Layout.fillWidth: true }
-
-                // Close Button with AppIcon
-                Rectangle {
-                    width: 26; height: 26; radius: 13
-                    color: closePopArea.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
-                    border.color: closePopArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                    border.width: 1
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 10
-                        color: closePopArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.75)
-                    }
-
-                    MouseArea {
-                        id: closePopArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: notePopover.visible = false
-                    }
-                }
-            }
-
-            // Note Text Quote Box (Organic Chromatic Glass)
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 42
-                radius: 8
-                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.09)
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                border.width: 1
-
-                Text {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    text: root.activePopoverNote ? ("“" + root.activePopoverNote.note_text + "”") : ""
-                    color: "#ffffff"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.italic: true
-                    wrapMode: Text.Wrap
-                }
-            }
-
-            // Attached Song & Listen Along Button
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: 8
-                    visible: root.activePopoverNote && root.activePopoverNote.track !== null && root.activePopoverNote.track !== undefined
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        // Artwork cover with fallback icon
-                        Rectangle {
-                            width: 36; height: 36; radius: 6
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                            border.width: 1
-                            clip: true
-
-                            Image {
-                                id: popoverTrackImg
-                                anchors.fill: parent
-                                source: (root.activePopoverNote && root.activePopoverNote.track) ? (root.activePopoverNote.track.cover || root.activePopoverNote.track.image || "") : ""
-                                fillMode: Image.PreserveAspectCrop
-                                visible: status === Image.Ready && source != ""
-                            }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 14
-                                color: root.accentColor
-                                visible: !popoverTrackImg.visible
-                            }
-                        }
-
-                        Column {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: root.activePopoverNote && root.activePopoverNote.track ? (root.activePopoverNote.track.title || "") : ""
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                                elide: Text.ElideRight
-                                width: 220
-                            }
-                            Text {
-                                text: root.activePopoverNote && root.activePopoverNote.track ? (root.activePopoverNote.track.artist || "") : ""
-                                color: Qt.rgba(1, 1, 1, 0.5)
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 9
-                                elide: Text.ElideRight
-                                width: 220
-                            }
-                        }
-                    }
-
-                    // CTA Listen Along Button (Dynamic Accent)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 34
-                        radius: 8
-                        color: playBtnArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.24)
-                        border.color: root.accentColor
-                        border.width: 1
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            AppIcon {
-                                anchors.verticalCenter: parent.verticalCenter
-                                source: "../assets/icons/media-playback-start-symbolic.svg"
-                                iconSize: 10
-                                color: "#ffffff"
-                            }
-                            Text {
-                                text: I18n.tr("Nghe bài này cùng bạn", "Listen along with friend")
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                        }
-
-                        MouseArea {
-                            id: playBtnArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                notePopover.visible = false;
-                                if (root.activePopoverNote && root.activePopoverNote.track) {
-                                    root.playTrackRequested(root.activePopoverNote.track);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: I18n.tr("Bạn này không đính kèm bài hát", "No track attached to this note")
-                    color: Qt.rgba(1, 1, 1, 0.4)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    visible: !root.activePopoverNote || !root.activePopoverNote.track
-                }
             }
         }
     }

@@ -83,14 +83,15 @@ def ensure_mpv():
         "--pause=no",
         "--no-video",
         f"--input-ipc-server={MPV_SOCKET}",
-        "--audio-buffer=0.2",
+        "--audio-buffer=0.4",
         "--demuxer-max-bytes=16M",
         "--demuxer-max-back-bytes=4M",
         "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
         f"--ytdl-format={ytdl_fmt}",
-        f"--user-agent={DEFAULT_UA}"
+        f"--user-agent={DEFAULT_UA}",
+        "--referrer=https://www.youtube.com/"
     ]
     if cookie_file and os.path.exists(cookie_file):
         cmd.append(f"--cookies-file={cookie_file}")

@@ -10,6 +10,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Tính năng âm thanh**:
   - Hỗ trợ phát liền mạch (gapless playback), giải mã phần cứng (hardware decoding).
   - Tích hợp hook `yt-dlp` (`mpv --ytdl-format="bestaudio"`) để stream luồng YouTube Music trực tiếp (< 100MB RAM, độ trễ cực thấp).
+  - **Tránh HTTP 403 CDN & Autoplay tức thì**: `resolve_stream_url()` dùng `player_client: ["android"]` (không ép cookie web vào direct googlevideo URL). MPV bổ sung `--referrer=https://www.youtube.com/` và `--audio-buffer=0.4` để mở stream ngay trong ~1.0s, autoplay 100% không bị abort.
 - **Quy tắc an toàn**: Không bao giờ giao tiếp trực tiếp với tiến trình con `mpv` bằng stdin/stdout shell thô; mọi lệnh phát, dừng, tìm bài, điều chỉnh âm lượng bắt buộc phải gửi qua socket IPC JSON.
 
 ---
@@ -58,7 +59,17 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 
 ---
 
-## 7. Lưu Trữ Trạng Thái Người Dùng & Đồng Bộ Reactive (`nutsty_settings.json`)
+## 7. Friends 24h Notes & Listen Along Synchronizer
+- **Tệp**: `backend/social_notes.py`, `backend/auth_server.py`, `components/FriendStoryModal.qml`, `components/FriendsPulseBar.qml`.
+- **Cơ chế hoạt động**:
+  - Ghi chú 24h & bài hát đính kèm được đồng bộ qua Cloudflare Worker / local auth server daemon (`port 17890`).
+  - **Focused Story Modal**: Kính mờ sâu, avatar tròn lớn có pulse rings, thought bubble, card bài hát đính kèm to nét, nút [▶ Nghe cùng bạn], lướt bạn bè qua `NavArrowButton.qml`.
+  - **Bimodal Listen Along Badge**: Đồng bộ Vị trí 1 (Floating Capsule góc trên Now Playing) và Vị trí 2 (Slim badge trên Player Bar đáy).
+  - **Event Delivery**: Bắn event qua `/api/notes/events` (one-time delivery TTL 10m), hiển thị toast khi bạn bè dừng nghe cùng.
+
+---
+
+## 8. Lưu Trữ Trạng Thái Người Dùng & Đồng Bộ Reactive (`nutsty_settings.json`)
 - **Tệp lưu**: `~/.config/noctalia/nutsty_settings.json`.
 - **Cơ chế đọc an toàn**: `shell.qml` nạp tự động qua `FileView` kết hợp timer trễ `delayedSettingsRead` (100ms) để bảo đảm tiến trình bất đồng bộ của Quickshell hoàn tất trước khi phân giải JSON.
 - **Ràng buộc QML Binding**: Khi click Shuffle hoặc Repeat trong `components/PlayerBarBottom.qml`, chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`. Tuyệt đối không gán đè thuộc tính cục bộ làm phá vỡ reactive property binding.

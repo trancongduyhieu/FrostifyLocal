@@ -98,6 +98,9 @@ Item {
     signal songDisliked(var trk)
     signal downloadRequested(var trk)
     signal queueUpdated(var newTracks)
+    signal exitListeningAlongRequested()
+
+    property var listeningAlongFriend: null
 
     FileView {
         id: dislikedFileView
@@ -227,7 +230,8 @@ Item {
         }
         if (url.indexOf("i.ytimg.com") !== -1) {
             var clean = url.split("?")[0];
-            return clean.replace(/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg/, "maxresdefault.jpg");
+            if (clean.indexOf("maxresdefault.jpg") !== -1) return clean;
+            return clean.replace(/(mqdefault|sddefault|default)\.jpg/, "hqdefault.jpg");
         }
         return url;
     }
@@ -1224,6 +1228,101 @@ Item {
                                 if (!root.relatedData) {
                                     root.fetchRelatedContent();
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Listen Along Mode Capsule (Vị trí 1: Góc trên bên phải cạnh tabs)
+                Rectangle {
+                    id: listenAlongBadge
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 32
+                    width: listenAlongRow.implicitWidth + 20
+                    radius: 16
+                    visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                    border.color: root.accentColor
+                    border.width: 1
+
+                    RowLayout {
+                        id: listenAlongRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        // Pulsing Green Live Dot
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#10b981"
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
+                                running: listenAlongBadge.visible
+                                NumberAnimation { to: 0.4; duration: 800 }
+                                NumberAnimation { to: 1.0; duration: 800 }
+                            }
+                        }
+
+                        // Friend Mini Avatar
+                        Rectangle {
+                            width: 20; height: 20; radius: 10
+                            color: Qt.rgba(1, 1, 1, 0.15)
+                            clip: true
+
+                            Image {
+                                id: badgeAvatarImg
+                                anchors.fill: parent
+                                source: root.listeningAlongFriend ? (root.listeningAlongFriend.avatar_url || "") : ""
+                                fillMode: Image.PreserveAspectCrop
+                                visible: status === Image.Ready && source != ""
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.listeningAlongFriend && root.listeningAlongFriend.user_name ? root.listeningAlongFriend.user_name.charAt(0).toUpperCase() : "F"
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.bold: true
+                                visible: !badgeAvatarImg.visible
+                            }
+                        }
+
+                        // Friend Name & Status Text
+                        Text {
+                            text: root.listeningAlongFriend ? I18n.tr("Đang nghe cùng " + (root.listeningAlongFriend.user_name || "Bạn"), "Listening with " + (root.listeningAlongFriend.user_name || "Friend")) : ""
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+
+                        // Vertical Separator
+                        Rectangle {
+                            width: 1; height: 14
+                            color: Qt.rgba(255, 255, 255, 0.2)
+                        }
+
+                        // Exit Button [✕]
+                        Rectangle {
+                            width: 20; height: 20; radius: 10
+                            color: exitBadgeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.4) : Qt.rgba(244, 63, 94, 0.18)
+                            border.color: Qt.rgba(244, 63, 94, 0.5)
+                            border.width: 1
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/window-close-symbolic.svg"
+                                iconSize: 9
+                                color: exitBadgeArea.containsMouse ? "#ffffff" : "#fda4af"
+                            }
+
+                            MouseArea {
+                                id: exitBadgeArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.exitListeningAlongRequested()
                             }
                         }
                     }
