@@ -346,7 +346,7 @@ Item {
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",
-                Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/lyrics_helper.py",
+                (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/lyrics_helper.py",
                 songTitle, songArtist, songVid, songPath
             ];
             lyricsProc.running = true;
@@ -517,7 +517,7 @@ Item {
         relatedProc.running = false;
         relatedProc.command = [
             "python3", "-u",
-            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+            (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
             "song_related", vid, title, artist
         ];
         relatedProc.running = true;
@@ -566,7 +566,7 @@ Item {
         moodChipsProc.running = false;
         moodChipsProc.command = [
             "python3", "-u",
-            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+            (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
             "next_chips", vid
         ];
         moodChipsProc.running = true;
@@ -618,7 +618,7 @@ Item {
         moodQueueProc.running = false;
         moodQueueProc.command = [
             "python3", "-u",
-            Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+            (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
             "filter_queue", vid, plId, params
         ];
         moodQueueProc.running = true;

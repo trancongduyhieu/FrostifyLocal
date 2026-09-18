@@ -73,6 +73,7 @@ def ensure_mpv():
     cmd = [
         "mpv",
         "--idle=yes",
+        "--pause=no",
         "--no-video",
         f"--input-ipc-server={MPV_SOCKET}",
         "--audio-buffer=0.2",
@@ -463,15 +464,20 @@ def main():
 
         has_file = bool(path and not idle) and not is_loading
 
-        # Self-healing unpause: if state was recently marked 'playing' (<25s), but MPV is paused during stream load
-        if st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 25.0:
+        # Self-healing unpause: if state was marked 'playing' or 'loading', but MPV is paused with a loaded file
+        if st.get("state") in ["playing", "loading"] and (time.time() - st.get("timestamp", 0)) < 45.0:
             if pause is True and (path and not idle):
                 send_mpv_cmd(["set_property", "pause", False])
                 pause = False
 
+        is_actively_playing = (pause is False) and has_file
+        # Grace period: during the first 3s of 'playing' state with a loaded file, report is_playing=True
+        if not is_actively_playing and st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 3.0 and (path and not idle):
+            is_actively_playing = True
+
         status = {
-            "is_playing": (pause is False) and has_file,
-            "is_paused": (pause is True) and has_file,
+            "is_playing": is_actively_playing,
+            "is_paused": (pause is True) and has_file and not is_actively_playing,
             "time_pos": round(time_pos, 1) if has_file else 0.0,
             "duration": round(duration, 1) if has_file else 0.0,
             "filename": filename if has_file else "",

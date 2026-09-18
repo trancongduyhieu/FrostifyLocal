@@ -24,11 +24,17 @@ Rectangle {
     property int arrowStylePreset: 1
     readonly property real accentLum: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
+    property var friendsNotes: []
+    property var myLatestNote: null
+
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
     signal playSectionRequested(var trackList)
     signal playlistSelected(var pl)
     signal trackContextMenuRequested(var trk, real globalX, real globalY)
+    signal postNoteRequested()
+    signal playFriendTrackRequested(var trk)
+    signal addFriendRequested()
 
     function getGreeting() {
         var h = new Date().getHours();
@@ -138,6 +144,17 @@ Rectangle {
                     font.pixelSize: 28
                     font.bold: true
                     color: Theme.textPrimary
+                }
+
+                // Friends Pulse: 24h Ephemeral Music Notes Bar
+                FriendsPulseBar {
+                    Layout.fillWidth: true
+                    friendsNotes: root.friendsNotes
+                    myLatestNote: root.myLatestNote
+                    accentColor: root.accentColor
+                    onPostNoteClicked: root.postNoteRequested()
+                    onPlayTrackRequested: track => root.playFriendTrackRequested(track)
+                    onAddFriendClicked: root.addFriendRequested()
                 }
 
                 // Separated Mood Filter Pills with Sliding Liquid Glass Lens (True Keo 502 Refraction)

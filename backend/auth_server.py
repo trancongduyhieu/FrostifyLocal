@@ -14,6 +14,31 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 import ytmusic_helper
+from datetime import datetime
+
+def get_notes_vault_path():
+    xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    d = os.path.join(xdg, "noctalia")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "nutsty_notes_vault.json")
+
+def load_notes_vault():
+    p = get_notes_vault_path()
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_notes_vault(data):
+    p = get_notes_vault_path()
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 PORT = 17890
 HOST = "127.0.0.1"
@@ -127,6 +152,28 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif path == "/api/notes":
+            friends_raw = query.get("friends", [""])[0]
+            friends = [f.strip().lower() for f in friends_raw.split(",") if f.strip()]
+            vault = load_notes_vault()
+            now = time.time()
+            valid_notes = []
+            cleaned_vault = {}
+            for k, item in vault.items():
+                if item.get("_expires_ts", 0) > now:
+                    cleaned_vault[k] = item
+                    if item.get("user_email", "").strip().lower() in friends:
+                        valid_notes.append(item)
+            if len(cleaned_vault) != len(vault):
+                save_notes_vault(cleaned_vault)
+            data = {"count": len(valid_notes), "notes": valid_notes}
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -151,6 +198,46 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             status_code = 200 if res.get("success") else 400
             payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
 
+            self.send_response(status_code)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif self.path == "/api/notes":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+            try:
+                req_data = json.loads(post_body)
+            except Exception:
+                req_data = {}
+
+            email = req_data.get("user_email", "").strip().lower()
+            note_text = req_data.get("note_text", "").strip()
+
+            if not email or not note_text:
+                res = {"success": False, "error": "Missing required fields"}
+                status_code = 400
+            else:
+                ttl = 86400
+                now = time.time()
+                record = {
+                    "user_email": email,
+                    "user_name": req_data.get("user_name", "Anonymous"),
+                    "avatar_url": req_data.get("avatar_url", ""),
+                    "note_text": note_text[:80],
+                    "track": req_data.get("track"),
+                    "created_at": datetime.fromtimestamp(now).isoformat(),
+                    "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
+                    "_expires_ts": now + ttl
+                }
+                vault = load_notes_vault()
+                vault[f"note:{email}"] = record
+                save_notes_vault(vault)
+                res = {"success": True, "note": record}
+                status_code = 200
+
+            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
             self.send_response(status_code)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json")

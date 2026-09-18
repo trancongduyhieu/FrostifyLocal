@@ -103,7 +103,7 @@ Rectangle {
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",
-                Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/lyrics_helper.py",
+                (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/lyrics_helper.py",
                 songTitle, songArtist, songVid, songPath
             ];
             lyricsProc.running = true;
@@ -234,7 +234,7 @@ Rectangle {
             songDetailsProc.running = false;
             songDetailsProc.command = [
                 "python3", "-u",
-                Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/ytmusic_helper.py",
+                (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
                 "song_details", vid
             ];
             songDetailsProc.running = true;

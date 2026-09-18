@@ -73,6 +73,8 @@ Scope {
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
     property bool showSidebar: true
+    property var friendsNotes: []
+    property var myLatestNote: null
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
@@ -642,6 +644,55 @@ Scope {
         }
     }
 
+    Process {
+        id: fetchFriendsNotesProc
+        command: ["python3", "-u", win.appDir + "/backend/social_notes.py", "get"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var parsed = JSON.parse(data);
+                    if (Array.isArray(parsed)) {
+                        win.friendsNotes = parsed;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
+        id: postNoteProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res && res.success && res.note) {
+                        win.myLatestNote = res.note;
+                    }
+                } catch(e) {}
+            }
+        }
+        onExited: {
+            if (!fetchFriendsNotesProc.running) {
+                fetchFriendsNotesProc.running = true;
+            }
+        }
+    }
+
+    Timer {
+        id: friendsNotesTimer
+        interval: 60000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!fetchFriendsNotesProc.running) {
+                fetchFriendsNotesProc.running = true;
+            }
+        }
+    }
+
     function trackPlayback(trk) {
         if (!win.syncHistoryToGoogle || !trk) return;
         var vid = trk.videoId || trk.path || "";
@@ -805,6 +856,47 @@ Scope {
         win.playingPlaylistId = "";
         win.playingSourceTitle = "";
         win.playOnlineTrack(trk, true);
+    }
+
+    function playFriendTrack(trk) {
+        if (!trk) return;
+        var rVid = trk.id || trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (rVid) {
+            win.currentTracks = [trk];
+            win.playingPlaylistId = "";
+            win.playingSourceTitle = I18n.tr("Nghe cùng bạn bè", "Listening with friend");
+            win.playOnlineTrack(trk, true);
+        } else {
+            var q = (trk.title || "") + " " + (trk.artist || "");
+            if (q.trim()) {
+                win.executeSearch(q.trim());
+            }
+        }
+    }
+
+    function postDailyNote(text, track) {
+        if (!text) return;
+        var trackObj = track ? {
+            id: track.videoId || track.id || "",
+            title: track.title || track.name || "",
+            artist: track.artist || "",
+            cover: track.cover || ""
+        } : null;
+        win.myLatestNote = {
+            note_text: text,
+            track: trackObj,
+            created_at: new Date().toISOString()
+        };
+        postNoteProc.running = false;
+        postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", text, JSON.stringify(trackObj || {})];
+        postNoteProc.running = true;
+    }
+
+    function promptAddFriend() {
+        Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "add_friend", "friend@gmail.com"]);
+        if (!fetchFriendsNotesProc.running) {
+            fetchFriendsNotesProc.running = true;
+        }
     }
 
     function playArtistShuffle(artistItem, candidateTracks) {
@@ -1113,13 +1205,6 @@ Scope {
         border.width: 0
         clip: true
         focus: true
-
-        Keys.onSpacePressed: event => {
-            if (!((searchView && searchView.isInputActiveFocus) || (win.activeFocusItem && (win.activeFocusItem.hasOwnProperty("cursorPosition") || win.activeFocusItem.hasOwnProperty("selectedText"))))) {
-                win.togglePlay();
-                event.accepted = true;
-            }
-        }
 
         // =====================================================================
         // Dynamic Playing Backdrop Cover:
@@ -1638,6 +1723,8 @@ Scope {
                             isPlaying: win.isPlaying
                             accentColor: win.accentColor
                             accountName: win.authAccountName
+                            friendsNotes: win.friendsNotes
+                            myLatestNote: win.myLatestNote
 
                             onMoodSelected: (title, params) => win.selectMood(title, params)
                             onTrackPlayRequested: trk => {
@@ -1652,6 +1739,9 @@ Scope {
                             }
                             onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                            onPostNoteRequested: postNoteModal.visible = true
+                            onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
+                            onAddFriendRequested: win.promptAddFriend()
                         }
 
                         MainTrackGrid {
@@ -2038,6 +2128,17 @@ Scope {
                 browserLoginProc.running = false;
                 browserLoginProc.command = ["python3", "-u", win.appDir + "/backend/browser_login.py"];
                 browserLoginProc.running = true;
+            }
+        }
+
+        PostNoteModal {
+            id: postNoteModal
+            currentTrack: win.currentTrack
+            accentColor: win.accentColor
+            onCloseRequested: postNoteModal.visible = false
+            onNoteSubmitted: (text, trk) => {
+                win.postDailyNote(text, trk);
+                postNoteModal.visible = false;
             }
         }
 
@@ -2839,11 +2940,16 @@ Scope {
                     var elapsed = Date.now() - win.trackChangeTimestamp;
 
                     if (win.isLoadingAudio) {
-                        // While loading:
-                        // 1. Daemon says is_loading, OR
-                        // 2. Not enough time elapsed (< 400ms), OR
-                        // 3. MPV hasn't started playing positive time (time_pos <= 0)
-                        if ((s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) && elapsed < 35000) {
+                        // If MPV is paused while loading, actively force unpause!
+                        if (s.is_paused) {
+                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                        }
+
+                        var isAdvancing = Boolean(s.time_pos && s.time_pos > 0);
+                        var isReadyPlaying = Boolean(!s.is_loading && s.is_playing && s.duration && s.duration > 0 && elapsed > 1000);
+
+                        // While loading: wait until either time_pos advances or stream is ready playing
+                        if ((s.is_loading || elapsed < 400 || (!isAdvancing && !isReadyPlaying)) && elapsed < 35000) {
                             win.currentTime = 0.0;
                             return;
                         }
@@ -2851,7 +2957,13 @@ Scope {
                         win.isLoadingAudio = false;
                         win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                        if (s.time_pos && s.time_pos > 0) {
+                        win.isPlaying = true;
+                        if (s.is_paused) {
+                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                        }
+                    } else {
+                        // Grace period: during first 2500ms of playback, don't allow transient buffering to flip isPlaying to false
+                        if (elapsed < 2500) {
                             win.isPlaying = true;
                             if (s.is_paused) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
@@ -2859,8 +2971,6 @@ Scope {
                         } else {
                             if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         }
-                    } else {
-                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
                         }
@@ -2944,11 +3054,15 @@ Scope {
         function submitSearch(q: string) { frostifyIpc.submitSearch(q); }
         function switchSearchTab(tab: string) { frostifyIpc.switchSearchTab(tab); }
         function toggleSleepTimer() { frostifyIpc.toggleSleepTimer(); }
+        function openPostNoteModal() { frostifyIpc.openPostNoteModal(); }
+        function closePostNoteModal() { frostifyIpc.closePostNoteModal(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function openPostNoteModal() { postNoteModal.visible = true; }
+        function closePostNoteModal() { postNoteModal.visible = false; }
         function toggleSleepTimer() {
             if (sleepTimerPopover.isOpen) sleepTimerPopover.close();
             else sleepTimerPopover.open();
