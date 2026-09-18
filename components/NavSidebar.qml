@@ -642,12 +642,10 @@ Rectangle {
                                 (modelData.id && root.currentTrack.id && modelData.id === root.currentTrack.id)
                             ))
 
-                            color: isCurrent ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
-                            border.color: isCurrent ? root.accentColor : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : Qt.rgba(1.0, 1.0, 1.0, 0.04))
-                            border.width: 1
+                            color: isCurrent ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : (qRowH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent")
+                            border.width: 0
 
                             Behavior on color { ColorAnimation { duration: 100 } }
-                            Behavior on border.color { ColorAnimation { duration: 100 } }
 
                             HoverHandler { id: qRowH }
 

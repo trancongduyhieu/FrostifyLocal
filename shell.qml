@@ -2386,6 +2386,16 @@ Scope {
     }
 
     function playNext() {
+        if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
+            // Guard: sleep timer instructed to stop at end of current track
+            win.isSleepTimerActive = false;
+            win.sleepTimerFadeTriggered = false;
+            win.sleepTimerMode = "";
+            win.sleepTimerRemainingSeconds = 0;
+            win.isPlaying = false;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+            return;
+        }
         if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
         var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
         if (curIdx === -1) return;
@@ -2442,7 +2452,11 @@ Scope {
 
     function startSleepTimer(seconds, mode) {
         win.sleepTimerMode = mode;
-        win.sleepTimerRemainingSeconds = seconds;
+        if (mode === "end_of_track") {
+            win.sleepTimerRemainingSeconds = Math.max(0, Math.round(win.totalDuration - win.currentTime));
+        } else {
+            win.sleepTimerRemainingSeconds = seconds;
+        }
         win.sleepTimerFadeTriggered = false;
         win.isSleepTimerActive = true;
     }
@@ -2475,18 +2489,17 @@ Scope {
                 } else if (win.sleepTimerRemainingSeconds <= 0) {
                     win.isSleepTimerActive = false;
                     win.sleepTimerFadeTriggered = false;
+                    win.sleepTimerMode = "";
                     win.isPlaying = false;
+                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
                 }
             } else if (win.sleepTimerMode === "end_of_track") {
+                win.sleepTimerRemainingSeconds = Math.max(0, Math.round(win.totalDuration - win.currentTime));
                 if (win.totalDuration > 5) {
                     var remaining = win.totalDuration - win.currentTime;
-                    if (remaining <= 5.0 && remaining > 0.5 && !win.sleepTimerFadeTriggered) {
+                    if (remaining <= 5.0 && remaining > 0.4 && !win.sleepTimerFadeTriggered) {
                         win.sleepTimerFadeTriggered = true;
                         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", String(Math.max(1.0, remaining))]);
-                    } else if (remaining <= 0.5 && win.sleepTimerFadeTriggered) {
-                        win.isSleepTimerActive = false;
-                        win.sleepTimerFadeTriggered = false;
-                        win.isPlaying = false;
                     }
                 }
             }
@@ -2818,9 +2831,26 @@ Scope {
                         if (matched) win.currentTrack = matched;
                     }
 
+                    // High-precision fade trigger for end_of_track sleep timer
+                    if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track" && win.totalDuration > 5) {
+                        var remToEnd = win.totalDuration - win.currentTime;
+                        if (remToEnd <= 5.0 && remToEnd > 0.6 && !win.sleepTimerFadeTriggered) {
+                            win.sleepTimerFadeTriggered = true;
+                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", String(Math.max(1.0, remToEnd))]);
+                        }
+                    }
+
                     // Auto-advance or Repeat at song end (only when actively playing)
-                    if (win.isPlaying && !win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.4) {
-                        if (win.isRepeat) {
+                    if (win.isPlaying && !win.isLoadingAudio && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
+                        if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
+                            // Sleep timer: End of track reached! Stop playback completely and cancel timer.
+                            win.isSleepTimerActive = false;
+                            win.sleepTimerFadeTriggered = false;
+                            win.sleepTimerMode = "";
+                            win.sleepTimerRemainingSeconds = 0;
+                            win.isPlaying = false;
+                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                        } else if (win.isRepeat) {
                             win.seekAudio(0.0);
                         } else {
                             win.playNext();

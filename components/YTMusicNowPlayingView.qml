@@ -1436,15 +1436,11 @@ Item {
                                 radius: 12
                                 readonly property bool isCurrent: root.track && (modelData.id === root.track.id || (modelData.videoId && modelData.videoId === root.track.videoId))
                                 color: isCurrent 
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) 
-                                       : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(1, 1, 1, 0.02))
-                                border.color: isCurrent 
-                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                              : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07))
-                                border.width: 1
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                       : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+                                border.width: 0
 
                                 Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1827,9 +1823,8 @@ Item {
                                         Layout.fillWidth: true
                                         height: 50
                                         radius: 8
-                                        color: relTrackMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                                        border.color: Qt.rgba(1, 1, 1, 0.06)
-                                        border.width: 1
+                                        color: relTrackMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                                        border.width: 0
 
                                         RowLayout {
                                             anchors.fill: parent

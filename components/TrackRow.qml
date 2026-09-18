@@ -5,12 +5,10 @@ Rectangle {
     id: row
     height: 48
     radius: 8
-    color: isCurrentTrack ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.12) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
-    border.color: isCurrentTrack ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.45) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
-    border.width: 1
+    color: isCurrentTrack ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.16) : (mouseArea.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : "transparent")
+    border.width: 0
 
     Behavior on color { ColorAnimation { duration: 100 } }
-    Behavior on border.color { ColorAnimation { duration: 100 } }
 
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property int indexNumber: 1
