@@ -1273,6 +1273,7 @@ Item {
                                     spacing: 8
                                     anchors.verticalCenter: parent.verticalCenter
                                     z: 5
+                                    onWidthChanged: Qt.callLater(moodFlickable.updateActiveIndicator)
 
                                     Repeater {
                                         id: chipRepeater
@@ -1284,6 +1285,12 @@ Item {
                                             readonly property bool isSelected: index === root.selectedMoodIndex
                                             readonly property bool isHovered: chipMouse.containsMouse
 
+                                            onXChanged: {
+                                                if (isSelected) activeChipIndicator.x = chipItem.x;
+                                            }
+                                            onWidthChanged: {
+                                                if (isSelected) activeChipIndicator.width = chipItem.width;
+                                            }
                                             onIsSelectedChanged: {
                                                 if (isSelected) {
                                                     activeChipIndicator.x = chipItem.x;
@@ -1362,6 +1369,15 @@ Item {
                                     if (itm) {
                                         activeChipIndicator.x = itm.x;
                                         activeChipIndicator.width = itm.width;
+                                        return;
+                                    }
+                                    for (var i = 0; i < chipRepeater.count; ++i) {
+                                        var candidate = chipRepeater.itemAt(i);
+                                        if (candidate && candidate.isSelected) {
+                                            activeChipIndicator.x = candidate.x;
+                                            activeChipIndicator.width = candidate.width;
+                                            break;
+                                        }
                                     }
                                 }
 
@@ -1374,6 +1390,13 @@ Item {
                                     moodFlickable.updateActiveIndicator();
                                 }
                                 function onMoodChipsChanged() {
+                                    Qt.callLater(moodFlickable.updateActiveIndicator);
+                                }
+                            }
+
+                            Connections {
+                                target: I18n
+                                function onLocaleChanged() {
                                     Qt.callLater(moodFlickable.updateActiveIndicator);
                                 }
                             }

@@ -235,6 +235,7 @@ Rectangle {
                             spacing: 8
                             anchors.verticalCenter: parent.verticalCenter
                             z: 5
+                            onWidthChanged: Qt.callLater(homeMoodFlickable.updateActiveIndicator)
 
                             Repeater {
                                 id: moodRepeater
@@ -259,6 +260,12 @@ Rectangle {
                                     readonly property bool isSelected: root.selectedMood === modelData.title
                                     readonly property bool isHovered: pillMouse.containsMouse
 
+                                    onXChanged: {
+                                        if (isSelected) activeMoodIndicator.x = pillItem.x;
+                                    }
+                                    onWidthChanged: {
+                                        if (isSelected) activeMoodIndicator.width = pillItem.width;
+                                    }
                                     onIsSelectedChanged: {
                                         if (isSelected) {
                                             activeMoodIndicator.x = pillItem.x;
@@ -335,6 +342,13 @@ Rectangle {
                             homeMoodFlickable.updateActiveIndicator();
                         }
                         function onMoodsChanged() {
+                            Qt.callLater(homeMoodFlickable.updateActiveIndicator);
+                        }
+                    }
+
+                    Connections {
+                        target: I18n
+                        function onLocaleChanged() {
                             Qt.callLater(homeMoodFlickable.updateActiveIndicator);
                         }
                     }
