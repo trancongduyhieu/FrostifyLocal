@@ -9,6 +9,7 @@ Item {
 
     implicitWidth: iconSize
     implicitHeight: iconSize
+    visible: opacity > 0.001 && root.source !== ""
 
     Image {
         id: rawIcon
@@ -26,6 +27,8 @@ Item {
         brightness: 1.0
         colorization: 1.0
         colorizationColor: root.color
+        autoPaddingEnabled: false
+        visible: root.visible && root.opacity > 0.001 && rawIcon.status === Image.Ready
         Behavior on colorizationColor { ColorAnimation { duration: 100 } }
     }
 }

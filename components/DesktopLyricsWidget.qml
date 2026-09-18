@@ -20,6 +20,8 @@ PanelWindow {
     property int customY: -1
 
     signal positionChanged(int newX, int newY)
+    signal playPauseRequested()
+    signal volumeChangeRequested(real delta)
 
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
@@ -32,6 +34,14 @@ PanelWindow {
         bottom: true
         left: true
         right: true
+    }
+
+    // Dynamic input mask: Passes through desktop clicks when idle; full grab when dragging
+    mask: (universalDragArea.pressed || universalDragArea.drag.active) ? null : lyricsRegion
+
+    Region {
+        id: lyricsRegion
+        item: containerBox
     }
 
     // =========================================================================
@@ -173,22 +183,54 @@ PanelWindow {
                     : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)))
         visible: root.enabled && root.activeLyrics && root.activeLyrics.length > 0
 
-        // Universal Full-Screen Drag Area (Shared across ALL presets)
+        // Universal Full-Screen Drag & Gesture Area (Shared across ALL presets)
         MouseArea {
             id: universalDragArea
             anchors.fill: parent
             z: 100
             hoverEnabled: true
-            cursorShape: containsMouse ? Qt.SizeAllCursor : Qt.ArrowCursor
+            acceptedButtons: Qt.LeftButton
+
+            property bool isSuperPressed: false
+            property int startDragX: 0
+            property int startDragY: 0
+
+            cursorShape: (drag.active || isSuperPressed)
+                ? Qt.ClosedHandCursor
+                : (containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
+
             drag.target: containerBox
+            drag.threshold: 8
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
             drag.maximumX: Math.max(0, root.width - 120)
             drag.minimumY: 0
             drag.maximumY: Math.max(0, root.height - containerBox.height)
 
+            onPressed: (mouse) => {
+                isSuperPressed = !!(mouse.modifiers & Qt.MetaModifier);
+                startDragX = containerBox.x;
+                startDragY = containerBox.y;
+            }
+
+            onDoubleClicked: (mouse) => {
+                root.playPauseRequested();
+            }
+
+            onWheel: (wheel) => {
+                var delta = (wheel.angleDelta.y > 0) ? 3.0 : -3.0;
+                root.volumeChangeRequested(delta);
+            }
+
             onReleased: {
-                root.positionChanged(containerBox.x, containerBox.y);
+                isSuperPressed = false;
+                if (Math.abs(containerBox.x - startDragX) > 2 || Math.abs(containerBox.y - startDragY) > 2) {
+                    root.positionChanged(containerBox.x, containerBox.y);
+                }
+            }
+
+            onCanceled: {
+                isSuperPressed = false;
             }
         }
 

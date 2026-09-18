@@ -64,6 +64,7 @@ Scope {
     property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop, 4: Anime MV Kinetic
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
+    property var desktopLyricsWallpaperPositions: ({})
     property string currentLanguage: I18n.locale
     property bool showSidebar: true
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
@@ -94,6 +95,34 @@ Scope {
         }
     }
     property string currentWallpaperPath: ""
+    onCurrentWallpaperPathChanged: {
+        if (currentWallpaperPath) {
+            syncLyricsPositionForWallpaper(currentWallpaperPath);
+        }
+    }
+
+    function getWallpaperKey(path) {
+        if (!path || typeof path !== "string" || path.trim() === "") return "default";
+        var clean = path.trim();
+        var parts = clean.split("/");
+        var filename = parts[parts.length - 1];
+        return filename || "default";
+    }
+
+    function syncLyricsPositionForWallpaper(wpPath) {
+        var wpKey = getWallpaperKey(wpPath);
+        if (win.desktopLyricsWallpaperPositions && win.desktopLyricsWallpaperPositions[wpKey]) {
+            var saved = win.desktopLyricsWallpaperPositions[wpKey];
+            if (saved && saved.x !== undefined && saved.y !== undefined) {
+                win.desktopLyricsCustomX = Number(saved.x);
+                win.desktopLyricsCustomY = Number(saved.y);
+                return;
+            }
+        }
+        win.desktopLyricsCustomX = -1;
+        win.desktopLyricsCustomY = -1;
+    }
+
     property var categorizedSearchData: null
     property string searchViewMode: "results" // "results", "suggestions"
     property var searchSuggestions: []
@@ -1850,6 +1879,12 @@ Scope {
             onResetLyricsPositionRequested: {
                 win.desktopLyricsCustomX = -1;
                 win.desktopLyricsCustomY = -1;
+                var wpKey = win.getWallpaperKey(win.currentWallpaperPath);
+                if (win.desktopLyricsWallpaperPositions && win.desktopLyricsWallpaperPositions[wpKey]) {
+                    var updated = Object.assign({}, win.desktopLyricsWallpaperPositions);
+                    delete updated[wpKey];
+                    win.desktopLyricsWallpaperPositions = updated;
+                }
                 win.saveSettings();
             }
             onConnectRequested: rawAuth => {
@@ -1965,7 +2000,10 @@ Scope {
             if (!raw || raw.trim() === "") return;
             try {
                 var p = JSON.parse(raw);
-                if (p.wallpaper) win.currentWallpaperPath = p.wallpaper;
+                if (p.wallpaper) {
+                    win.currentWallpaperPath = p.wallpaper;
+                    win.syncLyricsPositionForWallpaper(p.wallpaper);
+                }
                 var col = p.highlightColor || p.accentColor || "#deb06c";
                 win.wallpaperAccentColor = col;
             } catch(e) {}
@@ -2000,6 +2038,19 @@ Scope {
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);
             if (obj.desktopLyricsCustomX !== undefined) win.desktopLyricsCustomX = Number(obj.desktopLyricsCustomX);
             if (obj.desktopLyricsCustomY !== undefined) win.desktopLyricsCustomY = Number(obj.desktopLyricsCustomY);
+            if (obj.desktopLyricsWallpaperPositions !== undefined && typeof obj.desktopLyricsWallpaperPositions === "object") {
+                win.desktopLyricsWallpaperPositions = obj.desktopLyricsWallpaperPositions;
+            }
+            if (win.currentWallpaperPath) {
+                var curWpKey = win.getWallpaperKey(win.currentWallpaperPath);
+                if (win.desktopLyricsWallpaperPositions && win.desktopLyricsWallpaperPositions[curWpKey]) {
+                    win.syncLyricsPositionForWallpaper(win.currentWallpaperPath);
+                } else if (win.desktopLyricsCustomX >= 0 && win.desktopLyricsCustomY >= 0) {
+                    var initWpPos = Object.assign({}, win.desktopLyricsWallpaperPositions || {});
+                    initWpPos[curWpKey] = { x: win.desktopLyricsCustomX, y: win.desktopLyricsCustomY };
+                    win.desktopLyricsWallpaperPositions = initWpPos;
+                }
+            }
             if (obj.language !== undefined && (obj.language === "vi" || obj.language === "en")) {
                 win.currentLanguage = obj.language;
                 I18n.locale = win.currentLanguage;
@@ -2023,6 +2074,7 @@ Scope {
             desktopLyricsPreset: win.desktopLyricsPreset,
             desktopLyricsCustomX: win.desktopLyricsCustomX,
             desktopLyricsCustomY: win.desktopLyricsCustomY,
+            desktopLyricsWallpaperPositions: win.desktopLyricsWallpaperPositions,
             language: win.currentLanguage
         });
         Quickshell.execDetached(["python3", "-c",
@@ -2831,7 +2883,16 @@ Scope {
         onPositionChanged: (newX, newY) => {
             win.desktopLyricsCustomX = newX;
             win.desktopLyricsCustomY = newY;
+            var wpKey = win.getWallpaperKey(win.currentWallpaperPath);
+            var updated = Object.assign({}, win.desktopLyricsWallpaperPositions || {});
+            updated[wpKey] = { x: newX, y: newY };
+            win.desktopLyricsWallpaperPositions = updated;
             win.saveSettings();
+        }
+        onPlayPauseRequested: win.togglePlay()
+        onVolumeChangeRequested: (delta) => {
+            var newVol = Math.max(0.0, Math.min(100.0, win.volume + delta));
+            win.setVolume(newVol);
         }
     }
 

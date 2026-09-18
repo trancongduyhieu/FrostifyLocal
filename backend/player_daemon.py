@@ -38,6 +38,8 @@ def ensure_mpv():
         "--no-video",
         f"--input-ipc-server={MPV_SOCKET}",
         "--audio-buffer=0.2",
+        "--demuxer-max-bytes=16M",
+        "--demuxer-max-back-bytes=4M",
         "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
