@@ -442,6 +442,29 @@ class DownloadManager:
                     break
                 continue
 
+        # Defensive fallback: if audio file was successfully written despite a thumbnail or tag error
+        if last_err:
+            dl_dir = get_download_dir()
+            candidate_files = []
+            for ext in [f".{target_codec}", ".m4a", ".opus", ".mp3", ".webm"]:
+                matches = glob.glob(os.path.join(dl_dir, f"*{ext}"))
+                for m in matches:
+                    try:
+                        if (time.time() - os.path.getmtime(m)) < 120 and os.path.getsize(m) > 50000:
+                            candidate_files.append(m)
+                    except Exception:
+                        pass
+            if candidate_files:
+                candidate_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                downloaded_file = candidate_files[0]
+                with self.lock:
+                    task["state"] = STATE_DOWNLOADED
+                    task["progress"] = 100.0
+                    task["path"] = downloaded_file
+                self._fetch_lyrics_for_file(downloaded_file, task["title"], task["artist"], video_id)
+                self._trigger_library_rescan()
+                return True
+
         with self.lock:
             task["state"] = STATE_FAILED
             task["error"] = str(last_err)

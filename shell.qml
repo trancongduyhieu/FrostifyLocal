@@ -2825,7 +2825,7 @@ Scope {
                         // 1. Daemon says is_loading, OR
                         // 2. Not enough time elapsed (< 400ms), OR
                         // 3. MPV hasn't started playing positive time (time_pos <= 0)
-                        if (s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) {
+                        if ((s.is_loading || elapsed < 400 || !s.time_pos || s.time_pos <= 0) && elapsed < 12000) {
                             win.currentTime = 0.0;
                             return;
                         }

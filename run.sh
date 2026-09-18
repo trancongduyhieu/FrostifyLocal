@@ -21,6 +21,12 @@ if ! pgrep -f "backend/auth_server.py" >/dev/null 2>&1; then
     python3 "$DIR/backend/auth_server.py" >/dev/null 2>&1 &
 fi
 
+# Ensure required Python dependencies (mutagen)
+if ! python3 -c "import mutagen" >/dev/null 2>&1; then
+    echo "Installing missing dependency: mutagen..."
+    python3 -m pip install mutagen --quiet || true
+fi
+
 # Scan library if missing or requested
 if [ ! -f "$DIR/library.json" ] || [ "$1" == "--rescan" ]; then
     echo "Scanning music library..."

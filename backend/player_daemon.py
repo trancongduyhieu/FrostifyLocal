@@ -53,6 +53,15 @@ def ensure_mpv():
     streaming_quality = get_current_streaming_quality()
     ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
 
+    cookie_file = "/tmp/nutsty_yt_cookies.txt"
+    if not os.path.exists(cookie_file):
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import ytmusic_helper
+            cookie_file = ytmusic_helper.get_exported_cookie_file()
+        except Exception:
+            pass
+
     cmd = [
         "mpv",
         "--idle=yes",
@@ -66,6 +75,8 @@ def ensure_mpv():
         "--gapless-audio=yes",
         f"--ytdl-format={ytdl_fmt}"
     ]
+    if cookie_file and os.path.exists(cookie_file):
+        cmd.append(f"--ytdl-raw-options=cookies={cookie_file}")
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     # Wait for socket to appear
@@ -113,14 +124,21 @@ def resolve_media_path(file_path):
             if "watch?v=" in vid:
                 vid = vid.split("watch?v=")[1].split("&")[0]
 
-            # Instant cache lookup
+            streaming_quality = get_current_streaming_quality()
+
+            # Instant cache lookup with quality fallback
             cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
-            cached = cache.get(vid)
+            cached = cache.get(f"{vid}_{streaming_quality}") or cache.get(vid)
+            if not cached:
+                for k, v in cache.items():
+                    if k.startswith(f"{vid}_") and isinstance(v, dict) and v.get("stream_url"):
+                        cached = v
+                        break
             if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
                 return cached.get("stream_url")
 
-            # Resolve direct stream URL using android/ios bypass
-            res = ytmusic_helper.resolve_stream_url(vid)
+            # Resolve direct stream URL using authenticated format picker
+            res = ytmusic_helper.resolve_stream_url(vid, streaming_quality)
             if res and res.get("stream_url"):
                 return res.get("stream_url")
 
@@ -410,6 +428,8 @@ def main():
         path = get_mpv_property("path") or ""
         vol = get_mpv_property("volume") or 100
         idle = get_mpv_property("idle-active")
+        if time_pos and time_pos > 0:
+            is_loading = False
 
         has_file = bool(path and not idle) and not is_loading
 
