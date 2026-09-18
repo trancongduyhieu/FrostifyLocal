@@ -3119,13 +3119,21 @@ Scope {
                         win.currentTime = s.time_pos;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     } else {
-                        // Ngoài loading: tin hoàn toàn vào MPV
-                        if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
+                        if (postLoadElapsed < 2000 && !s.is_playing) {
+                            // Grace period 2s: MPV có thể brief-pause khi buffer stream mới.
+                            // Bỏ qua poll này → giữ nguyên win.isPlaying (không flip về false).
+                            // Không gọi resume → không gây infinite loop.
+                            // togglePlay() vẫn hoạt động vì nó set isPlaying trực tiếp, poll sau sẽ update đúng.
+                        } else {
+                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        }
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
                         }
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     }
+
 
                     // Cold-start recovery
                     if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
