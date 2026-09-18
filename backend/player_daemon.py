@@ -7,12 +7,30 @@ import os
 import sys
 import json
 import time
+import math
 import socket
 import subprocess
 
 MPV_SOCKET = "/tmp/nutsty_mpv.sock"
 STATUS_FILE = "/tmp/nutsty_status.json"
 COMMAND_FILE = "/tmp/nutsty_cmd.pipe"
+
+YTDL_FORMAT_MAP = {
+    "high_opus": "774/141/251/140/bestaudio/best",
+    "high_aac": "141/774/140/251/bestaudio/best",
+    "medium": "251/140/bestaudio/best",
+    "low": "250/ba[abr<=70]/bestaudio/best"
+}
+
+def get_current_streaming_quality():
+    settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                return json.load(f).get("streamingQuality", "high_opus")
+        except Exception:
+            pass
+    return "high_opus"
 
 def ensure_mpv():
     """Ensure background MPV process is running with IPC socket"""
@@ -32,6 +50,9 @@ def ensure_mpv():
         except Exception:
             pass
 
+    streaming_quality = get_current_streaming_quality()
+    ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
+
     cmd = [
         "mpv",
         "--idle=yes",
@@ -43,7 +64,7 @@ def ensure_mpv():
         "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
-        "--ytdl-format=bestaudio/best"
+        f"--ytdl-format={ytdl_fmt}"
     ]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
@@ -167,7 +188,51 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
         return meta
     except Exception:
         pass
-    return None
+def fade_out_and_pause(duration=5.0):
+    """Gradually lowers volume using a smooth Cosine fade curve, then pauses and restores volume."""
+    abort_file = "/tmp/nutsty_abort_fade"
+    if os.path.exists(abort_file):
+        try:
+            os.remove(abort_file)
+        except Exception:
+            pass
+
+    current_vol = get_mpv_property("volume")
+    if current_vol is None:
+        current_vol = 100.0
+    else:
+        try:
+            current_vol = float(current_vol)
+        except Exception:
+            current_vol = 100.0
+
+    if current_vol <= 0:
+        send_mpv_cmd(["set_property", "pause", True])
+        return
+
+    steps = max(10, int(duration * 20))  # 20 steps per second (50ms interval)
+    interval = duration / steps
+
+    for i in range(1, steps + 1):
+        if os.path.exists(abort_file):
+            try:
+                os.remove(abort_file)
+            except Exception:
+                pass
+            send_mpv_cmd(["set_property", "volume", current_vol])
+            return
+
+        t = i / steps  # 0.0 -> 1.0
+        # Cosine S-curve: factor = (1 + cos(pi * t)) / 2 (starts at 1.0, ends at 0.0)
+        factor = (1.0 + math.cos(math.pi * t)) / 2.0
+        v = round(current_vol * factor, 1)
+        send_mpv_cmd(["set_property", "volume", v])
+        time.sleep(interval)
+
+    # Pause playback once volume touches 0
+    send_mpv_cmd(["set_property", "pause", True])
+    # Restore original volume safely so next session starts normal
+    send_mpv_cmd(["set_property", "volume", current_vol])
 
 def main():
     if len(sys.argv) < 2:
@@ -308,6 +373,17 @@ def main():
         vol = float(sys.argv[2])
         send_mpv_cmd(["set_property", "volume", vol])
 
+    elif action == "fade_out_and_pause":
+        dur = float(sys.argv[2]) if len(sys.argv) > 2 else 5.0
+        fade_out_and_pause(dur)
+
+    elif action == "cancel_fade":
+        try:
+            with open("/tmp/nutsty_abort_fade", "w") as f:
+                f.write("1")
+        except Exception:
+            pass
+
     elif action == "prewarm" and len(sys.argv) > 2:
         vid = sys.argv[2]
         if vid:
@@ -372,7 +448,12 @@ def main():
             "sample_rate_str": samplerate_str,
             "channels": channel_str
         }
-        print(json.dumps(specs))
+    elif action == "set_streaming_quality" and len(sys.argv) > 2:
+        ensure_mpv()
+        qual = sys.argv[2]
+        ytdl_fmt = YTDL_FORMAT_MAP.get(qual, "774/141/251/140/bestaudio/best")
+        send_mpv_cmd(["set_property", "ytdl-format", ytdl_fmt])
+        print(json.dumps({"success": True, "quality": qual, "ytdl_format": ytdl_fmt}))
 
 if __name__ == "__main__":
     main()

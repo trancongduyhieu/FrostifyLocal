@@ -9,7 +9,7 @@ Rectangle {
     anchors.fill: parent
     color: Qt.rgba(0, 0, 0, 0.58)
     visible: false
-    z: 999
+    z: 10005
 
     // =========================================================================
     // Core Properties & State (100% preserved for shell.qml integration)
@@ -29,6 +29,8 @@ Rectangle {
     property int customX: -1
     property int customY: -1
     property string currentLanguage: I18n.locale
+    property string streamingQuality: "high_opus"
+    property string downloadQuality: "high_opus"
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     // =========================================================================
@@ -36,6 +38,8 @@ Rectangle {
     // =========================================================================
     signal closeRequested()
     signal selectLanguageRequested(string lang)
+    signal selectStreamingQualityRequested(string quality)
+    signal selectDownloadQualityRequested(string quality)
     signal connectRequested(string rawAuth)
     signal logoutRequested()
     signal launchBrowserLoginRequested()
@@ -44,6 +48,41 @@ Rectangle {
     signal toggleDesktopLyricsRequested(bool enabled)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
+
+    function getQualityLabel(qual, isDownload) {
+        if (qual === "high_opus") {
+            return I18n.tr("Cao - Opus (256 kbps)", "High - Opus (256 kbps)");
+        } else if (qual === "high_aac") {
+            return I18n.tr("Cao - AAC (256 kbps)", "High - AAC (256 kbps)");
+        } else if (qual === "medium") {
+            return isDownload
+                ? I18n.tr("Tiêu chuẩn (128 kbps)", "Standard (128 kbps)")
+                : I18n.tr("Tiêu chuẩn (129 kbps)", "Standard (129 kbps)");
+        } else if (qual === "low") {
+            return isDownload
+                ? I18n.tr("Tiết kiệm (64 kbps)", "Data Saver (64 kbps)")
+                : I18n.tr("Tiết kiệm (66 kbps)", "Data Saver (66 kbps)");
+        }
+        return I18n.tr("Cao - Opus (256 kbps)", "High - Opus (256 kbps)");
+    }
+
+    function closeAllDropdowns() {
+        if (typeof langRowItem !== "undefined" && langRowItem) langRowItem.menuOpen = false;
+        if (typeof streamQualityRowItem !== "undefined" && streamQualityRowItem) streamQualityRowItem.menuOpen = false;
+        if (typeof downloadQualityRowItem !== "undefined" && downloadQualityRowItem) downloadQualityRowItem.menuOpen = false;
+    }
+
+    function toggleStreamingQualityMenu() {
+        var next = !(typeof streamQualityRowItem !== "undefined" && streamQualityRowItem.menuOpen);
+        closeAllDropdowns();
+        if (typeof streamQualityRowItem !== "undefined") streamQualityRowItem.menuOpen = next;
+    }
+
+    function toggleDownloadQualityMenu() {
+        var next = !(typeof downloadQualityRowItem !== "undefined" && downloadQualityRowItem.menuOpen);
+        closeAllDropdowns();
+        if (typeof downloadQualityRowItem !== "undefined") downloadQualityRowItem.menuOpen = next;
+    }
 
     // =========================================================================
     // Authentic Fonts for Bento Preview Displays
@@ -104,7 +143,7 @@ Rectangle {
             if (root.currentTab === 1) {
                 return Math.min(540, root.height - 48);
             } else {
-                return root.isLoggedIn ? Math.min(380, root.height - 48) : Math.min(520, root.height - 48);
+                return root.isLoggedIn ? Math.min(590, root.height - 48) : Math.min(620, root.height - 48);
             }
         }
         anchors.centerIn: parent
@@ -138,11 +177,11 @@ Rectangle {
             z: 20
         }
 
-        // Intercept clicks inside dialog so modal doesn't dismiss
+        // Intercept clicks inside dialog so modal doesn't dismiss, and close active dropdowns
         MouseArea {
             anchors.fill: parent
             z: 2
-            onClicked: {}
+            onClicked: root.closeAllDropdowns()
         }
 
         ColumnLayout {
@@ -229,7 +268,10 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentTab = 0
+                            onClicked: {
+                                root.closeAllDropdowns();
+                                root.currentTab = 0;
+                            }
                         }
                     }
 
@@ -255,7 +297,10 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentTab = 1
+                            onClicked: {
+                                root.closeAllDropdowns();
+                                root.currentTab = 1;
+                            }
                         }
                     }
                 }
@@ -298,7 +343,9 @@ Rectangle {
                     id: scrollContentContainer
                     width: settingsFlickable.width
                     height: implicitHeight
-                    implicitHeight: (root.currentTab === 0 ? tab0Content.implicitHeight : tab1Content.implicitHeight) + 8
+                    implicitHeight: (root.currentTab === 0
+                                     ? tab0Content.implicitHeight + (langRowItem.menuOpen || streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen ? 210 : 30)
+                                     : tab1Content.implicitHeight) + 8
 
                     // =========================================================
                     // TAB 0: Google & Cloud Account Content (100% Frameless)
@@ -489,7 +536,7 @@ Rectangle {
                     id: langRowItem
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
-                    z: menuOpen ? 50 : 1
+                    z: menuOpen ? 100 : 3
 
                     property bool menuOpen: false
 
@@ -560,7 +607,11 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: langRowItem.menuOpen = !langRowItem.menuOpen
+                            onClicked: {
+                                var next = !langRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                langRowItem.menuOpen = next;
+                            }
                         }
                     }
 
@@ -643,6 +694,420 @@ Rectangle {
                                         onClicked: {
                                             root.selectLanguageRequested(modelData.code);
                                             langRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Streaming Audio Quality Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
+                Item {
+                    id: streamQualityRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    z: menuOpen ? 100 : 2
+
+                    property bool menuOpen: false
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: streamDropdownBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Chất lượng phát trực tuyến", "Streaming Audio Quality")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Độ phân giải âm thanh khi nghe trực tuyến từ YouTube Music", "Audio stream bitrate when listening online from YouTube Music")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Dropdown Trigger (Option 1: Chromatic Ghost Action Button)
+                    Rectangle {
+                        id: streamDropdownBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: streamBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (streamBtnMouse.containsMouse || streamQualityRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: streamBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getQualityLabel(root.streamingQuality, false)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (streamBtnMouse.containsMouse || streamQualityRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: streamQualityRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: streamBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !streamQualityRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                streamQualityRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: streamDropdownMenu
+                        visible: streamQualityRowItem.menuOpen
+                        anchors.top: streamDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: streamDropdownBtn.right
+                        width: 250
+                        height: streamCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: streamCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var qualityOptions: [
+                                {
+                                    key: "high_opus",
+                                    name: I18n.tr("Cao - Opus (256 kbps)", "High - Opus (256 kbps)"),
+                                    desc: I18n.tr("Chi tiết cao nhất, nén Opus hiện đại", "Highest detail, modern Opus compression")
+                                },
+                                {
+                                    key: "high_aac",
+                                    name: I18n.tr("Cao - AAC (256 kbps)", "High - AAC (256 kbps)"),
+                                    desc: I18n.tr("Âm thanh ấm áp, tương thích tối đa", "Warm sound, maximum compatibility")
+                                },
+                                {
+                                    key: "medium",
+                                    name: I18n.tr("Tiêu chuẩn (129 kbps)", "Standard (129 kbps)"),
+                                    desc: I18n.tr("Cân bằng băng thông và chất lượng", "Balanced data usage and quality")
+                                },
+                                {
+                                    key: "low",
+                                    name: I18n.tr("Tiết kiệm (66 kbps)", "Data Saver (66 kbps)"),
+                                    desc: I18n.tr("Tối ưu khi mạng yếu hoặc 4G", "Optimized for slow network or 4G")
+                                }
+                            ]
+
+                            Repeater {
+                                model: streamCol.qualityOptions
+                                delegate: Rectangle {
+                                    width: streamCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 42
+                                    radius: 7
+                                    color: (root.streamingQuality === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (streamItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.streamingQuality === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (streamItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: streamCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.streamingQuality === modelData.key
+                                                color: (root.streamingQuality === modelData.key) ? "#ffffff" : (streamItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.streamingQuality === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: streamCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.streamingQuality === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: streamItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectStreamingQualityRequested(modelData.key);
+                                            streamQualityRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Download Audio Quality Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
+                Item {
+                    id: downloadQualityRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    z: menuOpen ? 100 : 1
+
+                    property bool menuOpen: false
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: dlDropdownBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Chất lượng tải nhạc về máy", "Download Audio Quality")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Định dạng và bitrate khi lưu bài hát về bộ nhớ máy", "Format and bitrate used when saving tracks to local storage")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Dropdown Trigger (Option 1: Chromatic Ghost Action Button)
+                    Rectangle {
+                        id: dlDropdownBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: dlBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (dlBtnMouse.containsMouse || downloadQualityRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: dlBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getQualityLabel(root.downloadQuality, true)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (dlBtnMouse.containsMouse || downloadQualityRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: downloadQualityRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: dlBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !downloadQualityRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                downloadQualityRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: dlDropdownMenu
+                        visible: downloadQualityRowItem.menuOpen
+                        anchors.top: dlDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: dlDropdownBtn.right
+                        width: 250
+                        height: dlCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: dlCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var qualityOptions: [
+                                {
+                                    key: "high_opus",
+                                    name: I18n.tr("Cao - Opus (256 kbps)", "High - Opus (256 kbps)"),
+                                    desc: I18n.tr("Trích xuất Opus 256k nguyên gốc, chi tiết cao", "Direct Opus 256k extract, highest detail")
+                                },
+                                {
+                                    key: "high_aac",
+                                    name: I18n.tr("Cao - AAC (256 kbps)", "High - AAC (256 kbps)"),
+                                    desc: I18n.tr("Trích xuất M4A/AAC 256k tương thích mọi nơi", "Direct M4A/AAC 256k, universal compatibility")
+                                },
+                                {
+                                    key: "medium",
+                                    name: I18n.tr("Tiêu chuẩn (128 kbps)", "Standard (128 kbps)"),
+                                    desc: I18n.tr("Dung lượng vừa phải, định dạng M4A chuẩn", "Moderate file size, standard M4A")
+                                },
+                                {
+                                    key: "low",
+                                    name: I18n.tr("Tiết kiệm (64 kbps)", "Data Saver (64 kbps)"),
+                                    desc: I18n.tr("Dung lượng siêu nhẹ cho bộ nhớ máy nhỏ", "Ultra light storage for small disk spaces")
+                                }
+                            ]
+
+                            Repeater {
+                                model: dlCol.qualityOptions
+                                delegate: Rectangle {
+                                    width: dlCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 42
+                                    radius: 7
+                                    color: (root.downloadQuality === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (dlItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.downloadQuality === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (dlItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: dlCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.downloadQuality === modelData.key
+                                                color: (root.downloadQuality === modelData.key) ? "#ffffff" : (dlItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.downloadQuality === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: dlCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.downloadQuality === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: dlItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectDownloadQualityRequested(modelData.key);
+                                            downloadQualityRowItem.menuOpen = false;
                                         }
                                     }
                                 }

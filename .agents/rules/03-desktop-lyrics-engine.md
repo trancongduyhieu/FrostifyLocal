@@ -6,8 +6,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
 
 ## 1. Universal Lyrics Harness (`components/DesktopLyricsWidget.qml`)
 - **Kiến trúc Host**: Chạy trên nền native Wayland Layer-Shell thông qua Quickshell, neo trực tiếp lên không gian desktop mà không tạo khung cửa sổ XWayland truyền thống.
-- **Tọa độ trực quan**: Hiển thị nổi lên hình nền desktop tại vùng hạ tiêu cự / tà váy nhân vật.
-- **Tương tác**: Cho phép kéo thả tự do trên màn hình và tự động lưu tọa độ, đồng bộ màu sắc tức thời theo bảng màu `nutsty_palette.json`.
+- **Dynamic Input Mask**: Khai báo `Region { id: lyricsRegion; item: containerBox }` và `mask: (pressed || drag.active) ? null : lyricsRegion` giúp desktop/ứng dụng bên dưới nhận chuột 100% khi idle.
+- **Cử chỉ chuột & Bảo vệ kéo thả**: Double-click gọi `playPauseRequested()`, lăn chuột (wheel) tăng/giảm âm lượng $\pm 3\%$, drag threshold 8px (hoặc giữ phím `Super`) ngăn trôi vị trí khi click.
+- **Per-Wallpaper Smart Anchor**: Lưu tọa độ theo tên file hình nền vào `desktopLyricsWallpaperPositions` (`nutsty_settings.json`); tự động đổi vị trí tương ứng khi chuyển hình nền.
+- **Tọa độ trực quan**: Hiển thị nổi lên hình nền desktop tại vùng hạ tiêu cự / tà váy nhân vật, tự động đồng bộ màu theo `nutsty_palette.json`.
 
 ---
 

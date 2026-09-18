@@ -1922,7 +1922,14 @@ def get_search_suggestions(query):
         sys.stderr.write(f"[get_search_suggestions error]: {e}\n")
         return {"queries": [], "recommended": []}
 
-def resolve_stream_url(video_id):
+QUALITY_ITAG_PRIORITIES = {
+    "high_opus": [774, 141, 251, 140, 250],
+    "high_aac": [141, 774, 140, 251, 250],
+    "medium": [251, 140, 250, 141, 774],
+    "low": [250, 251, 140, 141, 774]
+}
+
+def resolve_stream_url(video_id, quality=None):
     if not video_id:
         return None
 
@@ -1931,8 +1938,23 @@ def resolve_stream_url(video_id):
     elif "watch?v=" in video_id:
         video_id = video_id.split("watch?v=")[1].split("&")[0]
 
+    if not quality:
+        settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    s_obj = json.load(f)
+                    quality = s_obj.get("streamingQuality", "high_opus")
+            except Exception:
+                quality = "high_opus"
+        else:
+            quality = "high_opus"
+
+    quality = quality if quality in QUALITY_ITAG_PRIORITIES else "high_opus"
+    cache_key = f"{video_id}_{quality}"
+
     cache = load_json(STREAM_CACHE_FILE, {})
-    cached = cache.get(video_id)
+    cached = cache.get(cache_key) or cache.get(video_id)
     now = time.time()
 
     if cached and (now - cached.get("timestamp", 0)) < 10800:
@@ -1944,25 +1966,45 @@ def resolve_stream_url(video_id):
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}}
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}
         }
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = [f for f in info.get("formats", []) if f.get("acodec") != "none"]
-            stream_url = formats[-1]["url"] if formats else info.get("url")
+
+            # Select format matching priority list (SimpMusic Twin Fallback)
+            priority = QUALITY_ITAG_PRIORITIES.get(quality, QUALITY_ITAG_PRIORITIES["high_opus"])
+            selected_format = None
+            for itag in priority:
+                for f in formats:
+                    fid = str(f.get("format_id") or "")
+                    if fid == str(itag) and f.get("url"):
+                        selected_format = f
+                        break
+                if selected_format:
+                    break
+
+            if not selected_format and formats:
+                selected_format = formats[-1]
+
+            stream_url = selected_format.get("url") if selected_format else info.get("url")
             duration = info.get("duration") or 0
             if stream_url:
                 res = {
                     "stream_url": stream_url,
                     "duration": duration,
+                    "quality": quality,
+                    "itag": selected_format.get("format_id") if selected_format else None,
+                    "bitrate": selected_format.get("abr") if selected_format else None,
+                    "codec": selected_format.get("acodec") if selected_format else None,
                     "timestamp": now
                 }
-                cache[video_id] = res
+                cache[cache_key] = res
                 save_json(STREAM_CACHE_FILE, cache)
                 return res
     except Exception as e:
-        sys.stderr.write(f"[resolve_stream_url error for {video_id}]: {e}\n")
+        sys.stderr.write(f"[resolve_stream_url error for {video_id} ({quality})]: {e}\n")
 
     return None
 
@@ -2892,6 +2934,13 @@ if __name__ == "__main__":
         album_hint = sys.argv[5] if len(sys.argv) > 5 else ""
         res = get_apple_music_animated_artwork(title, artist, dur, album_hint)
         print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd == "resolve_stream" and len(sys.argv) > 2:
+        vid = sys.argv[2]
+        qual = sys.argv[3] if len(sys.argv) > 3 else None
+        res = resolve_stream_url(vid, qual)
+        print(json.dumps(res, ensure_ascii=False) if res else "{}")
+
 
 
 

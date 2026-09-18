@@ -27,6 +27,42 @@ STATE_DOWNLOADING = 2
 STATE_DOWNLOADED = 3
 STATE_FAILED = 4
 
+DOWNLOAD_QUALITY_CONFIG = {
+    "high_opus": {
+        "format": "774/251/141/140/250/bestaudio/best",
+        "codec": "opus",
+        "quality": "256",
+    },
+    "high_aac": {
+        "format": "141/140/774/251/250/bestaudio/best",
+        "codec": "m4a",
+        "quality": "256",
+    },
+    "medium": {
+        "format": "251/140/250/141/774/bestaudio/best",
+        "codec": "m4a",
+        "quality": "128",
+    },
+    "low": {
+        "format": "250/251/140/141/774/bestaudio/best",
+        "codec": "m4a",
+        "quality": "64",
+    },
+}
+
+def get_current_download_quality():
+    settings_file = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                q = data.get("downloadQuality")
+                if q in DOWNLOAD_QUALITY_CONFIG:
+                    return q
+        except Exception:
+            pass
+    return "high_opus"
+
 def get_download_dir():
     music_dir = os.environ.get("XDG_MUSIC_DIR") or os.path.expanduser("~/Music")
     target = os.path.join(music_dir, "Downloads_Phone")
@@ -111,7 +147,7 @@ class DownloadManager:
         except Exception:
             pass
 
-    def enqueue(self, video_id, title="Track", artist="Artist", thumbnail=""):
+    def enqueue(self, video_id, title="Track", artist="Artist", thumbnail="", quality=None):
         if not video_id:
             return False
 
@@ -125,6 +161,7 @@ class DownloadManager:
                 "title": title or "Track",
                 "artist": artist or "Artist",
                 "thumbnail": thumbnail or "",
+                "quality": quality or get_current_download_quality(),
                 "state": STATE_PREPARING,
                 "progress": 0.0,
                 "speed": "--",
@@ -150,6 +187,7 @@ class DownloadManager:
             "title": title,
             "artist": artist,
             "thumbnail": thumbnail,
+            "quality": task["quality"],
             "queue_len": len(self.queue),
             "batch_total": self.batch_total,
             "active_count": len(self.active_downloads) + len(self.queue)
@@ -321,8 +359,14 @@ class DownloadManager:
                         "eta": eta_str
                     })
 
+        target_quality = task.get("quality") or get_current_download_quality()
+        cfg = DOWNLOAD_QUALITY_CONFIG.get(target_quality, DOWNLOAD_QUALITY_CONFIG["high_opus"])
+        target_format = cfg["format"]
+        target_codec = cfg["codec"]
+        target_quality_val = cfg["quality"]
+
         base_opts = {
-            "format": "bestaudio/best",
+            "format": target_format,
             "outtmpl": os.path.join(dl_dir, "%(title)s.%(ext)s"),
             "remote_components": ["ejs:github"],
             "extractor_args": {"youtube": {"player_client": ["ios", "android", "mweb", "web"]}},
@@ -331,8 +375,8 @@ class DownloadManager:
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
-                    "preferredcodec": "m4a",
-                    "preferredquality": "192",
+                    "preferredcodec": target_codec,
+                    "preferredquality": target_quality_val,
                 },
                 {"key": "FFmpegMetadata"},
                 {"key": "EmbedThumbnail"},
@@ -369,11 +413,13 @@ class DownloadManager:
                     # Find output filename
                     expected_fn = ydl.prepare_filename(info)
                     base, _ = os.path.splitext(expected_fn)
-                    m4a_path = base + ".m4a"
                     downloaded_file = None
-                    if os.path.exists(m4a_path):
-                        downloaded_file = m4a_path
-                    elif os.path.exists(expected_fn):
+                    for ext in [f".{target_codec}", ".m4a", ".opus", ".mp3", ".webm", ".flac", ".ogg"]:
+                        candidate = base + ext
+                        if os.path.exists(candidate):
+                            downloaded_file = candidate
+                            break
+                    if not downloaded_file and os.path.exists(expected_fn):
                         downloaded_file = expected_fn
 
                 with self.lock:
@@ -495,7 +541,8 @@ def run_daemon():
                                             cmd.get("videoId"),
                                             cmd.get("title", "Track"),
                                             cmd.get("artist", "Artist"),
-                                            cmd.get("thumbnail", "")
+                                            cmd.get("thumbnail", ""),
+                                            cmd.get("quality")
                                         )
                                     elif action == "cancel":
                                         manager.cancel(cmd.get("videoId"))
@@ -536,7 +583,7 @@ def run_daemon():
             except Exception:
                 pass
 
-def client_enqueue(video_id, title="Track", artist="Artist", thumbnail=""):
+def client_enqueue(video_id, title="Track", artist="Artist", thumbnail="", quality=None):
     """CLI client helper to enqueue a download"""
     def is_socket_alive():
         if not os.path.exists(SOCKET_PATH):
@@ -570,7 +617,8 @@ def client_enqueue(video_id, title="Track", artist="Artist", thumbnail=""):
             "videoId": video_id,
             "title": title,
             "artist": artist,
-            "thumbnail": thumbnail
+            "thumbnail": thumbnail,
+            "quality": quality
         }
         s.sendall((json.dumps(payload) + "\n").encode("utf-8"))
         s.close()
@@ -654,7 +702,8 @@ if __name__ == "__main__":
             t = sys.argv[3] if len(sys.argv) > 3 else "Track"
             a = sys.argv[4] if len(sys.argv) > 4 else "Artist"
             thumb = sys.argv[5] if len(sys.argv) > 5 else ""
-            client_enqueue(vid, t, a, thumb)
+            qual = sys.argv[6] if len(sys.argv) > 6 else ""
+            client_enqueue(vid, t, a, thumb, qual)
         elif cmd in ("remove", "delete"):
             vid = sys.argv[2] if len(sys.argv) > 2 else ""
             client_remove(vid)

@@ -81,7 +81,7 @@ Item {
 
         Quickshell.execDetached([
             "python3", win.appDir + "/backend/download_manager.py", "add",
-            vid, title, artist, thumb
+            vid, title, artist, thumb, (win.downloadQuality || "high_opus")
         ]);
     }
 

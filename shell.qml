@@ -65,7 +65,13 @@ Scope {
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property var desktopLyricsWallpaperPositions: ({})
+    property bool isSleepTimerActive: false
+    property int sleepTimerRemainingSeconds: 0
+    property string sleepTimerMode: "" // "duration" or "end_of_track"
+    property bool sleepTimerFadeTriggered: false
     property string currentLanguage: I18n.locale
+    property string streamingQuality: "high_opus"
+    property string downloadQuality: "high_opus"
     property bool showSidebar: true
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
@@ -1375,6 +1381,79 @@ Scope {
             }
         }
 
+        // =====================================================================
+        // Dedicated Frosted Backdrop for SleepTimerPopover (Deep Bokeh Blur)
+        // Blurs underlying lyrics and track cards much more than playerbar
+        // for pristine legibility and fluid Keo 502 resin optics.
+        // =====================================================================
+        Item {
+            id: frostedSleepTimerBackdrop
+            anchors.fill: parent
+            z: -997
+            opacity: 0.001
+
+            // 1. Semi-translucent dark foundation for enhanced contrast
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0.04, 0.05, 0.08, 0.65)
+            }
+
+            // 2. Active Song Atmosphere / Wallpaper with deep blur (blurMax: 64)
+            Item {
+                id: sleepTimerBgArtworkComposite
+                anchors.fill: parent
+
+                Image {
+                    anchors.fill: parent
+                    source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                }
+
+                Image {
+                    anchors.fill: parent
+                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                    }
+                }
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: sleepTimerBgArtworkComposite
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 64
+                saturation: 1.30
+                brightness: -0.05
+            }
+
+            // 3. Live UI Content (Lyrics, Cards) heavily blurred (blurMax: 64)
+            ShaderEffectSource {
+                id: sleepTimerLiveContentRaw
+                anchors.fill: parent
+                sourceItem: mainContentBackdrop
+                live: (typeof sleepTimerPopover !== "undefined" && sleepTimerPopover.opacity > 0.01)
+                hideSource: false
+                smooth: true
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: sleepTimerLiveContentRaw
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 64
+                saturation: 1.20
+                brightness: -0.10
+            }
+        }
+
         // 1. Main Application Backdrop & Scrolling Content
         Item {
             id: mainContentBackdrop
@@ -1812,6 +1891,8 @@ Scope {
             isLyricsActive: win.isNowPlayingOpen
             isNowPlayingOpen: win.isNowPlayingOpen
             isQueueActive: false
+            isSleepTimerActive: win.isSleepTimerActive
+            sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
             accentColor: win.accentColor
 
             onPlayPauseClicked: win.togglePlay()
@@ -1836,6 +1917,13 @@ Scope {
             }
             onSeekRequested: sec => win.seekAudio(sec)
             onReqVolumeChange: vol => win.setVolume(vol)
+            onSleepTimerClicked: {
+                if (sleepTimerPopover.isOpen) {
+                    sleepTimerPopover.close();
+                } else {
+                    sleepTimerPopover.open();
+                }
+            }
         }
 
         // Google Account / Cloud Settings Modal
@@ -1853,11 +1941,22 @@ Scope {
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
             currentLanguage: win.currentLanguage
+            streamingQuality: win.streamingQuality
+            downloadQuality: win.downloadQuality
 
             onCloseRequested: settingsModal.visible = false
             onSelectLanguageRequested: lang => {
                 win.currentLanguage = lang;
                 I18n.locale = lang;
+                win.saveSettings();
+            }
+            onSelectStreamingQualityRequested: qual => {
+                win.streamingQuality = qual;
+                win.saveSettings();
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "set_streaming_quality", qual]);
+            }
+            onSelectDownloadQualityRequested: qual => {
+                win.downloadQuality = qual;
                 win.saveSettings();
             }
             onToggleSyncHistoryRequested: enabled => {
@@ -1941,6 +2040,26 @@ Scope {
             dlMgr: downloadManager
             accentColor: win.accentColor
             backgroundSourceItem: glassCompositeBackdrop
+        }
+
+        SleepTimerPopover {
+            id: sleepTimerPopover
+            accentColor: win.accentColor
+            backgroundSourceItem: frostedSleepTimerBackdrop
+            targetAnchorItem: bottomPlayer
+            isTimerActive: win.isSleepTimerActive
+            remainingSeconds: win.sleepTimerRemainingSeconds
+            timerMode: win.sleepTimerMode
+
+            onSetTimerRequested: (minutes) => {
+                win.startSleepTimer(minutes * 60, "duration");
+            }
+            onSetEndOfTrackRequested: () => {
+                win.startSleepTimer(0, "end_of_track");
+            }
+            onCancelTimerRequested: () => {
+                win.cancelSleepTimer();
+            }
         }
     }
 
@@ -2057,7 +2176,13 @@ Scope {
             } else {
                 win.currentLanguage = I18n.locale;
             }
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", widgetPos=(" + win.widgetX + "," + win.widgetY + ")");
+            if (obj.streamingQuality !== undefined && (obj.streamingQuality === "high_opus" || obj.streamingQuality === "high_aac" || obj.streamingQuality === "medium" || obj.streamingQuality === "low")) {
+                win.streamingQuality = obj.streamingQuality;
+            }
+            if (obj.downloadQuality !== undefined && (obj.downloadQuality === "high_opus" || obj.downloadQuality === "high_aac" || obj.downloadQuality === "medium" || obj.downloadQuality === "low")) {
+                win.downloadQuality = obj.downloadQuality;
+            }
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality);
         } catch(e) {}
     }
 
@@ -2075,7 +2200,9 @@ Scope {
             desktopLyricsCustomX: win.desktopLyricsCustomX,
             desktopLyricsCustomY: win.desktopLyricsCustomY,
             desktopLyricsWallpaperPositions: win.desktopLyricsWallpaperPositions,
-            language: win.currentLanguage
+            language: win.currentLanguage,
+            streamingQuality: win.streamingQuality,
+            downloadQuality: win.downloadQuality
         });
         Quickshell.execDetached(["python3", "-c",
             "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
@@ -2311,6 +2438,59 @@ Scope {
     function setVolume(vol) {
         win.volume = vol;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
+    }
+
+    function startSleepTimer(seconds, mode) {
+        win.sleepTimerMode = mode;
+        win.sleepTimerRemainingSeconds = seconds;
+        win.sleepTimerFadeTriggered = false;
+        win.isSleepTimerActive = true;
+    }
+
+    function cancelSleepTimer() {
+        win.isSleepTimerActive = false;
+        win.sleepTimerFadeTriggered = false;
+        win.sleepTimerRemainingSeconds = 0;
+        win.sleepTimerMode = "";
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "cancel_fade"]);
+    }
+
+    Timer {
+        id: sleepCountdownTimer
+        interval: 1000
+        repeat: true
+        running: win.isSleepTimerActive
+        onTriggered: {
+            if (!win.isSleepTimerActive) return;
+
+            if (win.sleepTimerMode === "duration") {
+                if (win.sleepTimerRemainingSeconds > 0) {
+                    win.sleepTimerRemainingSeconds--;
+                }
+
+                // Trigger 5-second Cosine Fade at 5s remaining
+                if (win.sleepTimerRemainingSeconds === 5 && !win.sleepTimerFadeTriggered) {
+                    win.sleepTimerFadeTriggered = true;
+                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", "5.0"]);
+                } else if (win.sleepTimerRemainingSeconds <= 0) {
+                    win.isSleepTimerActive = false;
+                    win.sleepTimerFadeTriggered = false;
+                    win.isPlaying = false;
+                }
+            } else if (win.sleepTimerMode === "end_of_track") {
+                if (win.totalDuration > 5) {
+                    var remaining = win.totalDuration - win.currentTime;
+                    if (remaining <= 5.0 && remaining > 0.5 && !win.sleepTimerFadeTriggered) {
+                        win.sleepTimerFadeTriggered = true;
+                        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", String(Math.max(1.0, remaining))]);
+                    } else if (remaining <= 0.5 && win.sleepTimerFadeTriggered) {
+                        win.isSleepTimerActive = false;
+                        win.sleepTimerFadeTriggered = false;
+                        win.isPlaying = false;
+                    }
+                }
+            }
+        }
     }
 
     function rateSong(vid, rating) {
@@ -2664,6 +2844,8 @@ Scope {
         function openSettings() { frostifyIpc.openSettings(); }
         function openLyricsSettings() { frostifyIpc.openLyricsSettings(); }
         function closeSettings() { frostifyIpc.closeSettings(); }
+        function toggleStreamingQualityMenu() { frostifyIpc.toggleStreamingQualityMenu(); }
+        function toggleDownloadQualityMenu() { frostifyIpc.toggleDownloadQualityMenu(); }
         function showLibrary() { frostifyIpc.showLibrary(); }
         function showHome() { frostifyIpc.showHome(); }
         function selectMood(title: string, params: string) { frostifyIpc.selectMood(title, params); }
@@ -2688,11 +2870,16 @@ Scope {
         function typeSearch(q: string) { frostifyIpc.typeSearch(q); }
         function submitSearch(q: string) { frostifyIpc.submitSearch(q); }
         function switchSearchTab(tab: string) { frostifyIpc.switchSearchTab(tab); }
+        function toggleSleepTimer() { frostifyIpc.toggleSleepTimer(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function toggleSleepTimer() {
+            if (sleepTimerPopover.isOpen) sleepTimerPopover.close();
+            else sleepTimerPopover.open();
+        }
         function playNext() { win.playNext(); }
         function playPrev() { win.playPrev(); }
         function toggleMaximize() {
@@ -2741,6 +2928,18 @@ Scope {
         }
         function closeSettings() {
             settingsModal.visible = false;
+        }
+        function toggleStreamingQualityMenu() {
+            win.visible = true;
+            settingsModal.visible = true;
+            settingsModal.currentTab = 0;
+            settingsModal.toggleStreamingQualityMenu();
+        }
+        function toggleDownloadQualityMenu() {
+            win.visible = true;
+            settingsModal.visible = true;
+            settingsModal.currentTab = 0;
+            settingsModal.toggleDownloadQualityMenu();
         }
         function showLibrary() {
             win.currentView = "library";

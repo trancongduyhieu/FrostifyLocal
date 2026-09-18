@@ -26,6 +26,8 @@ Item {
     property real scrubTime: 0.0
     property bool isScrubbingVolume: false
     property bool isLoadingAudio: false
+    property bool isSleepTimerActive: false
+    property int sleepTimerRemainingSeconds: 0
     property color accentColor: "#deb06c"
 
     signal playPauseClicked()
@@ -38,6 +40,7 @@ Item {
     signal openDetailsRequested()
     signal queueClicked()
     signal openArtistRequested(string artistName, string channelId)
+    signal sleepTimerClicked()
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -587,6 +590,36 @@ Item {
                         }
                         onCanceled: root.isScrubbingVolume = false
                     }
+                }
+            }
+
+            // Sleep Timer Button [ 🌙 ]
+            Item {
+                width: 28; height: 28
+                anchors.verticalCenter: parent.verticalCenter
+                HoverHandler { id: sleepH }
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/sleep-timer-symbolic.svg"
+                    iconSize: 15
+                    color: root.isSleepTimerActive ? root.accentColor : (sleepH.hovered ? "#ffffff" : "#b3b3b3")
+                }
+
+                // Glowing indicator dot when active
+                Rectangle {
+                    width: 3; height: 3; radius: 1.5
+                    color: root.accentColor
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: root.isSleepTimerActive
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.sleepTimerClicked()
                 }
             }
 
