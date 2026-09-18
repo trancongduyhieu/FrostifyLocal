@@ -18,6 +18,7 @@ HOME_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/home_feed.json")
 ONLINE_TRACKS_FILE = os.path.expanduser("~/.cache/nutsty/online_tracks.json")
 MOOD_CACHE_DIR = os.path.expanduser("~/.cache/nutsty/moods")
 MOOD_CATS_FILE = os.path.expanduser("~/.cache/nutsty/mood_categories.json")
+SQUARE_COVERS_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/square_covers.json")
 
 def load_json(filepath, default=None):
     if os.path.exists(filepath):
@@ -2819,6 +2820,101 @@ def get_apple_music_animated_artwork(title, artist, duration_seconds=0, album_hi
         sys.stderr.write(f"[Apple Music Animated Artwork Error for {title}]: {e}\n")
         return {"found": False, "error": str(e)}
 
+_square_cover_cache = None
+
+def _get_square_covers_cache():
+    global _square_cover_cache
+    if _square_cover_cache is None:
+        _square_cover_cache = load_json(SQUARE_COVERS_CACHE_FILE, {})
+    return _square_cover_cache
+
+def _save_square_covers_cache():
+    global _square_cover_cache
+    if _square_cover_cache is not None:
+        save_json(SQUARE_COVERS_CACHE_FILE, _square_cover_cache)
+
+def resolve_square_cover(title, artist="", video_id=None, current_image=None):
+    """
+    2-Tier Resolver for 1:1 Square Album Artwork:
+    Tier 0: If current_image is already a Google CDN square artwork, upscale to 1200px and return immediately.
+    Tier 1: Search official song release on YouTube Music (filter='songs', limit=5).
+            If a matching song candidate exists, extract native square 1:1 artwork.
+    Tier 2 (Fallback): Return current_image or maxresdefault.jpg.
+    """
+    clean_title = str(title or "").strip()
+    clean_artist = str(artist or "").strip()
+    clean_vid = str(video_id or "").strip().replace("ytdl://", "").replace("yt_", "")
+    curr_img = str(current_image or "").strip()
+
+    # Tier 0: Already native square Google CDN image
+    if curr_img and ("googleusercontent.com" in curr_img or "ggpht.com" in curr_img):
+        upgraded = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', curr_img)
+        if "=w1200-h1200-l90-rj" not in upgraded:
+            if "=" in upgraded:
+                upgraded = upgraded.split("=")[0] + "=w1200-h1200-l90-rj"
+            else:
+                upgraded = upgraded + "=w1200-h1200-l90-rj"
+        return {"url": upgraded, "is_square": True, "cached": True}
+
+    cache_key = clean_vid if clean_vid else f"{clean_title}_{clean_artist}".lower()
+    if cache_key:
+        cached_data = _get_square_covers_cache().get(cache_key)
+        if cached_data:
+            return cached_data
+
+    # Tier 1: Search official song release on YouTube Music
+    ytm = get_ytmusic_client()
+    query = f"{clean_title} {clean_artist}".strip()
+    if not query and clean_title:
+        query = clean_title
+
+    if query and ytm:
+        try:
+            results = ytm.search(query, filter="songs", limit=5)
+            for r in results:
+                t = r.get("title", "")
+                r_artists = [a.get("name", "") for a in r.get("artists", []) if isinstance(a, dict)]
+                cand_artist_str = ", ".join(r_artists)
+
+                sc = match_score(t, clean_title)
+                agree = artist_agrees(cand_artist_str, clean_artist) if clean_artist else True
+                if (sc is not None) and agree:
+                    thumbs = r.get("thumbnails", [])
+                    if thumbs:
+                        thumb_url = thumbs[-1].get("url", "")
+                        if "googleusercontent.com" in thumb_url or "ggpht.com" in thumb_url:
+                            upgraded = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
+                            if "=w1200-h1200-l90-rj" not in upgraded:
+                                if "=" in upgraded:
+                                    upgraded = upgraded.split("=")[0] + "=w1200-h1200-l90-rj"
+                                else:
+                                    upgraded = upgraded + "=w1200-h1200-l90-rj"
+                            res = {
+                                "url": upgraded,
+                                "is_square": True,
+                                "title": t,
+                                "videoId": r.get("videoId", ""),
+                                "match": "official_song"
+                            }
+                            if cache_key:
+                                _get_square_covers_cache()[cache_key] = res
+                                _save_square_covers_cache()
+                            return res
+        except Exception as e:
+            sys.stderr.write(f"[resolve_square_cover error]: {e}\n")
+
+    # Tier 2 Fallback: return current_image (or maxresdefault)
+    fallback_url = curr_img
+    if fallback_url and "i.ytimg.com" in fallback_url:
+        clean_yt = fallback_url.split("?")[0]
+        fallback_url = re.sub(r'(hqdefault|mqdefault|sddefault|default)\.jpg', 'maxresdefault.jpg', clean_yt)
+
+    res = {"url": fallback_url, "is_square": False, "match": "fallback"}
+    if cache_key:
+        _get_square_covers_cache()[cache_key] = res
+        _save_square_covers_cache()
+    return res
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating> | song_related <id>]")
@@ -2972,6 +3068,14 @@ if __name__ == "__main__":
         qual = sys.argv[3] if len(sys.argv) > 3 else None
         res = resolve_stream_url(vid, qual)
         print(json.dumps(res, ensure_ascii=False) if res else "{}")
+
+    elif cmd == "resolve_cover" and len(sys.argv) > 2:
+        title = sys.argv[2]
+        artist = sys.argv[3] if len(sys.argv) > 3 else ""
+        vid = sys.argv[4] if len(sys.argv) > 4 else None
+        curr = sys.argv[5] if len(sys.argv) > 5 else None
+        res = resolve_square_cover(title, artist, vid, curr)
+        print(json.dumps(res, ensure_ascii=False))
 
 
 

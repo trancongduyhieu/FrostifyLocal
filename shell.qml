@@ -1056,7 +1056,9 @@ Scope {
     }
 
     property var currentTrack: null
+    property string currentResolvedCover: ""
     onCurrentTrackChanged: {
+        win.currentResolvedCover = "";
         if (win.currentTrack && win.currentTrack.image) {
             win.fetchSongPalette(win.currentTrack.image);
         } else {
@@ -1148,7 +1150,7 @@ Scope {
                     anchors.centerIn: parent
                     width: parent.width * 1.75
                     height: parent.height * 1.75
-                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    source: (win.currentResolvedCover !== "") ? win.currentResolvedCover : ((win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : "")
                     sourceSize: Qt.size(64, 64)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -1872,6 +1874,12 @@ Scope {
                     onSongDisliked: trk => win.handleDislikedTrack(trk)
                     onDownloadRequested: trk => win.downloadTrack(trk)
                     onQueueUpdated: newTracks => { win.currentTracks = newTracks; }
+                    onSquareCoverResolved: (url, isSquare) => {
+                        if (url && isSquare) {
+                            win.currentResolvedCover = url;
+                            win.fetchSongPalette(url);
+                        }
+                    }
                 }
             }
         }
@@ -1889,6 +1897,7 @@ Scope {
             backgroundSourceItem: glassCompositeBackdrop
 
             currentTrack: win.currentTrack
+            resolvedSquareImage: win.currentResolvedCover
             isPlaying: win.isPlaying
             isLoadingAudio: win.isLoadingAudio
             currentTime: win.currentTime

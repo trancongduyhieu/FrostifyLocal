@@ -82,6 +82,11 @@ Item {
         }
     }
 
+    property string resolvedSquareImage: ""
+    property bool resolvedIsSquare: false
+    property string lastResolvedCoverKey: ""
+    signal squareCoverResolved(string url, bool isSquare)
+
     signal seekRequested(real seconds)
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
@@ -147,9 +152,13 @@ Item {
             currentLikeStatus = "INDIFFERENT";
             root.moodChips = [];
             root.selectedMoodIndex = 0;
+            root.resolvedSquareImage = "";
+            root.resolvedIsSquare = false;
+            root.lastResolvedCoverKey = "";
             return;
         }
         root.highResFailed = false;
+        resolveCoverArt(root.track);
         var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
         currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
 
@@ -184,6 +193,9 @@ Item {
         if (visible && root.track && (!root.moodChips || root.moodChips.length === 0)) {
             fetchMoodChips();
         }
+        if (visible && root.track && root.resolvedSquareImage === "") {
+            resolveCoverArt(root.track);
+        }
         if (visible && root.track && root.animatedCoverEnabled && (!root.animatedArtworkUrl || root.animatedArtworkUrl === "") && !root.isLoadingAnimatedArtwork) {
             fetchAnimatedArtwork();
         }
@@ -215,6 +227,99 @@ Item {
             return clean.replace(/(hqdefault|mqdefault|sddefault|default)\.jpg/, "maxresdefault.jpg");
         }
         return url;
+    }
+
+    function resolveCoverArt(trk) {
+        if (!trk) {
+            root.resolvedSquareImage = "";
+            root.resolvedIsSquare = false;
+            root.lastResolvedCoverKey = "";
+            return;
+        }
+
+        var tTitle = (trk.title || trk.name || "").trim();
+        var tArtist = (trk.artist || "").trim();
+        var tVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var tImg = trk.image || "";
+        var coverKey = (tVid ? tVid : (tTitle + "_" + tArtist));
+
+        if (root.lastResolvedCoverKey === coverKey && root.resolvedSquareImage !== "") {
+            return;
+        }
+        root.lastResolvedCoverKey = coverKey;
+
+        // Tier 0: Already native square Google CDN image
+        if (tImg && (tImg.indexOf("googleusercontent.com") !== -1 || tImg.indexOf("ggpht.com") !== -1)) {
+            var up = root.getHighResImage(tImg);
+            root.resolvedSquareImage = up;
+            root.resolvedIsSquare = true;
+            root.squareCoverResolved(up, true);
+            return;
+        }
+
+        // For local tracks: embedded art is typically already 1:1 square
+        if (trk.path && !trk.path.startsWith("ytdl://") && !tVid) {
+            root.resolvedSquareImage = tImg;
+            root.resolvedIsSquare = true;
+            root.squareCoverResolved(tImg, true);
+            return;
+        }
+
+        // Tier 1: Query resident HTTP daemon /api/resolve_cover
+        var apiUrl = "http://127.0.0.1:17890/api/resolve_cover?" +
+                     "title=" + encodeURIComponent(tTitle) +
+                     "&artist=" + encodeURIComponent(tArtist) +
+                     "&videoId=" + encodeURIComponent(tVid) +
+                     "&current=" + encodeURIComponent(tImg);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl);
+        xhr.timeout = 4000;
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (root.lastResolvedCoverKey === coverKey) {
+                            if (res && res.url) {
+                                var resUrl = root.getHighResImage(res.url);
+                                root.resolvedSquareImage = resUrl;
+                                root.resolvedIsSquare = !!res.is_square;
+                                root.squareCoverResolved(resUrl, !!res.is_square);
+                            } else {
+                                var fb = root.getHighResImage(tImg);
+                                root.resolvedSquareImage = fb;
+                                root.resolvedIsSquare = false;
+                                root.squareCoverResolved(fb, false);
+                            }
+                        }
+                    } catch (e) {
+                        if (root.lastResolvedCoverKey === coverKey) {
+                            var fb = root.getHighResImage(tImg);
+                            root.resolvedSquareImage = fb;
+                            root.resolvedIsSquare = false;
+                            root.squareCoverResolved(fb, false);
+                        }
+                    }
+                } else {
+                    if (root.lastResolvedCoverKey === coverKey) {
+                        var fb = root.getHighResImage(tImg);
+                        root.resolvedSquareImage = fb;
+                        root.resolvedIsSquare = false;
+                        root.squareCoverResolved(fb, false);
+                    }
+                }
+            }
+        };
+        xhr.ontimeout = function() {
+            if (root.lastResolvedCoverKey === coverKey) {
+                var fb = root.getHighResImage(tImg);
+                root.resolvedSquareImage = fb;
+                root.resolvedIsSquare = false;
+                root.squareCoverResolved(fb, false);
+            }
+        };
+        xhr.send();
     }
 
     function fetchLyrics() {
@@ -655,12 +760,19 @@ Item {
                             id: bigCoverImg
                             anchors.fill: parent
                             source: {
+                                if (root.resolvedSquareImage !== "") {
+                                    var rImg = root.resolvedSquareImage;
+                                    return (rImg.startsWith("/") && !rImg.startsWith("file://")) ? ("file://" + rImg) : rImg;
+                                }
                                 if (!root.track || !root.track.image) return "";
                                 var img = root.highResFailed ? root.track.image : root.getHighResImage(root.track.image);
                                 return (img.startsWith("/") && !img.startsWith("file://")) ? ("file://" + img) : img;
                             }
                             fillMode: Image.PreserveAspectCrop
-                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                            scale: (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
+                                   ? 1.0
+                                   : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0)
+                            Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                             transformOrigin: Item.Center
                             asynchronous: true
                             mipmap: true

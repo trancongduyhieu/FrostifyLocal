@@ -29,6 +29,7 @@ Item {
     property bool isSleepTimerActive: false
     property int sleepTimerRemainingSeconds: 0
     property color accentColor: "#deb06c"
+    property string resolvedSquareImage: ""
 
     signal playPauseClicked()
     signal nextClicked()
@@ -137,13 +138,16 @@ Item {
                         id: miniCover
                         anchors.fill: parent
                         source: {
+                            if (root.resolvedSquareImage !== "") return root.resolvedSquareImage;
                             if (!root.currentTrack || !root.currentTrack.image) return "";
                             var s = root.currentTrack.image;
                             return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                         }
                         asynchronous: true
                         fillMode: Image.PreserveAspectCrop
-                        scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                        scale: (root.resolvedSquareImage !== "" || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
+                               ? 1.0
+                               : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0)
                         transformOrigin: Item.Center
                         visible: status === Image.Ready
                     }

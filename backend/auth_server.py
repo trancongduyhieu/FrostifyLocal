@@ -110,6 +110,23 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif path == "/api/resolve_cover":
+            title = query.get("title", [""])[0]
+            artist = query.get("artist", [""])[0]
+            vid = query.get("videoId", [""])[0]
+            curr = query.get("current", [""])[0]
+            try:
+                data = ytmusic_helper.resolve_square_cover(title, artist, vid, curr)
+            except Exception as e:
+                sys.stderr.write(f"[resolve_cover error]: {e}\n")
+                data = {"url": curr, "is_square": False, "match": "error"}
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         else:
             self.send_response(404)
             self._send_cors_headers()
