@@ -1506,7 +1506,9 @@ Scope {
                     win.currentAlbumMetadata = null;
                     mainGrid.albumMetadata = null;
                     mainGrid.downloadsSubTab = "tracks";
+                    libLoader.reload();
                     win.browsingTracks = win.allTracks;
+                    if (mainGrid) mainGrid.tracks = win.browsingTracks;
                     win.mainSectionTitle = "Downloads";
                     mainGrid.sectionTitle = "Downloads";
                     win.refreshLocalAlbums();
@@ -2049,6 +2051,9 @@ Scope {
             id: downloadManager
             onTaskCompleted: (videoId, title, path) => {
                 libLoader.reload();
+                Qt.callLater(function() {
+                    libLoader.reload();
+                });
             }
         }
 
@@ -2292,6 +2297,9 @@ Scope {
             win.allTracks = libLoader.allTracks;
             if (win.currentView === "library" || !win.browsingTracks || win.browsingTracks.length === 0) {
                 win.browsingTracks = win.allTracks;
+            }
+            if (mainGrid && win.currentView === "library") {
+                mainGrid.tracks = win.browsingTracks;
             }
             // Do not auto-populate win.currentTracks with allTracks!
             // Queue remains empty until user explicitly clicks a track, album or playlist.
@@ -2989,9 +2997,14 @@ Scope {
             settingsModal.toggleDownloadQualityMenu();
         }
         function showLibrary() {
+            win.showAmberolDetails = false;
+            if (downloadPopover && downloadPopover.isOpen) downloadPopover.close();
             win.currentView = "library";
+            libLoader.reload();
             win.browsingTracks = win.allTracks;
-            mainGrid.sectionTitle = "Downloads (Local)";
+            if (mainGrid) mainGrid.tracks = win.browsingTracks;
+            mainGrid.downloadsSubTab = "tracks";
+            mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {
             win.currentView = "home";
