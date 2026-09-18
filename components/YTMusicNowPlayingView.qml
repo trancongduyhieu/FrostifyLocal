@@ -84,6 +84,7 @@ Item {
 
     property string resolvedSquareImage: ""
     property bool resolvedIsSquare: false
+    property bool squareImageFailed: false
     property string lastResolvedCoverKey: ""
     signal squareCoverResolved(string url, bool isSquare)
 
@@ -154,10 +155,12 @@ Item {
             root.selectedMoodIndex = 0;
             root.resolvedSquareImage = "";
             root.resolvedIsSquare = false;
+            root.squareImageFailed = false;
             root.lastResolvedCoverKey = "";
             return;
         }
         root.highResFailed = false;
+        root.squareImageFailed = false;
         resolveCoverArt(root.track);
         var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
         currentLikeStatus = (vid && isTrackDisliked(vid)) ? "DISLIKE" : "INDIFFERENT";
@@ -224,15 +227,29 @@ Item {
         }
         if (url.indexOf("i.ytimg.com") !== -1) {
             var clean = url.split("?")[0];
-            return clean.replace(/(hqdefault|mqdefault|sddefault|default)\.jpg/, "maxresdefault.jpg");
+            return clean.replace(/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg/, "maxresdefault.jpg");
         }
         return url;
+    }
+
+    function getRawTrackImage(trk) {
+        if (!trk) return "";
+        var img = trk.image || trk.artUrl || trk.cover || trk.thumbnail || "";
+        if (!img) {
+            var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+            if (vid) {
+                img = "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg";
+            }
+        }
+        return img;
     }
 
     function resolveCoverArt(trk) {
         if (!trk) {
             root.resolvedSquareImage = "";
             root.resolvedIsSquare = false;
+            root.squareImageFailed = false;
+            root.highResFailed = false;
             root.lastResolvedCoverKey = "";
             return;
         }
@@ -240,7 +257,7 @@ Item {
         var tTitle = (trk.title || trk.name || "").trim();
         var tArtist = (trk.artist || "").trim();
         var tVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        var tImg = trk.image || "";
+        var tImg = root.getRawTrackImage(trk);
 
         // If videoId is missing, extract it directly from YouTube image URL
         if (!tVid && tImg && tImg.indexOf("i.ytimg.com") !== -1) {
@@ -252,10 +269,12 @@ Item {
 
         var coverKey = (tVid ? tVid : (tTitle + "_" + tArtist));
 
-        if (root.lastResolvedCoverKey === coverKey && root.resolvedSquareImage !== "") {
+        if (root.lastResolvedCoverKey === coverKey && (root.resolvedSquareImage !== "" || root.resolvedIsSquare)) {
             return;
         }
         root.lastResolvedCoverKey = coverKey;
+        root.squareImageFailed = false;
+        root.highResFailed = false;
 
         // Tier 0: Already native square Google CDN image
         if (tImg && (tImg.indexOf("googleusercontent.com") !== -1 || tImg.indexOf("ggpht.com") !== -1)) {
@@ -274,7 +293,7 @@ Item {
             return;
         }
 
-        // Tier 1: Query resident HTTP daemon /api/resolve_cover
+        // Tier 1: Query resident HTTP daemon /api/resolve_cover for official 1:1 square artwork
         var apiUrl = "http://127.0.0.1:17890/api/resolve_cover?" +
                      "title=" + encodeURIComponent(tTitle) +
                      "&artist=" + encodeURIComponent(tArtist) +
@@ -290,42 +309,38 @@ Item {
                     try {
                         var res = JSON.parse(xhr.responseText);
                         if (root.lastResolvedCoverKey === coverKey) {
-                            if (res && res.url) {
+                            if (res && res.url && res.is_square === true) {
                                 var resUrl = root.getHighResImage(res.url);
                                 root.resolvedSquareImage = resUrl;
-                                root.resolvedIsSquare = !!res.is_square;
-                                root.squareCoverResolved(resUrl, !!res.is_square);
+                                root.resolvedIsSquare = true;
+                                root.squareCoverResolved(resUrl, true);
                             } else {
-                                var fb = root.getHighResImage(tImg);
-                                root.resolvedSquareImage = fb;
+                                root.resolvedSquareImage = "";
                                 root.resolvedIsSquare = false;
-                                root.squareCoverResolved(fb, false);
+                                root.squareCoverResolved(tImg, false);
                             }
                         }
                     } catch (e) {
                         if (root.lastResolvedCoverKey === coverKey) {
-                            var fb = root.getHighResImage(tImg);
-                            root.resolvedSquareImage = fb;
+                            root.resolvedSquareImage = "";
                             root.resolvedIsSquare = false;
-                            root.squareCoverResolved(fb, false);
+                            root.squareCoverResolved(tImg, false);
                         }
                     }
                 } else {
                     if (root.lastResolvedCoverKey === coverKey) {
-                        var fb = root.getHighResImage(tImg);
-                        root.resolvedSquareImage = fb;
+                        root.resolvedSquareImage = "";
                         root.resolvedIsSquare = false;
-                        root.squareCoverResolved(fb, false);
+                        root.squareCoverResolved(tImg, false);
                     }
                 }
             }
         };
         xhr.ontimeout = function() {
             if (root.lastResolvedCoverKey === coverKey) {
-                var fb = root.getHighResImage(tImg);
-                root.resolvedSquareImage = fb;
+                root.resolvedSquareImage = "";
                 root.resolvedIsSquare = false;
-                root.squareCoverResolved(fb, false);
+                root.squareCoverResolved(tImg, false);
             }
         };
         xhr.send();
@@ -769,13 +784,14 @@ Item {
                             id: bigCoverImg
                             anchors.fill: parent
                             source: {
-                                if (root.resolvedSquareImage !== "") {
+                                if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
                                     var rImg = root.resolvedSquareImage;
                                     return (rImg.startsWith("/") && !rImg.startsWith("file://")) ? ("file://" + rImg) : rImg;
                                 }
-                                if (!root.track || !root.track.image) return "";
-                                var img = root.highResFailed ? root.track.image : root.getHighResImage(root.track.image);
-                                return (img.startsWith("/") && !img.startsWith("file://")) ? ("file://" + img) : img;
+                                var raw = root.getRawTrackImage(root.track);
+                                if (!raw) return "";
+                                var targetImg = root.highResFailed ? raw : root.getHighResImage(raw);
+                                return (targetImg.startsWith("/") && !targetImg.startsWith("file://")) ? ("file://" + targetImg) : targetImg;
                             }
                             fillMode: Image.PreserveAspectCrop
                             scale: (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
@@ -789,8 +805,12 @@ Item {
                             sourceSize.width: 1200
                             sourceSize.height: 1200
                             onStatusChanged: {
-                                if (status === Image.Error && !root.highResFailed && root.track && root.track.image) {
-                                    root.highResFailed = true;
+                                if (status === Image.Error) {
+                                    if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
+                                        root.squareImageFailed = true;
+                                    } else if (!root.highResFailed) {
+                                        root.highResFailed = true;
+                                    }
                                 }
                             }
                         }

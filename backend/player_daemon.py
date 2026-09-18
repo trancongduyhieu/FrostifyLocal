@@ -32,26 +32,33 @@ def get_current_streaming_quality():
             pass
     return "high_opus"
 
+DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+
+def is_mpv_running():
+    try:
+        res = subprocess.run(["pgrep", "-f", "title=nutsty-audio"], capture_output=True, text=True)
+        return res.returncode == 0 and bool(res.stdout.strip())
+    except Exception:
+        return False
+
 def ensure_mpv():
-    """Ensure background MPV process is running with IPC socket"""
-    try:
-        # Check if socket is active
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(0.6)
-        s.connect(MPV_SOCKET)
-        s.close()
+    """Ensure background MPV process is running with IPC socket safely without pkill thrashing"""
+    # 1. If socket responds, we are good
+    if os.path.exists(MPV_SOCKET):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1.5)
+            s.connect(MPV_SOCKET)
+            s.close()
+            return True
+        except Exception:
+            pass
+
+    # 2. If MPV process is alive, it might just be busy connecting to a remote network stream!
+    if is_mpv_running():
         return True
-    except Exception:
-        pass
 
-    # If socket connection failed, clean up any zombie/stuck mpv with nutsty-audio
-    try:
-        subprocess.run(["pkill", "-f", "title=nutsty-audio"], capture_output=True)
-        time.sleep(0.1)
-    except Exception:
-        pass
-
-    # Start mpv
+    # 3. Only if MPV process is definitely not running, clean up stale socket and start it
     if os.path.exists(MPV_SOCKET):
         try:
             os.remove(MPV_SOCKET)
@@ -82,11 +89,14 @@ def ensure_mpv():
         "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
-        f"--ytdl-format={ytdl_fmt}"
+        f"--ytdl-format={ytdl_fmt}",
+        f"--user-agent={DEFAULT_UA}"
     ]
     if cookie_file and os.path.exists(cookie_file):
+        cmd.append(f"--cookies-file={cookie_file}")
         cmd.append(f"--ytdl-raw-options=cookies={cookie_file}")
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     
     # Wait for socket to appear
     for _ in range(25):
@@ -94,7 +104,7 @@ def ensure_mpv():
         if os.path.exists(MPV_SOCKET):
             try:
                 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(0.6)
+                s.settimeout(1.0)
                 s.connect(MPV_SOCKET)
                 s.close()
                 return True
@@ -107,7 +117,7 @@ def send_mpv_cmd(command_args):
     ensure_mpv()
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(1.5)
+        s.settimeout(2.0)
         s.connect(MPV_SOCKET)
         payload = json.dumps({"command": command_args}) + "\n"
         s.sendall(payload.encode("utf-8"))
@@ -116,6 +126,37 @@ def send_mpv_cmd(command_args):
         return json.loads(data.decode("utf-8"))
     except Exception as e:
         return {"error": str(e)}
+
+def get_mpv_properties_batch(props):
+    """Retrieve multiple MPV properties in a single socket connection (0.3ms batch query)"""
+    ensure_mpv()
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(2.0)
+        s.connect(MPV_SOCKET)
+        payload = "".join(json.dumps({"command": ["get_property", p], "request_id": i}) + "\n" for i, p in enumerate(props))
+        s.sendall(payload.encode("utf-8"))
+        buf = ""
+        results = {}
+        while len(results) < len(props):
+            data = s.recv(4096).decode("utf-8")
+            if not data:
+                break
+            buf += data
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                if line.strip():
+                    try:
+                        obj = json.loads(line)
+                        idx = obj.get("request_id")
+                        if idx is not None and idx < len(props):
+                            results[props[idx]] = obj.get("data")
+                    except Exception:
+                        pass
+        s.close()
+        return results
+    except Exception:
+        return {}
 
 def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
@@ -438,51 +479,53 @@ def main():
             ytmusic_helper.resolve_stream_url(vid)
 
     elif action == "status":
-        ensure_mpv()
-
-        is_loading = False
         state_file = "/tmp/nutsty_playback_state.json"
         st = {}
+        is_loading = False
         if os.path.exists(state_file):
             try:
                 with open(state_file, "r", encoding="utf-8") as f:
                     st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 35.0:
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 45.0:
                         is_loading = True
             except Exception:
                 pass
 
-        pause = get_mpv_property("pause")
-        time_pos = get_mpv_property("time-pos") or 0.0
-        duration = get_mpv_property("duration") or 0.0
-        filename = get_mpv_property("filename") or ""
-        path = get_mpv_property("path") or ""
-        vol = get_mpv_property("volume") or 100
-        idle = get_mpv_property("idle-active")
+        props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
+        batch = get_mpv_properties_batch(props)
+
+        pause = batch.get("pause")
+        time_pos = batch.get("time-pos") or 0.0
+        duration = batch.get("duration") or 0.0
+        filename = batch.get("filename") or ""
+        path = batch.get("path") or ""
+        vol = batch.get("volume") if batch.get("volume") is not None else 100
+        idle = batch.get("idle-active")
+        has_file = bool(path and not idle)
         if time_pos and time_pos > 0:
             is_loading = False
 
-        has_file = bool(path and not idle) and not is_loading
-
         # Self-healing unpause: if state was marked 'playing' or 'loading', but MPV is paused with a loaded file
         if st.get("state") in ["playing", "loading"] and (time.time() - st.get("timestamp", 0)) < 45.0:
-            if pause is True and (path and not idle):
+            if pause is True and has_file:
                 send_mpv_cmd(["set_property", "pause", False])
                 pause = False
 
-        is_actively_playing = (pause is False) and has_file
-        # Grace period: during the first 3s of 'playing' state with a loaded file, report is_playing=True
-        if not is_actively_playing and st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 3.0 and (path and not idle):
+        effective_loading = is_loading or (has_file and not (time_pos and time_pos > 0) and duration == 0.0)
+
+        is_actively_playing = (pause is False) and has_file and not effective_loading
+        # Grace period: during the first 3.5s of 'playing' state with a loaded file, report is_playing=True
+        if not is_actively_playing and st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 3.5 and has_file and not effective_loading:
             is_actively_playing = True
 
         status = {
             "is_playing": is_actively_playing,
-            "is_paused": (pause is True) and has_file and not is_actively_playing,
+            "is_paused": (pause is True) and has_file and not is_actively_playing and not effective_loading,
             "time_pos": round(time_pos, 1) if has_file else 0.0,
             "duration": round(duration, 1) if has_file else 0.0,
             "filename": filename if has_file else "",
             "volume": vol,
-            "is_loading": is_loading
+            "is_loading": effective_loading
         }
         print(json.dumps(status))
 

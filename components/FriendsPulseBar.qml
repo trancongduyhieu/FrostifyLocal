@@ -18,6 +18,19 @@ Item {
     signal addFriendClicked()
 
     property var activePopoverNote: null
+    readonly property bool isPopoverOpen: notePopover.visible
+
+    function closePopover() {
+        notePopover.visible = false;
+    }
+
+    function openFriendNote(idx) {
+        if (root.friendsNotes && root.friendsNotes.length > idx) {
+            root.activePopoverNote = root.friendsNotes[idx];
+            notePopover.x = 96 + idx * 80;
+            notePopover.visible = true;
+        }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -46,12 +59,11 @@ Item {
                     scale: postCardArea.containsMouse ? 1.08 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    Text {
+                    AppIcon {
                         anchors.centerIn: parent
-                        text: "＋"
+                        source: "../assets/icons/list-add-symbolic.svg"
+                        iconSize: 18
                         color: "#ffffff"
-                        font.pixelSize: 20
-                        font.bold: true
                     }
                 }
 
@@ -129,10 +141,11 @@ Item {
                         anchors.rightMargin: 8
                         spacing: 4
 
-                        Text {
-                            text: "♫"
+                        AppIcon {
+                            Layout.alignment: Qt.AlignVCenter
+                            source: "../assets/icons/folder-music-symbolic.svg"
+                            iconSize: 10
                             color: root.accentColor
-                            font.pixelSize: 10
                             visible: modelData.track !== null && modelData.track !== undefined
                         }
 
@@ -273,19 +286,11 @@ Item {
             border.color: Qt.rgba(1, 1, 1, 0.12)
             border.width: 1
 
-            Text {
+            AppIcon {
                 anchors.centerIn: parent
-                text: "👥"
-                font.pixelSize: 14
-                visible: false // No emojis rule
-            }
-
-            Text {
-                anchors.centerIn: parent
-                text: "+"
-                color: Qt.rgba(1, 1, 1, 0.7)
-                font.pixelSize: 16
-                font.bold: true
+                source: "../assets/icons/list-add-symbolic.svg"
+                iconSize: 14
+                color: addFriendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
             }
 
             MouseArea {
@@ -298,27 +303,32 @@ Item {
         }
     }
 
-    // INTERACTIVE NOTE POPOVER (LISTEN ALONG)
+    // INTERACTIVE NOTE POPOVER (LISTEN ALONG - Dynamic Chromatic Liquid Glass)
     Rectangle {
         id: notePopover
         visible: false
-        z: 999
+        z: 1000
         width: 320
         height: cardCol.implicitHeight + 32
         x: 100
-        y: root.height + 6
+        y: root.height + 4
         radius: 16
-        color: Qt.rgba(0.08, 0.08, 0.12, 0.96)
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+        color: Qt.rgba(0.06 + root.accentColor.r * 0.10, 0.06 + root.accentColor.g * 0.10, 0.08 + root.accentColor.b * 0.14, 0.96)
+        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38)
         border.width: 1
 
         MultiEffect {
             anchors.fill: notePopover
             source: notePopover
             shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.7)
-            shadowBlur: 0.8
-            shadowVerticalOffset: 8
+            shadowColor: Qt.rgba(0, 0, 0, 0.55)
+            shadowBlur: 0.6
+            shadowVerticalOffset: 6
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            // Prevent clicks inside popover from passing through to underlying elements
         }
 
         ColumnLayout {
@@ -341,31 +351,44 @@ Item {
                     }
                     Text {
                         text: root.activePopoverNote ? (root.activePopoverNote.user_email || "") : ""
-                        color: Qt.rgba(1, 1, 1, 0.45)
+                        color: Qt.rgba(1, 1, 1, 0.5)
                         font.family: Theme.fontFamily
                         font.pixelSize: 10
                     }
                 }
                 Item { Layout.fillWidth: true }
+
+                // Close Button with AppIcon
                 Rectangle {
-                    width: 24; height: 24; radius: 12
-                    color: Qt.rgba(1, 1, 1, 0.08)
-                    Text { anchors.centerIn: parent; text: "✕"; color: Qt.rgba(1, 1, 1, 0.6); font.pixelSize: 10 }
+                    width: 26; height: 26; radius: 13
+                    color: closePopArea.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
+                    border.color: closePopArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                    border.width: 1
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 10
+                        color: closePopArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.75)
+                    }
+
                     MouseArea {
+                        id: closePopArea
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: notePopover.visible = false
                     }
                 }
             }
 
-            // Note Text Quote
+            // Note Text Quote Box (Organic Chromatic Glass)
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 42
                 radius: 8
-                color: Qt.rgba(1, 1, 1, 0.04)
-                border.color: Qt.rgba(1, 1, 1, 0.06)
+                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.09)
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
                 border.width: 1
 
                 Text {
@@ -394,10 +417,29 @@ Item {
                         Layout.fillWidth: true
                         spacing: 8
 
+                        // Artwork cover with fallback icon
                         Rectangle {
-                            width: 32; height: 32; radius: 6
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                            Text { anchors.centerIn: parent; text: "♫"; color: root.accentColor; font.pixelSize: 14 }
+                            width: 36; height: 36; radius: 6
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            border.width: 1
+                            clip: true
+
+                            Image {
+                                id: popoverTrackImg
+                                anchors.fill: parent
+                                source: (root.activePopoverNote && root.activePopoverNote.track) ? (root.activePopoverNote.track.cover || root.activePopoverNote.track.image || "") : ""
+                                fillMode: Image.PreserveAspectCrop
+                                visible: status === Image.Ready && source != ""
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/folder-music-symbolic.svg"
+                                iconSize: 14
+                                color: root.accentColor
+                                visible: !popoverTrackImg.visible
+                            }
                         }
 
                         Column {
@@ -428,14 +470,19 @@ Item {
                         Layout.fillWidth: true
                         height: 34
                         radius: 8
-                        color: playBtnArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                        color: playBtnArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.24)
                         border.color: root.accentColor
                         border.width: 1
 
                         Row {
                             anchors.centerIn: parent
                             spacing: 6
-                            Text { text: "▶"; color: "#ffffff"; font.pixelSize: 10 }
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/media-playback-start-symbolic.svg"
+                                iconSize: 10
+                                color: "#ffffff"
+                            }
                             Text {
                                 text: I18n.tr("Nghe bài này cùng bạn", "Listen along with friend")
                                 color: "#ffffff"

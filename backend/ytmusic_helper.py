@@ -2656,7 +2656,10 @@ def match_score(candidate, subject):
     if s in c:
         return (2, len(c) - len(s))
     if c in s:
-        return (3, len(s) - len(c))
+        # If candidate is a substring of subject, ensure it is substantial (at least 60% of length or >= 12 chars)
+        if len(c) >= 12 or (len(c) / max(1, len(s))) >= 0.60:
+            return (3, len(s) - len(c))
+        return None
     return None
 
 def get_apple_music_animated_artwork(title, artist, duration_seconds=0, album_hint=""):
@@ -2859,7 +2862,7 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
     cache_key = clean_vid if clean_vid else f"{clean_title}_{clean_artist}".lower()
     if cache_key:
         cached_data = _get_square_covers_cache().get(cache_key)
-        if cached_data:
+        if cached_data and cached_data.get("is_square"):
             return cached_data
 
     # Tier 1: Search official song release on YouTube Music

@@ -49,6 +49,18 @@ Rectangle {
         return greet;
     }
 
+    function openFriendNote(idx) {
+        if (friendsPulseBar) friendsPulseBar.openFriendNote(idx);
+    }
+
+    function closeFriendNote() {
+        if (friendsPulseBar) friendsPulseBar.closePopover();
+    }
+
+    function scrollToTop() {
+        feedListView.positionViewAtBeginning();
+    }
+
     function formatMoodTitle(title) {
         return I18n.formatMoodChipTitle(title);
     }
@@ -127,6 +139,14 @@ Rectangle {
         header: Item {
             width: feedListView.width
             height: headerCol.implicitHeight + 16
+            z: (friendsPulseBar && friendsPulseBar.isPopoverOpen) ? 1000 : 10
+
+            MouseArea {
+                anchors.fill: parent
+                z: 490
+                visible: friendsPulseBar && friendsPulseBar.isPopoverOpen
+                onClicked: friendsPulseBar.closePopover()
+            }
 
             ColumnLayout {
                 id: headerCol
@@ -148,7 +168,9 @@ Rectangle {
 
                 // Friends Pulse: 24h Ephemeral Music Notes Bar
                 FriendsPulseBar {
+                    id: friendsPulseBar
                     Layout.fillWidth: true
+                    z: (friendsPulseBar && friendsPulseBar.isPopoverOpen) ? 500 : 1
                     friendsNotes: root.friendsNotes
                     myLatestNote: root.myLatestNote
                     accentColor: root.accentColor

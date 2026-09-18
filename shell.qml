@@ -50,6 +50,7 @@ Scope {
     property bool isLoadingAudio: false
 
     property real trackChangeTimestamp: 0
+    property real postLoadGraceTimestamp: 0
     property var moodCache: ({})
     property string pendingSearchQuery: ""
     property string pendingSearchMode: "online"
@@ -880,7 +881,7 @@ Scope {
             id: track.videoId || track.id || "",
             title: track.title || track.name || "",
             artist: track.artist || "",
-            cover: track.cover || ""
+            cover: (track.image || track.cover || win.currentResolvedCover || "")
         } : null;
         win.myLatestNote = {
             note_text: text,
@@ -1983,6 +1984,8 @@ Scope {
                         if (url && isSquare) {
                             win.currentResolvedCover = url;
                             win.fetchSongPalette(url);
+                        } else if (url) {
+                            win.fetchSongPalette(url);
                         }
                     }
                 }
@@ -2134,6 +2137,7 @@ Scope {
         PostNoteModal {
             id: postNoteModal
             currentTrack: win.currentTrack
+            resolvedCover: win.currentResolvedCover
             accentColor: win.accentColor
             onCloseRequested: postNoteModal.visible = false
             onNoteSubmitted: (text, trk) => {
@@ -2919,7 +2923,7 @@ Scope {
 
     Timer {
         id: pollTimer
-        interval: win.isPlaying ? 80 : 400
+        interval: win.isPlaying ? 120 : (win.isLoadingAudio ? 200 : 400)
         running: true
         repeat: true
         onTriggered: {
@@ -2946,7 +2950,7 @@ Scope {
                         }
 
                         var isAdvancing = Boolean(s.time_pos && s.time_pos > 0);
-                        var isReadyPlaying = Boolean(!s.is_loading && s.is_playing && s.duration && s.duration > 0 && elapsed > 1000);
+                        var isReadyPlaying = Boolean(!s.is_loading && s.is_playing && s.duration && s.duration > 0 && elapsed > 800);
 
                         // While loading: wait until either time_pos advances or stream is ready playing
                         if ((s.is_loading || elapsed < 400 || (!isAdvancing && !isReadyPlaying)) && elapsed < 35000) {
@@ -2955,6 +2959,7 @@ Scope {
                         }
                         // New track has begun streaming and playing!
                         win.isLoadingAudio = false;
+                        win.postLoadGraceTimestamp = Date.now();
                         win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                         win.isPlaying = true;
@@ -2962,8 +2967,10 @@ Scope {
                             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                         }
                     } else {
-                        // Grace period: during first 2500ms of playback, don't allow transient buffering to flip isPlaying to false
-                        if (elapsed < 2500) {
+                        var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
+                        // Grace period: during first 3000ms after audio finishes loading,
+                        // never let transient buffering or 0:00 pause from MPV flip isPlaying to false!
+                        if (postLoadElapsed < 3000 || elapsed < 2000) {
                             win.isPlaying = true;
                             if (s.is_paused) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
@@ -3056,11 +3063,15 @@ Scope {
         function toggleSleepTimer() { frostifyIpc.toggleSleepTimer(); }
         function openPostNoteModal() { frostifyIpc.openPostNoteModal(); }
         function closePostNoteModal() { frostifyIpc.closePostNoteModal(); }
+        function openFriendNote(idx: int) { frostifyIpc.openFriendNote(idx); }
+        function closeFriendNote() { frostifyIpc.closeFriendNote(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function openFriendNote(idx: int) { homeView.openFriendNote(idx); }
+        function closeFriendNote() { homeView.closeFriendNote(); }
         function openPostNoteModal() { postNoteModal.visible = true; }
         function closePostNoteModal() { postNoteModal.visible = false; }
         function toggleSleepTimer() {

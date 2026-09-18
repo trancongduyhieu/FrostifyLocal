@@ -30,6 +30,9 @@ Item {
     property int sleepTimerRemainingSeconds: 0
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
+    property bool squareFailed: false
+    onResolvedSquareImageChanged: squareFailed = false
+    onCurrentTrackChanged: squareFailed = false
 
     signal playPauseClicked()
     signal nextClicked()
@@ -138,18 +141,29 @@ Item {
                         id: miniCover
                         anchors.fill: parent
                         source: {
-                            if (root.resolvedSquareImage !== "") return root.resolvedSquareImage;
-                            if (!root.currentTrack || !root.currentTrack.image) return "";
-                            var s = root.currentTrack.image;
+                            if (root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                var r = root.resolvedSquareImage;
+                                return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
+                            }
+                            if (!root.currentTrack) return "";
+                            var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
+                            if (!s && root.currentTrack.videoId) {
+                                s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
+                            }
                             return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                         }
                         asynchronous: true
                         fillMode: Image.PreserveAspectCrop
-                        scale: (root.resolvedSquareImage !== "" || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
+                        scale: ((root.resolvedSquareImage !== "" && !root.squareFailed) || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
                                ? 1.0
                                : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0)
                         transformOrigin: Item.Center
                         visible: status === Image.Ready
+                        onStatusChanged: {
+                            if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                root.squareFailed = true;
+                            }
+                        }
                     }
 
                     Rectangle {

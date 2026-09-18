@@ -12,6 +12,7 @@ Rectangle {
     z: 10006
 
     property var currentTrack: null
+    property string resolvedCover: ""
     property color accentColor: Theme.accent
     property string statusMessage: ""
     property bool isSubmitting: false
@@ -23,6 +24,12 @@ Rectangle {
         root.visible = true;
     }
 
+    function getTrackCover() {
+        if (root.resolvedCover && root.resolvedCover.length > 0) return root.resolvedCover;
+        if (!root.currentTrack) return "";
+        return root.currentTrack.image || root.currentTrack.cover || root.currentTrack.thumbnail || root.currentTrack.art || "";
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: {
@@ -30,31 +37,21 @@ Rectangle {
         }
     }
 
-    // Centered Modal Dialog Card
+    // Centered Modal Dialog Card (Organic Chromatic Liquid Glass)
     Rectangle {
         id: dialogCard
         width: 480
         height: 350
         anchors.centerIn: parent
         radius: 18
-        color: Qt.rgba(0.06, 0.06, 0.09, 0.96)
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+        color: Qt.rgba(0.05 + root.accentColor.r * 0.08, 0.05 + root.accentColor.g * 0.08, 0.07 + root.accentColor.b * 0.12, 0.96)
+        border.color: Qt.rgba(255, 255, 255, 0.16)
         border.width: 1
 
         // Prevent clicking background through modal
         MouseArea {
             anchors.fill: parent
             onClicked: (mouse) => mouse.accepted = true
-        }
-
-        // Ambient glow around dialog
-        MultiEffect {
-            anchors.fill: dialogCard
-            source: dialogCard
-            shadowEnabled: true
-            shadowColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-            shadowBlur: 0.8
-            shadowVerticalOffset: 6
         }
 
         ColumnLayout {
@@ -86,19 +83,18 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                // Close Button (Hairline glass)
+                // Close Button (Organic tinted glass with AppIcon)
                 Rectangle {
                     width: 32; height: 32; radius: 16
-                    color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.2) : Qt.rgba(1, 1, 1, 0.06)
-                    border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.4) : Qt.rgba(1, 1, 1, 0.1)
+                    color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                     border.width: 1
 
-                    Text {
+                    AppIcon {
                         anchors.centerIn: parent
-                        text: "✕"
-                        color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.6)
-                        font.pixelSize: 12
-                        font.bold: true
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 12
+                        color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.75)
                     }
 
                     MouseArea {
@@ -116,8 +112,8 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 88
                 radius: 12
-                color: Qt.rgba(0, 0, 0, 0.45)
-                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(1, 1, 1, 0.12)
+                color: Qt.rgba(0.03 + root.accentColor.r * 0.04, 0.03 + root.accentColor.g * 0.04, 0.05 + root.accentColor.b * 0.06, 0.85)
+                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                 border.width: 1
 
                 ColumnLayout {
@@ -173,13 +169,13 @@ Rectangle {
                 }
             }
 
-            // Attached Track Preview Card (Concentric radius R_con = 12 - 4 = 8)
+            // Attached Track Preview Card (Concentric radius R_con = 10, chromatic glass)
             Rectangle {
                 Layout.fillWidth: true
-                height: 52
+                height: 54
                 radius: 10
-                color: Qt.rgba(1, 1, 1, 0.04)
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
                 border.width: 1
 
                 RowLayout {
@@ -187,27 +183,28 @@ Rectangle {
                     anchors.margins: 8
                     spacing: 12
 
-                    // Album Cover or vinyl icon
+                    // Album Cover Image with fallback icon
                     Rectangle {
-                        width: 36; height: 36; radius: 6
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.3)
+                        width: 38; height: 38; radius: 6
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
                         border.width: 1
                         clip: true
 
                         Image {
+                            id: attachedTrackImg
                             anchors.fill: parent
-                            source: (root.currentTrack && root.currentTrack.cover) ? root.currentTrack.cover : ""
+                            source: root.getTrackCover()
                             fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready
+                            visible: status === Image.Ready && source != ""
                         }
 
-                        Text {
+                        AppIcon {
                             anchors.centerIn: parent
-                            text: "♫"
+                            source: "../assets/icons/folder-music-symbolic.svg"
+                            iconSize: 16
                             color: root.accentColor
-                            font.pixelSize: 16
-                            visible: !root.currentTrack || !root.currentTrack.cover
+                            visible: !attachedTrackImg.visible
                         }
                     }
 
@@ -221,21 +218,21 @@ Rectangle {
                             font.pixelSize: 12
                             font.bold: true
                             elide: Text.ElideRight
-                            width: 300
+                            width: 290
                         }
                         Text {
                             text: root.currentTrack ? (root.currentTrack.artist || I18n.tr("Đang phát trong Nutsty", "Playing in Nutsty")) : I18n.tr("Bật nhạc để đính kèm vào note", "Play a song to attach to note")
-                            color: Qt.rgba(1, 1, 1, 0.5)
+                            color: Qt.rgba(1, 1, 1, 0.6)
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             elide: Text.ElideRight
-                            width: 300
+                            width: 290
                         }
                     }
 
                     Rectangle {
-                        width: 76; height: 22; radius: 11
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        width: 76; height: 24; radius: 12
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
                         border.color: root.accentColor
                         border.width: 1
                         Text {
@@ -257,17 +254,17 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                // Cancel Button
+                // Cancel Button (Dynamic Chromatic Glass)
                 Rectangle {
                     width: 96; height: 38; radius: 10
-                    color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(1, 1, 1, 0.05)
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    color: cancelArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
+                    border.color: cancelArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                     border.width: 1
 
                     Text {
                         anchors.centerIn: parent
                         text: I18n.tr("Hủy", "Cancel")
-                        color: "#ffffff"
+                        color: cancelArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.8)
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
                     }
@@ -284,7 +281,7 @@ Rectangle {
                 // Submit Button (Dynamic Accent)
                 Rectangle {
                     width: 160; height: 38; radius: 10
-                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.42) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
                     border.color: root.accentColor
                     border.width: 1
                     scale: submitArea.containsMouse ? 1.03 : 1.0
