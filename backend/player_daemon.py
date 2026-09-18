@@ -514,8 +514,9 @@ def main():
         effective_loading = is_loading or (has_file and not (time_pos and time_pos > 0) and duration == 0.0)
 
         is_actively_playing = (pause is False) and has_file and not effective_loading
-        # Grace period: during the first 3.5s of 'playing' state with a loaded file, report is_playing=True
-        if not is_actively_playing and st.get("state") == "playing" and (time.time() - st.get("timestamp", 0)) < 3.5 and has_file and not effective_loading:
+        # Grace period: 15s từ lúc state="playing" được ghi (bao phủ yt-dlp resolve + buffer)
+        state_age = time.time() - st.get("timestamp", 0)
+        if not is_actively_playing and st.get("state") in ["playing", "loading"] and state_age < 15.0 and has_file:
             is_actively_playing = True
 
         status = {

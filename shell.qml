@@ -783,6 +783,7 @@ Scope {
         }
         if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
+        win.postLoadGraceTimestamp = Date.now(); // Reset ngay khi bắt đầu track mới
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.isLoadingAudio = true;
@@ -2968,15 +2969,26 @@ Scope {
                         }
                     } else {
                         var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
-                        // Grace period: during first 3000ms after audio finishes loading,
-                        // never let transient buffering or 0:00 pause from MPV flip isPlaying to false!
-                        if (postLoadElapsed < 3000 || elapsed < 2000) {
+                        // Grace period: 12s sau khi bắt đầu track (bao phủ cả yt-dlp resolve time)
+                        // Hoặc 4s sau khi isLoadingAudio = false để tránh transient pause
+                        if (postLoadElapsed < 12000 || elapsed < 4000) {
                             win.isPlaying = true;
                             if (s.is_paused) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                             }
                         } else {
-                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                            // Guard bổ sung: nếu là online track và currentTime < 3s,
+                            // không chấp nhận is_playing=false (có thể là transient buffering)
+                            var isOnlineTrack = win.currentTrack && (win.currentTrack.videoId ||
+                                (win.currentTrack.path && win.currentTrack.path.startsWith("ytdl://")));
+                            if (!s.is_playing && isOnlineTrack && win.currentTime < 3.0) {
+                                win.isPlaying = true;
+                                if (s.is_paused) {
+                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                                }
+                            } else {
+                                if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                            }
                         }
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
@@ -3149,7 +3161,9 @@ Scope {
             mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {
+            win.showDetails = false;
             win.currentView = "home";
+            homeView.scrollToTop();
         }
         function selectMood(title: string, params: string) {
             win.selectMood(title, params);
