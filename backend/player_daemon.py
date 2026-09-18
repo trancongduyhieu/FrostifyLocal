@@ -340,7 +340,7 @@ def main():
 
         try:
             with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
+                json.dump({"state": "starting", "path": file_path, "timestamp": time.time()}, f)
         except Exception:
             pass
         print("Playing:", file_path)
@@ -511,19 +511,29 @@ def main():
                 send_mpv_cmd(["set_property", "pause", False])
                 pause = False
 
-        effective_loading = is_loading or (has_file and not (time_pos and time_pos > 0) and duration == 0.0)
+        effective_loading = is_loading or (has_file and (time_pos <= 0.0 and duration <= 0.0))
+        if st.get("state") in ["loading", "starting"] and (time.time() - st.get("timestamp", 0)) < 45.0 and not (time_pos and time_pos > 0):
+            effective_loading = True
+
+        # If audio has started advancing, mark state as 'playing'
+        if time_pos and time_pos > 0 and st.get("state") in ["loading", "starting"]:
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "playing", "path": path, "timestamp": time.time()}, f)
+            except Exception:
+                pass
 
         is_actively_playing = (pause is False) and has_file and not effective_loading
-        # Grace period: 15s từ lúc state="playing" được ghi (bao phủ yt-dlp resolve + buffer)
+        # Grace period: during first 5s of 'playing' state with loaded file and unpaused, keep playing flag active
         state_age = time.time() - st.get("timestamp", 0)
-        if not is_actively_playing and st.get("state") in ["playing", "loading"] and state_age < 15.0 and has_file:
+        if not is_actively_playing and st.get("state") == "playing" and (pause is False) and has_file and state_age < 5.0 and not is_loading:
             is_actively_playing = True
 
         status = {
             "is_playing": is_actively_playing,
-            "is_paused": (pause is True) and has_file and not is_actively_playing and not effective_loading,
-            "time_pos": round(time_pos, 1) if has_file else 0.0,
-            "duration": round(duration, 1) if has_file else 0.0,
+            "is_paused": (pause is True) and has_file and not effective_loading,
+            "time_pos": round(time_pos, 1) if (has_file and not effective_loading) else 0.0,
+            "duration": round(duration, 1) if (has_file and not effective_loading) else 0.0,
             "filename": filename if has_file else "",
             "volume": vol,
             "is_loading": effective_loading

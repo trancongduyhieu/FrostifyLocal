@@ -1995,12 +1995,12 @@ def resolve_stream_url(video_id, quality=None):
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
+            "skip_download": True,
+            "check_formats": False,
+            "extractor_args": {"youtube": {"player_client": ["android_music", "web_embedded"]}}
         }
         if cookie_file:
             ydl_opts["cookiefile"] = cookie_file
-            ydl_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
-        else:
-            ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)

@@ -1712,7 +1712,7 @@ Item {
                                     Text {
                                         text: {
                                             if (modelData && modelData.duration && modelData.duration !== "--:--") return modelData.duration;
-                                            if (qRow.isCurrent && root.totalDuration > 0) {
+                                            if (qRow.isCurrent && root.totalDuration > 1.0) {
                                                 var m = Math.floor(root.totalDuration / 60);
                                                 var s = Math.floor(root.totalDuration % 60);
                                                 return m + ":" + (s < 10 ? "0" : "") + s;

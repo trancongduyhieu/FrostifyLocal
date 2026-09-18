@@ -783,7 +783,6 @@ Scope {
         }
         if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
-        win.postLoadGraceTimestamp = Date.now(); // Reset ngay khi bắt đầu track mới
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.isLoadingAudio = true;
@@ -1950,7 +1949,7 @@ Scope {
                     track: win.currentTrack
                     animatedCoverEnabled: win.animatedCoverEnabled
                     currentTime: win.currentTime
-                    totalDuration: win.totalDuration > 0 ? win.totalDuration : 1.0
+                    totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
@@ -2950,15 +2949,15 @@ Scope {
                             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                         }
 
-                        var isAdvancing = Boolean(s.time_pos && s.time_pos > 0);
-                        var isReadyPlaying = Boolean(!s.is_loading && s.is_playing && s.duration && s.duration > 0 && elapsed > 800);
+                        // We only transition out of loading when audio has ACTUALLY started advancing or playing
+                        var isStarted = Boolean(!s.is_loading && (s.time_pos > 0 || (s.duration > 0 && s.is_playing)));
 
-                        // While loading: wait until either time_pos advances or stream is ready playing
-                        if ((s.is_loading || elapsed < 400 || (!isAdvancing && !isReadyPlaying)) && elapsed < 35000) {
+                        if (!isStarted && elapsed < 40000) {
                             win.currentTime = 0.0;
                             return;
                         }
-                        // New track has begun streaming and playing!
+
+                        // Audio is ACTUALLY streaming and playing now!
                         win.isLoadingAudio = false;
                         win.postLoadGraceTimestamp = Date.now();
                         win.currentTime = (s.time_pos && s.time_pos > 0) ? s.time_pos : 0.0;
@@ -2969,26 +2968,15 @@ Scope {
                         }
                     } else {
                         var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
-                        // Grace period: 12s sau khi bắt đầu track (bao phủ cả yt-dlp resolve time)
-                        // Hoặc 4s sau khi isLoadingAudio = false để tránh transient pause
-                        if (postLoadElapsed < 12000 || elapsed < 4000) {
+                        // Grace period: during first 3500ms after audio finishes loading,
+                        // never let transient pause or buffering flip isPlaying to false
+                        if (postLoadElapsed < 3500) {
                             win.isPlaying = true;
                             if (s.is_paused) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                             }
                         } else {
-                            // Guard bổ sung: nếu là online track và currentTime < 3s,
-                            // không chấp nhận is_playing=false (có thể là transient buffering)
-                            var isOnlineTrack = win.currentTrack && (win.currentTrack.videoId ||
-                                (win.currentTrack.path && win.currentTrack.path.startsWith("ytdl://")));
-                            if (!s.is_playing && isOnlineTrack && win.currentTime < 3.0) {
-                                win.isPlaying = true;
-                                if (s.is_paused) {
-                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
-                                }
-                            } else {
-                                if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
-                            }
+                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
                         }
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
@@ -3161,7 +3149,7 @@ Scope {
             mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {
-            win.showDetails = false;
+            win.showAmberolDetails = false;
             win.currentView = "home";
             homeView.scrollToTop();
         }
