@@ -10,10 +10,8 @@ venv/
 # Reference repositories and skills
 references/
 
-# Local planning and AI guides
+# Local planning
 TODO.md
 todo.md
-AGENTS.md
-agents.md
 .codegraph/
 
