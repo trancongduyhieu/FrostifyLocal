@@ -73,6 +73,18 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+    def _send_json(self, data, status_code=200):
+        payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        try:
+            self.send_response(status_code)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._send_cors_headers()
@@ -196,13 +208,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             if len(cleaned_vault) != len(vault):
                 save_notes_vault(cleaned_vault)
             data = {"count": len(valid_notes), "notes": valid_notes, "my_note": my_note}
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(data, 200)
         elif path == "/api/notes/events":
             user_email = query.get("user_email", [""])[0].strip().lower()
             events = load_events_vault()
@@ -211,13 +217,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             if len(my_events) > 0:
                 save_events_vault(remaining_events)
             data = {"count": len(my_events), "events": my_events}
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(data, 200)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -301,14 +301,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 vault = load_notes_vault()
                 vault.pop(f"note:{email}", None)
                 save_notes_vault(vault)
-            res = {"success": True}
-            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json({"success": True}, 200)
         elif self.path == "/api/notes/events":
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
@@ -321,8 +314,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             from_name = req_data.get("from_name", "").strip()
             to_email = req_data.get("to_email", "").strip()
             if not to_email:
-                res = {"success": False, "error": "Missing to_email"}
-                status_code = 400
+                self._send_json({"success": False, "error": "Missing to_email"}, 400)
             else:
                 events = load_events_vault()
                 ev = {
@@ -331,20 +323,13 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "from_email": from_email,
                     "from_name": from_name,
                     "to_email": to_email,
+                    "data": req_data.get("data"),
                     "timestamp": time.time(),
                     "created_at": datetime.now().isoformat()
                 }
                 events.append(ev)
                 save_events_vault(events)
-                res = {"success": True, "event": ev}
-                status_code = 200
-            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
-            self.send_response(status_code)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+                self._send_json({"success": True, "event": ev}, 200)
         elif self.path == "/api/now_playing":
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
@@ -356,8 +341,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             email = req_data.get("user_email", "").strip().lower()
             now_playing = req_data.get("now_playing")
             if not email:
-                res = {"success": False, "error": "Missing user_email"}
-                status_code = 400
+                self._send_json({"success": False, "error": "Missing user_email"}, 400)
             else:
                 vault = load_notes_vault()
                 key = f"note:{email}"
@@ -382,16 +366,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     }
                     vault[key] = record
                 save_notes_vault(vault)
-                res = {"success": True, "note": record}
-                status_code = 200
-
-            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
-            self.send_response(status_code)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+                self._send_json({"success": True, "note": record}, 200)
         else:
             self.send_response(404)
             self._send_cors_headers()

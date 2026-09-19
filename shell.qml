@@ -83,6 +83,8 @@ Scope {
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
+    property bool isSyncingFromFriend: false
+    property var activeCoListeners: []
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
@@ -758,9 +760,34 @@ Scope {
         }
     }
 
+    function sendSocialEventFast(ev_type, to_email, extra_data) {
+        if (!to_email) return;
+        var myEmail = win.authAccountEmail;
+        if (!myEmail) {
+            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+            myEmail = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
+        }
+        var myName = win.authAccountName;
+        if (!myName) {
+            var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+            myName = (profileN === "user2") ? "Hiếu Trần" : (profileN === "user1" ? "Shiraori" : "Nutsty User");
+        }
+        var payload = {
+            event: ev_type,
+            from_email: myEmail,
+            from_name: myName,
+            to_email: to_email,
+            data: extra_data || null
+        };
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify(payload));
+    }
+
     function syncNowPlaying(force) {
         var now = Date.now();
-        if (!force && (now - win.lastNowPlayingSyncTime < 800)) return;
+        if (!force && (now - win.lastNowPlayingSyncTime < 500)) return;
         win.lastNowPlayingSyncTime = now;
 
         var email = win.authAccountEmail;
@@ -772,7 +799,7 @@ Scope {
 
         var cur = win.currentTrack;
         var npData = null;
-        if (cur && (win.isPlaying || win.isLoadingAudio)) {
+        if (cur) {
             var vid = cur.videoId || cur.id || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
             if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
             npData = {
@@ -830,7 +857,8 @@ Scope {
                             if (parsed.my_note !== undefined) {
                                 win.myLatestNote = parsed.my_note;
                             }
-                            // Auto-follow when listening along
+
+                            // Auto-follow and real-time co-listening synchronization (Play/Pause/Seek)
                             if (win.listeningAlongFriend && Array.isArray(parsed.notes)) {
                                 var targetEmail = (win.listeningAlongFriend.user_email || "").toLowerCase();
                                 var targetName = win.listeningAlongFriend.user_name;
@@ -838,17 +866,48 @@ Scope {
                                     return (targetEmail && f.user_email && f.user_email.toLowerCase() === targetEmail) ||
                                            (targetName && f.user_name === targetName);
                                 });
-                                if (updated) {
+                                if (updated && updated.now_playing) {
                                     win.listeningAlongFriend = updated;
                                     var np = updated.now_playing;
-                                    if (np && (np.title || np.name) && np.is_playing !== false) {
-                                        var npVid = np.videoId || np.id || "";
-                                        if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
-                                        var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
-                                        if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
-                                        if (npVid && curVid && npVid !== curVid) {
-                                            win.startListeningAlong(updated);
+                                    var npVid = np.videoId || np.id || "";
+                                    if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
+                                    var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
+                                    if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
+
+                                    if (npVid && curVid && npVid !== curVid) {
+                                        // Host switched to a new track!
+                                        win.startListeningAlong(updated);
+                                    } else if (npVid && curVid && npVid === curVid) {
+                                        // Same track: Reconcile Play/Pause and Seek Drift!
+                                        win.isSyncingFromFriend = true;
+
+                                        // 1. Play / Pause State Machine Sync
+                                        if (np.is_playing === false && win.isPlaying === true) {
+                                            win.isPlaying = false;
+                                            win.isLoadingAudio = false;
+                                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                                        } else if (np.is_playing === true && win.isPlaying === false) {
+                                            win.isPlaying = true;
+                                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
                                         }
+
+                                        // 2. Real-time Seek Drift Reconciliation (Tua nhạc đồng bộ)
+                                        var expectedPos = Number(np.position || 0);
+                                        if (np.is_playing === true && np.timestamp) {
+                                            var nowSec = Date.now() / 1000.0;
+                                            var recordSec = (np.timestamp > 1000000000000) ? (np.timestamp / 1000.0) : Number(np.timestamp);
+                                            var elapsed = nowSec - recordSec;
+                                            if (elapsed > 0 && elapsed < (win.totalDuration || 600)) {
+                                                expectedPos += elapsed;
+                                            }
+                                        }
+                                        var drift = Math.abs(win.currentTime - expectedPos);
+                                        if (drift > 2.0 && expectedPos >= 0) {
+                                            win.currentTime = expectedPos;
+                                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(expectedPos)]);
+                                        }
+
+                                        win.isSyncingFromFriend = false;
                                     }
                                 }
                             }
@@ -859,7 +918,7 @@ Scope {
         };
         xhr.send();
 
-        // Fetch social events fast
+        // Fetch social events fast (instant peer actions: pause, play, seek, leave)
         if (email) {
             var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email);
             var evXhr = new XMLHttpRequest();
@@ -871,11 +930,72 @@ Scope {
                         var events = (evData && Array.isArray(evData.events)) ? evData.events : [];
                         for (var i = 0; i < events.length; i++) {
                             var ev = events[i];
-                            if (ev && ev.event === "leave") {
+                            if (!ev) continue;
+                            if (ev.event === "join") {
+                                var jEmail = (ev.from_email || "").trim().toLowerCase();
+                                if (jEmail) {
+                                    var existing = win.activeCoListeners ? win.activeCoListeners.slice(0) : [];
+                                    if (existing.indexOf(jEmail) === -1) {
+                                        existing.push(jEmail);
+                                        win.activeCoListeners = existing;
+                                    }
+                                    var jName = ev.from_name || jEmail;
+                                    win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
+                                    win.syncNowPlaying(true);
+                                    if (win.currentTrack) {
+                                        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", jEmail);
+                                        win.sendSocialEventFast("seek", jEmail, { position: win.currentTime });
+                                    }
+                                }
+                            } else if (ev.event === "leave") {
+                                var lEmail = (ev.from_email || "").trim().toLowerCase();
+                                if (lEmail && win.activeCoListeners) {
+                                    win.activeCoListeners = win.activeCoListeners.filter(function(e) { return e !== lEmail; });
+                                }
                                 var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
                                 win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                                 if (win.listeningAlongFriend && (win.listeningAlongFriend.user_email === ev.from_email || win.listeningAlongFriend.user_name === ev.from_name)) {
                                     win.listeningAlongFriend = null;
+                                }
+                            } else if (ev.event === "pause") {
+                                if (win.isPlaying) {
+                                    win.isSyncingFromFriend = true;
+                                    win.isPlaying = false;
+                                    win.isLoadingAudio = false;
+                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                                    win.isSyncingFromFriend = false;
+                                    var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                    win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
+                                }
+                            } else if (ev.event === "play" || ev.event === "resume") {
+                                if (!win.isPlaying && win.currentTrack) {
+                                    win.isSyncingFromFriend = true;
+                                    win.isPlaying = true;
+                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
+                                    win.isSyncingFromFriend = false;
+                                    var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                    win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
+                                }
+                            } else if (ev.event === "seek") {
+                                var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
+                                if (sPos >= 0) {
+                                    win.isSyncingFromFriend = true;
+                                    win.currentTime = sPos;
+                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sPos)]);
+                                    win.isSyncingFromFriend = false;
+                                }
+                            } else if (ev.event === "track_change") {
+                                if (ev.data && ev.data.track && win.listeningAlongFriend) {
+                                    var newTrk = ev.data.track;
+                                    var newVid = newTrk.videoId || newTrk.id || "";
+                                    if (newVid.startsWith("yt_")) newVid = newVid.replace(/^yt_/, "");
+                                    var myVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
+                                    if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
+                                    if (newVid !== myVid) {
+                                        win.playOnlineTrack(newTrk, false);
+                                        var tcName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                        win.showToast(I18n.tr(tcName + " đã chuyển bài hát", tcName + " changed track"));
+                                    }
                                 }
                             }
                         }
@@ -888,7 +1008,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: 800
+        interval: 600
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1059,6 +1179,12 @@ Scope {
         var tArtist = trk.artist || "";
         var tImage = trk.image || trk.cover || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
+        win.syncNowPlaying(true);
+        if (!win.isSyncingFromFriend && win.activeCoListeners && win.activeCoListeners.length > 0) {
+            for (var cli = 0; cli < win.activeCoListeners.length; cli++) {
+                win.sendSocialEventFast("track_change", win.activeCoListeners[cli], { track: trk });
+            }
+        }
 
         // Pre-warm the next track after 4s delay so current track has 100% bandwidth to start
         if (win.currentTracks && win.currentTracks.length > 1) {
@@ -1222,6 +1348,9 @@ Scope {
         win.isNowPlayingOpen = true;
         var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
         win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
+        if (friend.user_email) {
+            win.sendSocialEventFast("join", friend.user_email);
+        }
     }
 
     function exitListeningAlong() {
@@ -1232,9 +1361,7 @@ Scope {
         win.listeningAlongFriend = null;
         win.showToast(I18n.tr("Đã rời chế độ nghe cùng với " + friendName, "Left listen along with " + friendName));
         if (friendEmail) {
-            sendSocialEventProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "send_event", "leave", friendEmail];
-            sendSocialEventProc.running = false;
-            sendSocialEventProc.running = true;
+            win.sendSocialEventFast("leave", friendEmail);
         }
     }
 
@@ -2995,6 +3122,12 @@ Scope {
         var tArtist = trk.artist || "";
         var tImage = trk.image || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage]);
+        win.syncNowPlaying(true);
+        if (!win.isSyncingFromFriend && win.activeCoListeners && win.activeCoListeners.length > 0) {
+            for (var cli2 = 0; cli2 < win.activeCoListeners.length; cli2++) {
+                win.sendSocialEventFast("track_change", win.activeCoListeners[cli2], { track: trk });
+            }
+        }
         pollTimer.restart();
     }
 
@@ -3009,6 +3142,7 @@ Scope {
             win.isPlaying = false;
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
             pollTimer.restart();
+            win.syncNowPlaying(true);
             return;
         }
 
@@ -3026,6 +3160,20 @@ Scope {
             win.isPlaying = false;
             win.isLoadingAudio = false;
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        }
+
+        win.syncNowPlaying(true);
+
+        if (!win.isSyncingFromFriend) {
+            var evType = win.isPlaying ? "play" : "pause";
+            if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
+                win.sendSocialEventFast(evType, win.listeningAlongFriend.user_email);
+            }
+            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+                for (var li = 0; li < win.activeCoListeners.length; li++) {
+                    win.sendSocialEventFast(evType, win.activeCoListeners[li]);
+                }
+            }
         }
 
         pollTimer.restart();
@@ -3089,6 +3237,17 @@ Scope {
     function seekAudio(sec) {
         win.currentTime = sec;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
+        win.syncNowPlaying(true);
+        if (!win.isSyncingFromFriend) {
+            if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
+                win.sendSocialEventFast("seek", win.listeningAlongFriend.user_email, { position: sec });
+            }
+            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+                for (var si = 0; si < win.activeCoListeners.length; si++) {
+                    win.sendSocialEventFast("seek", win.activeCoListeners[si], { position: sec });
+                }
+            }
+        }
     }
 
     function setVolume(vol) {
@@ -3598,9 +3757,11 @@ Scope {
         function openFriendNote(idx: int) { frostifyIpc.openFriendNote(idx); }
         function closeFriendNote() { frostifyIpc.closeFriendNote(); }
         function testListenAlong() { frostifyIpc.testListenAlong(); }
+        function testListenAlongFriend(emailOrName: string) { frostifyIpc.testListenAlongFriend(emailOrName); }
         function testExitListenAlong() { frostifyIpc.testExitListenAlong(); }
         function testPlayUserNote() { frostifyIpc.testPlayUserNote(); }
         function testPlayFriendNote() { frostifyIpc.testPlayFriendNote(); }
+        function testSeekAudio(sec: real) { frostifyIpc.testSeekAudio(sec); }
     }
 
     IpcHandler {
@@ -3622,11 +3783,27 @@ Scope {
         function closeFriendNote() { friendStoryModal.close(); }
         function testListenAlong() {
             if (win.friendsNotes && win.friendsNotes.length > 0) {
-                win.startListeningAlong(win.friendsNotes[0]);
+                var shira = win.friendsNotes.find(f => (f.user_email && f.user_email.indexOf("shiraori") !== -1) || (f.user_name && f.user_name.indexOf("Shiraori") !== -1));
+                if (shira) {
+                    win.startListeningAlong(shira);
+                } else {
+                    win.startListeningAlong(win.friendsNotes[0]);
+                }
+            }
+        }
+        function testListenAlongFriend(emailOrName: string) {
+            if (win.friendsNotes && win.friendsNotes.length > 0) {
+                var found = win.friendsNotes.find(f => (f.user_email && f.user_email.toLowerCase() === emailOrName.toLowerCase()) || (f.user_name && f.user_name.toLowerCase() === emailOrName.toLowerCase()));
+                if (found) {
+                    win.startListeningAlong(found);
+                }
             }
         }
         function testExitListenAlong() {
             win.exitListeningAlong();
+        }
+        function testSeekAudio(sec: real) {
+            win.seekAudio(sec);
         }
         function openPostNoteModal() { postNoteModal.openModal(); }
         function openPostNotePicker() { postNoteModal.openModal(); postNoteModal.isPickingTrack = true; }

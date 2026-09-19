@@ -1260,7 +1260,7 @@ Item {
                     height: 32
                     width: listenAlongRow.implicitWidth + 20
                     radius: 16
-                    visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+                    visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined && (parent.width > (tabsRow.implicitWidth + listenAlongBadge.implicitWidth + 40))
                     color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
                     border.color: root.accentColor
                     border.width: 1
