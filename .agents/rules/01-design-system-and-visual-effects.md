@@ -57,10 +57,14 @@ Tài liệu đặc tả chuyên sâu về hệ thống đồ họa, ngôn ngữ 
 
 ---
 
-## 5. Bo Góc Avatar Người Dùng & Chống Lỗi Render Mép Đen
-- Sử dụng `MultiEffect` với `maskEnabled: true` để bo góc ảnh mượt mà bằng phần cứng GPU.
-- Ảnh đại diện phải lấp đầy 100% diện tích thẻ, không để lại khoảng đệm (moat/margin) trống gây lỗi render màu đen ở 4 góc bo.
-- Viền hairline 1px áp dụng trực tiếp trên mép ảnh theo công thức bo góc đồng tâm: $R_{\text{trong}} = R_{\text{ngoài}} - \text{border.width}$.
+## 5. Chuẩn Hóa Hình Ảnh Bo Góc (`components/RoundedImage.qml`)
+- **Quy định nghiêm ngặt**: Mọi hình ảnh cần bo góc trong toàn bộ dự án BẮT BUỘC dùng `RoundedImage.qml` với thuộc tính `radius`. TUYỆT ĐỐI KHÔNG tự sinh thêm cụm `Rectangle mask + MultiEffect` thủ công gây phình mã nguồn và rò rỉ VRAM FBO.
+- **Tối ưu RAM/VRAM tự động**:
+  - Tự động downscale HiDPI: `sourceSize: Qt.size(width * 2, height * 2)` (giảm 99% RAM giải nén bitmap).
+  - Tiêu tốn 0 byte VRAM khi ảnh chưa tải hoặc `radius === 0` (`layer.enabled` chỉ bật khi `Image.Ready && radius > 0`).
+  - Tích hợp sẵn placeholder nền và fallback `AppIcon` khi rỗng hoặc tải lỗi.
+- Ảnh đại diện/bìa phải lấp đầy 100% thẻ (`fillMode: Image.PreserveAspectCrop`), không để đệm trống mép đen.
+- Viền hairline 1px áp dụng trực tiếp qua `borderColor` và `borderWidth` theo công thức bo góc đồng tâm.
 
 ---
 

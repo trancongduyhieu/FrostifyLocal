@@ -152,6 +152,7 @@ Item {
                             if (!s && root.currentTrack.videoId) {
                                 s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
                             }
+                            if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
                             return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                         }
                         asynchronous: true

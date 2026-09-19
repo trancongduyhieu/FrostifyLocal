@@ -21,6 +21,7 @@ Item {
     property string userName: ""
 
     signal postNoteClicked()
+    signal userNoteDetailClicked()
     signal addFriendClicked()
     signal openStoryRequested(var friendData, int index)
     signal playTrackRequested(var track)
@@ -154,6 +155,8 @@ Item {
                     border.width: 1
                     scale: userMouseArea.containsMouse ? 1.05 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
+                    Behavior on color { ColorAnimation { duration: 250 } }
+                    Behavior on border.color { ColorAnimation { duration: 200 } }
 
                     // Connector Dot 1 (top dot)
                     Rectangle {
@@ -374,7 +377,13 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.postNoteClicked()
+                    onClicked: {
+                        if (root.myLatestNote !== null) {
+                            root.userNoteDetailClicked();
+                        } else {
+                            root.postNoteClicked();
+                        }
+                    }
                 }
             }
 
@@ -413,6 +422,8 @@ Item {
                         border.width: 1
                         scale: friendArea.containsMouse ? 1.05 : 1.0
                         Behavior on scale { NumberAnimation { duration: 150 } }
+                        Behavior on color { ColorAnimation { duration: 250 } }
+                        Behavior on border.color { ColorAnimation { duration: 200 } }
 
                         // Connector Dot 1 (top dot)
                         Rectangle {

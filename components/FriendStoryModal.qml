@@ -20,10 +20,25 @@ Item {
     property var friendsNotes: []
     property int currentIndex: 0
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    property Item backgroundSourceItem: null
 
     signal listenAlongRequested(var friendData)
+    signal playTrackRequested(var track)
 
     readonly property var currentFriend: (friendsNotes && friendsNotes.length > currentIndex && currentIndex >= 0) ? friendsNotes[currentIndex] : null
+    readonly property var attachedTrack: (currentFriend && currentFriend.track) ? currentFriend.track : null
+    readonly property string trackTitle: attachedTrack ? String(attachedTrack.title || attachedTrack.name || "").trim() : ""
+    readonly property string trackArtist: attachedTrack ? String(attachedTrack.artist || "").trim() : ""
+
+    readonly property bool isThisTrackPlaying: {
+        if (!attachedTrack || typeof win === "undefined" || !win.isPlaying || !win.currentTrack) return false;
+        var curId = win.currentTrack.videoId || win.currentTrack.id || "";
+        var attId = attachedTrack.videoId || attachedTrack.id || "";
+        if (curId && attId && curId === attId) return true;
+        var curTitle = win.currentTrack.title || win.currentTrack.name || "";
+        var attTitle = attachedTrack.title || attachedTrack.name || "";
+        return curTitle && attTitle && curTitle === attTitle;
+    }
 
     function openWithIndex(idx) {
         if (friendsNotes && idx >= 0 && idx < friendsNotes.length) {
@@ -90,7 +105,7 @@ Item {
     // Dismiss Backdrop
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0.02, 0.02, 0.04, 0.72)
+        color: Qt.rgba(0, 0, 0, 0.58)
 
         MouseArea {
             anchors.fill: parent
@@ -98,10 +113,10 @@ Item {
         }
     }
 
-    // Story Dialog Container (Row with Nav Arrows and Story Card)
-    RowLayout {
+    // Center Dialog Container with Carousel Nav Buttons
+    Row {
         anchors.centerIn: parent
-        spacing: 16
+        spacing: 24
 
         // Left Navigation Arrow
         NavArrowButton {
@@ -113,382 +128,523 @@ Item {
             onClicked: root.prevStory()
         }
 
-        // Center Story Card (Messenger/Instagram Stories Style - Concentric R=22)
-        Rectangle {
-            id: storyCard
-            Layout.preferredWidth: 440
-            Layout.preferredHeight: 520
-            radius: 22
-            color: Qt.rgba(0.05 + root.accentColor.r * 0.08, 0.05 + root.accentColor.g * 0.08, 0.07 + root.accentColor.b * 0.12, 0.96)
-            border.color: Qt.rgba(255, 255, 255, 0.16)
-            border.width: 1
-            clip: true
+        // Center Container wrapping Dialog and Elevation Shadow
+        Item {
+            width: 420
+            height: 480
 
-            // Absorbs click inside story card so clicking doesn't close backdrop
+            // Elevation: MultiEffect Drop Shadow behind Dialog
+            Rectangle {
+                id: shadowShape
+                anchors.fill: parent
+                radius: 20
+                color: "#000000"
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: shadowShape
+                source: shadowShape
+                shadowEnabled: true
+                shadowColor: "#80000000"
+                shadowVerticalOffset: 6
+                shadowBlur: 0.65
+                z: 1
+            }
+
+            // Main Dialog Card: Keo 502 Optical Resin (LiquidGlass, 20px Radius)
+            LiquidGlass {
+                id: dialogCard
+                anchors.fill: parent
+                radius: 20
+                displacement: 22.0
+                aberration: 0.03
+                bevelWidth: 26.0
+                tintColor: Qt.rgba(0.04, 0.05, 0.08, 0.92)
+                backgroundSourceItem: root.backgroundSourceItem
+                isFlowActive: (typeof win !== "undefined" && win.isPlaying && win.currentTrack !== null)
+                clip: true
+                z: 2
+
+                scale: root.isOpen ? 1.0 : 0.94
+                Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+            // Shaded Tint Overlay: Ensures effortless text contrast
+            Rectangle {
+                anchors.fill: parent
+                radius: dialogCard.radius
+                color: Qt.rgba(0.04, 0.05, 0.08, 0.82)
+                z: 1
+            }
+
+            // 1px Hairline Border: Keo 502 Surface Tension Rim
+            Rectangle {
+                anchors.fill: parent
+                radius: dialogCard.radius
+                color: "transparent"
+                border.color: Qt.rgba(255, 255, 255, 0.18)
+                border.width: 1
+                z: 20
+            }
+
+            // Prevent click-through
             MouseArea {
                 anchors.fill: parent
+                z: 2
+                onClicked: (mouse) => { mouse.accepted = true; }
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 16
+                anchors.margins: 22
+                spacing: 0
+                z: 5
 
-                // 1. Header: Friend Profile & Close Button
+                // ==========================================
+                // HEADER: Friend Mini Avatar + Name (Left) & Close Button (Far Right)
+                // ==========================================
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    Layout.preferredHeight: 32
 
-                    // Mini Avatar
-                    Rectangle {
-                        width: 38; height: 38; radius: 19
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                        border.color: root.accentColor
-                        border.width: 1.5
-                        clip: true
+                    // Mini circular avatar + Friend info
+                    RowLayout {
+                        spacing: 10
+                        Layout.alignment: Qt.AlignVCenter
 
-                        Image {
-                            id: miniAvatarImg
-                            anchors.fill: parent
+                        RoundedImage {
+                            Layout.preferredWidth: 32
+                            Layout.preferredHeight: 32
+                            radius: 16
                             source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready && source != ""
+                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                            fallbackIconColor: root.accentColor
                         }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.currentFriend && root.currentFriend.user_name ? root.currentFriend.user_name.charAt(0).toUpperCase() : "F"
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 15
-                            font.bold: true
-                            visible: !miniAvatarImg.visible
+                        ColumnLayout {
+                            spacing: 1
+
+                            Text {
+                                text: root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : ""
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                text: root.currentFriend ? root.formatTimeAgo(root.currentFriend.created_at) : ""
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
                         }
                     }
 
-                    Column {
-                        Layout.fillWidth: true
-                        spacing: 2
-                        Text {
-                            text: root.currentFriend ? (root.currentFriend.user_name || "Friend") : ""
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 14
-                            font.bold: true
-                            elide: Text.ElideRight
-                            width: 280
-                        }
-                        Text {
-                            text: root.currentFriend ? root.formatTimeAgo(root.currentFriend.created_at) : ""
-                            color: Qt.rgba(1, 1, 1, 0.5)
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                        }
-                    }
+                    Item { Layout.fillWidth: true } // Far right push!
 
-                    // Close Button with AppIcon
                     Rectangle {
-                        width: 32; height: 32; radius: 16
-                        color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.25) : Qt.rgba(1, 1, 1, 0.08)
-                        border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(1, 1, 1, 0.12)
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+                        border.color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.08)
                         border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        HoverHandler { id: closeHover }
 
                         AppIcon {
                             anchors.centerIn: parent
                             source: "../assets/icons/window-close-symbolic.svg"
                             iconSize: 12
-                            color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.8)
+                            color: closeHover.hovered ? "#ffffff" : Theme.textSecondary
                         }
 
                         MouseArea {
-                            id: closeArea
                             anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.close()
                         }
                     }
                 }
 
-                Item { Layout.fillHeight: true; Layout.preferredHeight: 6 }
-
-                // 2. Center Stage: Large Avatar + Live Pulse Ring + Thought Bubble
+                // ==========================================
+                // CENTER: Thought Bubble + Soft Droplet Tail + Clean Avatar + Mini Play/Stop
+                // ==========================================
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 210
+                    Layout.fillHeight: true
 
-                    // Pulse Ring (Breathing animation when friend has music)
-                    Rectangle {
-                        id: pulseRing
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        anchors.topMargin: 70
-                        width: 116; height: 116; radius: 58
-                        color: "transparent"
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                        border.width: 1.5
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        spacing: 0
 
-                        SequentialAnimation on scale {
-                            loops: Animation.Infinite
-                            running: root.isOpen && root.currentFriend && root.currentFriend.track
-                            NumberAnimation { to: 1.08; duration: 1600; easing.type: Easing.InOutSine }
-                            NumberAnimation { to: 1.0; duration: 1600; easing.type: Easing.InOutSine }
+                        // 1. THOUGHT BUBBLE CONTAINER
+                        Item {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: Math.max(160, Math.min(320, friendBubbleCol.implicitWidth + 36))
+                            Layout.preferredHeight: friendBubbleBg.height + 10
+
+                            // Seamless Droplet Tail (Rotated rounded square)
+                            Rectangle {
+                                id: friendBubbleTail
+                                anchors.top: friendBubbleBg.bottom
+                                anchors.topMargin: -6
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 14
+                                height: 14
+                                radius: 3
+                                rotation: 45
+                                color: friendBubbleBg.color
+                                border.color: friendBubbleBg.border.color
+                                border.width: 1
+                                z: 1
+                            }
+
+                            // Thought Bubble Card (Dynamic Chromatic Salience - No dead grey)
+                            Rectangle {
+                                id: friendBubbleBg
+                                anchors.top: parent.top
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: parent.width
+                                height: friendBubbleCol.implicitHeight + 22
+                                radius: 20
+                                color: {
+                                    var isPlaying = root.isThisTrackPlaying;
+                                    if (isPlaying) {
+                                        return friendBubbleMouse.containsMouse
+                                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22);
+                                    } else {
+                                        return friendBubbleMouse.containsMouse
+                                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10);
+                                    }
+                                }
+                                border.color: {
+                                    var isPlaying = root.isThisTrackPlaying;
+                                    if (isPlaying) {
+                                        return friendBubbleMouse.containsMouse
+                                            ? root.accentColor
+                                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.55);
+                                    } else {
+                                        return friendBubbleMouse.containsMouse
+                                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                                            : Qt.rgba(255, 255, 255, 0.12);
+                                    }
+                                }
+                                border.width: 1
+                                z: 2
+
+                                scale: friendBubbleMouse.containsMouse ? 1.02 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 150 } }
+                                Behavior on color { ColorAnimation { duration: 250 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                                ColumnLayout {
+                                    id: friendBubbleCol
+                                    anchors.centerIn: parent
+                                    width: parent.width - 24
+                                    spacing: 5
+
+                                    // Note Text
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.currentFriend ? String(root.currentFriend.note_text || "").trim() : ""
+                                        color: "#ffffff"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 3
+                                        lineHeight: 1.15
+                                        elide: Text.ElideRight
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+
+                                    // Attached Music Section (Waveform + Song + Artist)
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        visible: root.attachedTrack !== null
+
+                                        RowLayout {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            spacing: 6
+
+                                            // Audio Waveform Visualizer
+                                            Row {
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 2
+                                                height: 12
+
+                                                Rectangle {
+                                                    width: 2.2; height: 6; radius: 1.1
+                                                    color: root.accentColor
+                                                    anchors.bottom: parent.bottom
+                                                    SequentialAnimation on height {
+                                                        running: root.attachedTrack !== null
+                                                        loops: Animation.Infinite
+                                                        NumberAnimation { to: 12; duration: 340; easing.type: Easing.InOutQuad }
+                                                        NumberAnimation { to: 4; duration: 340; easing.type: Easing.InOutQuad }
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    width: 2.2; height: 12; radius: 1.1
+                                                    color: root.accentColor
+                                                    anchors.bottom: parent.bottom
+                                                    SequentialAnimation on height {
+                                                        running: root.attachedTrack !== null
+                                                        loops: Animation.Infinite
+                                                        NumberAnimation { to: 5; duration: 260; easing.type: Easing.InOutQuad }
+                                                        NumberAnimation { to: 12; duration: 260; easing.type: Easing.InOutQuad }
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    width: 2.2; height: 8; radius: 1.1
+                                                    color: root.accentColor
+                                                    anchors.bottom: parent.bottom
+                                                    SequentialAnimation on height {
+                                                        running: root.attachedTrack !== null
+                                                        loops: Animation.Infinite
+                                                        NumberAnimation { to: 11; duration: 400; easing.type: Easing.InOutQuad }
+                                                        NumberAnimation { to: 3; duration: 400; easing.type: Easing.InOutQuad }
+                                                    }
+                                                }
+                                            }
+
+                                            // Song Title
+                                            Text {
+                                                Layout.maximumWidth: friendBubbleCol.width - 24
+                                                text: root.trackTitle
+                                                color: "#ffffff"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                                horizontalAlignment: Text.AlignHCenter
+                                            }
+                                        }
+
+                                        // Artist Name
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.trackArtist
+                                            color: Qt.rgba(1, 1, 1, 0.65)
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+                                    }
+                                }
+
+                                // Interactive Area to play attached song immediately
+                                MouseArea {
+                                    id: friendBubbleMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: root.attachedTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: {
+                                        if (root.attachedTrack) {
+                                            root.playTrackRequested(root.attachedTrack);
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
 
-                    // Main Big Avatar (104x104)
-                    Rectangle {
-                        id: bigAvatar
-                        anchors.centerIn: pulseRing
-                        width: 104; height: 104; radius: 52
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        border.color: root.accentColor
-                        border.width: 2.5
-                        clip: true
-
-                        Image {
-                            id: bigAvatarImg
-                            anchors.fill: parent
+                        // 2. CLEAN CIRCULAR FRIEND AVATAR (80x80, Single Ring, Zero Concentric Gaps)
+                        RoundedImage {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: 80
+                            Layout.preferredHeight: 80
+                            Layout.topMargin: 6
+                            radius: 40
                             source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready && source != ""
+                            borderColor: Qt.rgba(255, 255, 255, 0.15)
+                            borderWidth: 1
+                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                            fallbackIconColor: root.accentColor
+                            fallbackIconSize: 32
                         }
 
+                        // 3. CIRCULAR MINI PLAY/STOP BUTTON (Direct under avatar - Messenger Style)
+                        Item {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: 36
+                            Layout.preferredHeight: 36
+                            Layout.topMargin: 8
+                            visible: root.attachedTrack !== null
+
+                            // Spinning Progress Ring when playing
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 18
+                                color: "transparent"
+                                border.color: root.isThisTrackPlaying ? root.accentColor : "transparent"
+                                border.width: 1.5
+                                visible: root.isThisTrackPlaying
+
+                                RotationAnimation on rotation {
+                                    running: root.isThisTrackPlaying
+                                    loops: Animation.Infinite
+                                    from: 0; to: 360; duration: 2500
+                                }
+                            }
+
+                            Rectangle {
+                                id: friendPlayStopCircle
+                                anchors.centerIn: parent
+                                width: 32; height: 32; radius: 16
+                                color: {
+                                    var isPlaying = root.isThisTrackPlaying;
+                                    if (isPlaying) {
+                                        return friendPlayStopMouse.containsMouse
+                                            ? Qt.lighter(root.accentColor, 1.15)
+                                            : root.accentColor;
+                                    } else {
+                                        return friendPlayStopMouse.containsMouse
+                                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
+                                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22);
+                                    }
+                                }
+                                border.color: root.isThisTrackPlaying
+                                    ? Qt.rgba(255, 255, 255, 0.4)
+                                    : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                border.width: 1
+
+                                scale: friendPlayStopMouse.containsMouse ? 1.08 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120 } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: root.isThisTrackPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                                    iconSize: 12
+                                    color: root.isThisTrackPlaying ? "#000000" : "#ffffff"
+                                }
+
+                                MouseArea {
+                                    id: friendPlayStopMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (root.attachedTrack) {
+                                            if (root.isThisTrackPlaying && typeof win !== "undefined") {
+                                                win.togglePlay();
+                                            } else {
+                                                root.playTrackRequested(root.attachedTrack);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. FRIEND NAME
                         Text {
-                            anchors.centerIn: parent
-                            text: root.currentFriend && root.currentFriend.user_name ? root.currentFriend.user_name.charAt(0).toUpperCase() : "F"
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: 8
+                            text: root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : ""
                             color: "#ffffff"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 42
+                            font.pixelSize: 17
                             font.bold: true
-                            visible: !bigAvatarImg.visible
-                        }
-                    }
-
-                    // Thought Bubble (Bong bóng suy nghĩ nổi trên đầu avatar)
-                    Rectangle {
-                        id: thoughtBubble
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        anchors.topMargin: 4
-                        width: Math.min(360, Math.max(160, noteText.implicitWidth + 36))
-                        height: Math.max(44, noteText.implicitHeight + 20)
-                        radius: 16
-                        color: Qt.rgba(0.08 + root.accentColor.r * 0.12, 0.08 + root.accentColor.g * 0.12, 0.11 + root.accentColor.b * 0.16, 0.98)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.42)
-                        border.width: 1.5
-
-                        // Subtle bubble connector dots
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: thoughtBubble.bottom
-                            anchors.topMargin: 2
-                            width: 10; height: 10; radius: 5
-                            color: thoughtBubble.color
-                            border.color: thoughtBubble.border.color
-                            border.width: 1
-                        }
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: thoughtBubble.bottom
-                            anchors.topMargin: 14
-                            width: 6; height: 6; radius: 3
-                            color: thoughtBubble.color
-                            border.color: thoughtBubble.border.color
-                            border.width: 1
-                        }
-
-                        Text {
-                            id: noteText
-                            anchors.centerIn: parent
-                            anchors.margins: 12
-                            width: parent.width - 24
-                            text: root.currentFriend ? (root.currentFriend.note_text || "") : ""
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 2
                             elide: Text.ElideRight
+                        }
+
+                        // 5. SHARING SUBTEXT
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: 4
+                            text: I18n.tr("Đã chia sẻ với bạn bè", "Shared with friends")
+                            color: Qt.rgba(1, 1, 1, 0.60)
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
                         }
                     }
                 }
 
-                Item { Layout.fillHeight: true; Layout.preferredHeight: 6 }
-
-                // 3. Attached Song Card (To bản, rõ nét, concentric R=12)
+                // ==========================================
+                // FOOTER: [🎧 Nghe cùng bạn] LIVE LISTENING CAPSULE (Soft, Elegant Glass)
+                // ==========================================
                 Rectangle {
+                    id: liveListenBtn
+                    readonly property var liveTrack: root.currentFriend ? (root.currentFriend.now_playing || root.currentFriend.current_track || null) : null
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 66
-                    radius: 12
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                    Layout.preferredHeight: liveTrack ? 46 : 40
+                    radius: 20
+                    color: liveListenMouse.containsMouse
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
                     border.width: 1
-                    visible: root.currentFriend && root.currentFriend.track !== null && root.currentFriend.track !== undefined
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 8
-                        spacing: 12
+                    scale: liveListenMouse.containsMouse ? 1.02 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
 
-                        // Track Cover Artwork (50x50, R=8 with GPU MultiEffect Mask)
-                        Item {
-                            width: 50; height: 50
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
 
-                            Rectangle {
-                                id: storySongMask
-                                anchors.fill: parent
-                                radius: 8
-                                color: "#ffffff"
-                                visible: false
-                                layer.enabled: true
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 8
+
+                            AppIcon {
+                                source: "../assets/icons/media-optical-audio-symbolic.svg"
+                                iconSize: 14
+                                color: root.accentColor
                             }
 
-                            Item {
-                                anchors.fill: parent
-                                layer.enabled: true
-                                layer.effect: MultiEffect {
-                                    maskEnabled: true
-                                    maskSource: storySongMask
-                                    autoPaddingEnabled: false
-                                }
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 8
-                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.24)
-                                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
-                                    border.width: 1
-                                }
-
-                                Image {
-                                    id: songCoverImg
-                                    anchors.fill: parent
-                                    source: (root.currentFriend && root.currentFriend.track) ? (root.currentFriend.track.cover || root.currentFriend.track.image || "") : ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    visible: status === Image.Ready && source != ""
-                                }
-
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    source: "../assets/icons/folder-music-symbolic.svg"
-                                    iconSize: 20
-                                    color: root.accentColor
-                                    visible: !songCoverImg.visible
-                                }
-                            }
-                        }
-
-                        // Song Details
-                        Column {
-                            Layout.fillWidth: true
-                            spacing: 3
                             Text {
-                                text: root.currentFriend && root.currentFriend.track ? (root.currentFriend.track.title || root.currentFriend.track.name || "") : ""
+                                text: I18n.tr("Nghe cùng " + (root.currentFriend ? root.currentFriend.user_name : I18n.tr("bạn bè", "friend")), "Listen along with " + (root.currentFriend ? root.currentFriend.user_name : "friend"))
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
-                                elide: Text.ElideRight
-                                width: 230
-                            }
-                            Text {
-                                text: root.currentFriend && root.currentFriend.track ? (root.currentFriend.track.artist || I18n.tr("Đang phát", "Playing")) : ""
-                                color: Qt.rgba(1, 1, 1, 0.6)
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                elide: Text.ElideRight
-                                width: 230
                             }
                         }
 
-                        // Badge "24h Note"
-                        Rectangle {
-                            Layout.preferredWidth: 64
-                            Layout.preferredHeight: 22
-                            radius: 11
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                            border.color: root.accentColor
-                            border.width: 1
-                            Text {
-                                anchors.centerIn: parent
-                                text: I18n.tr("24h Note", "24h Note")
+                        // Subtitle indicating friend's real-time now_playing track
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 4
+                            visible: liveListenBtn.liveTrack !== null
+
+                            Rectangle {
+                                width: 5; height: 5; radius: 2.5
                                 color: root.accentColor
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 9
-                                font.bold: true
+                                Layout.alignment: Qt.AlignVCenter
                             }
-                        }
-                    }
-                }
 
-                // Empty track fallback message if no track attached
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 46
-                    radius: 12
-                    color: Qt.rgba(1, 1, 1, 0.04)
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
-                    border.width: 1
-                    visible: !root.currentFriend || !root.currentFriend.track
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: I18n.tr("Bạn này không đính kèm bài hát vào note", "No track attached to this note")
-                        color: Qt.rgba(1, 1, 1, 0.45)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                    }
-                }
-
-                // 4. Primary CTA: [ ▶ Nghe cùng bạn ] (Listen Along Button)
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 44
-                    radius: 12
-                    visible: root.currentFriend && root.currentFriend.track !== null && root.currentFriend.track !== undefined
-                    color: listenBtnArea.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                    border.color: root.accentColor
-                    border.width: 1.2
-                    scale: listenBtnArea.containsMouse ? 1.02 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
-                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        AppIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "../assets/icons/media-playback-start-symbolic.svg"
-                            iconSize: 13
-                            color: "#ffffff"
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("Nghe cùng bạn", "Listen along with friend")
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
+                            Text {
+                                text: liveListenBtn.liveTrack ? I18n.tr("Đang nghe: " + (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "Track"), "Now playing: " + (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "Track")) : ""
+                                color: Qt.rgba(1, 1, 1, 0.70)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: liveListenBtn.width - 36
+                            }
                         }
                     }
 
                     MouseArea {
-                        id: listenBtnArea
+                        id: liveListenMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             var f = root.currentFriend;
                             root.close();
-                            if (f && f.track) {
+                            if (f) {
                                 root.listenAlongRequested(f);
                             }
                         }
@@ -496,6 +652,7 @@ Item {
                 }
             }
         }
+    }
 
         // Right Navigation Arrow
         NavArrowButton {

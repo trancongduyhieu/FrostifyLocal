@@ -85,13 +85,40 @@ Rectangle {
                     source: {
                         if (!root.track || !root.track.image) return "";
                         var s = root.track.image;
-                        return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                        if (s.startsWith("/") && !s.startsWith("file://")) return "file://" + s;
+                        if (s.indexOf("googleusercontent.com") !== -1 || s.indexOf("ggpht.com") !== -1) {
+                            return s.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+                        }
+                        if (s.indexOf("mzstatic.com") !== -1) {
+                            return s.replace(/\d+x\d+bb/, "1200x1200bb");
+                        }
+                        if (s.indexOf("i.ytimg.com") !== -1) {
+                            return s.split("?")[0];
+                        }
+                        return s;
                     }
                     fillMode: Image.PreserveAspectCrop
-                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
+                    scale: {
+                        if (implicitWidth > 0 && implicitHeight > 0) {
+                            var r = implicitWidth / implicitHeight;
+                            if (r > 1.25 && r < 1.45) return 1.34;
+                        }
+                        return 1.0;
+                    }
                     transformOrigin: Item.Center
                     asynchronous: true
                     visible: status === Image.Ready
+                    sourceSize: Qt.size(360, 360)
+                    mipmap: true
+                    smooth: true
+                    onStatusChanged: {
+                        if (status === Image.Error) {
+                            var srcStr = String(source);
+                            if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
+                                source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
+                            }
+                        }
+                    }
                 }
 
                 // Fallback gradient cover if image fails or missing

@@ -236,6 +236,32 @@ def clean_artist_name(raw_name):
         return p_clean
     return parts[0].strip() or "YouTube Music"
 
+def clean_thumbnail_url(url, vid=None, is_16_9=False):
+    """
+    Returns optimal high-resolution artwork URL:
+    1. Google CDN: upscaled to =w1200-h1200-l90-rj (square) or =w1280-h720-l90-rj (16:9).
+    2. Apple Music CDN: upscaled to 1200x1200bb.
+    3. YouTube video CDN: strips ?sqp= compression query parameters.
+    """
+    if not url:
+        return f"https://i.ytimg.com/vi/{vid}/maxresdefault.jpg" if vid else ""
+    url = str(url).strip()
+    if "googleusercontent.com" in url or "ggpht.com" in url:
+        target_dim = "=w1280-h720-l90-rj" if is_16_9 else "=w1200-h1200-l90-rj"
+        upgraded = re.sub(r'=w\d+-h\d+.*', target_dim, url)
+        if target_dim not in upgraded:
+            if "=" in upgraded:
+                upgraded = upgraded.split("=")[0] + target_dim
+            else:
+                upgraded = upgraded + target_dim
+        return upgraded
+    if "mzstatic.com" in url:
+        return re.sub(r'\d+x\d+bb', '1200x1200bb', url)
+    if "i.ytimg.com" in url:
+        clean = url.split("?")[0]
+        return clean
+    return url
+
 def normalize_track(item):
     vid = item.get("videoId")
     if not vid or is_song_disliked(vid):
@@ -254,10 +280,8 @@ def normalize_track(item):
     dur_str = item.get("duration", "--:--")
     dur_sec = item.get("duration_seconds") or 0
     thumbs = item.get("thumbnails", [])
-    thumb_url = thumbs[-1].get("url", "") if thumbs else f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
-
-    if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-        thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+    raw_thumb = thumbs[-1].get("url", "") if thumbs else ""
+    thumb_url = clean_thumbnail_url(raw_thumb, vid)
 
     res = {
         "id": f"yt_{vid}",
@@ -400,9 +424,8 @@ def _normalize_shelf_item(it, shelf_title):
                 artist = "".join(x.get("text", "") for x in artist_runs if "views" not in x.get("text", "").lower() and "plays" not in x.get("text", "").lower() and "lượt" not in x.get("text", "").lower()).strip(" • ")
         artist = clean_artist_name(artist)
         thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-        thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
-        if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-            thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        raw_thumb = thumbs[-1].get("url", "") if thumbs else ""
+        thumb_url = clean_thumbnail_url(raw_thumb, vid, is_16_9=False)
         if vid and title:
             item_res = {
                 "id": f"yt_{vid}",
@@ -454,13 +477,8 @@ def _normalize_shelf_item(it, shelf_title):
             is_16_9 = True
 
         thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
-        thumb_url = thumbs[-1].get("url", "") if thumbs else ""
-        if is_16_9:
-            if "=w" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w640-h360-l90-rj', thumb_url)
-        else:
-            if "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        raw_thumb = thumbs[-1].get("url", "") if thumbs else ""
+        thumb_url = clean_thumbnail_url(raw_thumb, vid=None, is_16_9=is_16_9)
 
         nav_ep = r.get("navigationEndpoint", {})
         watch_ep = nav_ep.get("watchEndpoint", {})
@@ -529,13 +547,8 @@ def _normalize_shelf_item(it, shelf_title):
             is_16_9 = True
 
         thumbs = it.get("thumbnails", [])
-        thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
-        if is_16_9:
-            if "=w" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w640-h360-l90-rj', thumb_url)
-        else:
-            if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+        raw_thumb = thumbs[-1].get("url", "") if thumbs else ""
+        thumb_url = clean_thumbnail_url(raw_thumb, vid, is_16_9=is_16_9)
 
         artist = ""
         channel_id = ""
@@ -885,7 +898,7 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
             thumbs = r.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
             if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
             if vid and title_text and len(quick_picks) < max_qp:
                 if not any(q.get("videoId") == vid for q in quick_picks):
                     qp_item = {
@@ -925,7 +938,7 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
             thumbs = r.get("thumbnailRenderer", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else ""
             if "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
 
             nav_ep = r.get("navigationEndpoint", {})
             watch_ep = nav_ep.get("watchEndpoint", {})
@@ -966,7 +979,7 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
             thumbs = it.get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else ""
             if "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
             if pl_id and t_text and thumb_url:
                 if len(featured_playlists) < max_fp and not any(p.get("title") == t_text for p in featured_playlists):
                     featured_playlists.append({
@@ -983,7 +996,7 @@ def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max
             thumbs = it.get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else (f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "")
             if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
             if vid and t_text and len(quick_picks) < max_qp:
                 if not any(q.get("videoId") == vid for q in quick_picks):
                     quick_picks.append({
@@ -1100,7 +1113,7 @@ def get_mood_feed(params, title=""):
                 thumbs = item.get("thumbnails", [])
                 thumb_url = thumbs[-1].get("url", "") if thumbs else ""
                 if "w120" in thumb_url or "w226" in thumb_url:
-                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                    thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
                 if pl_id and pl_title and not any(p.get("title") == pl_title for p in featured_playlists):
                     featured_playlists.append({
                         "id": pl_id,
@@ -1153,7 +1166,7 @@ def get_album_details(browse_id):
         thumbs = alb.get("thumbnails", [])
         alb_thumb = thumbs[-1].get("url", "") if thumbs else ""
         if "w60" in alb_thumb or "w120" in alb_thumb or "w226" in alb_thumb:
-            alb_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', alb_thumb)
+            alb_thumb = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', alb_thumb)
 
         artists = alb.get("artists", [])
         artist_name = ", ".join(a.get("name", "") for a in artists if isinstance(a, dict)) if artists else "Unknown Artist"
@@ -1236,7 +1249,7 @@ def get_artist(channel_id_or_name):
         thumbs = art.get("thumbnails", [])
         art_thumb = thumbs[-1].get("url", "") if thumbs else ""
         if "w60" in art_thumb or "w120" in art_thumb or "w226" in art_thumb:
-            art_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', art_thumb)
+            art_thumb = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', art_thumb)
         elif "s60" in art_thumb or "s120" in art_thumb or "s226" in art_thumb:
             art_thumb = re.sub(r'=s\d+.*', '=s960-c-k-c0x00ffffff-no-rj', art_thumb)
             
@@ -1264,7 +1277,7 @@ def get_artist(channel_id_or_name):
             s_thumbs = s.get("thumbnails", [])
             s_thumb = s_thumbs[-1].get("url", "") if s_thumbs else ""
             if "w60" in s_thumb or "w120" in s_thumb or "w226" in s_thumb:
-                s_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', s_thumb)
+                s_thumb = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', s_thumb)
             singles_list.append({
                 "title": s.get("title", ""),
                 "browseId": s.get("browseId", ""),
@@ -1279,7 +1292,7 @@ def get_artist(channel_id_or_name):
             a_thumbs = a.get("thumbnails", [])
             a_thumb = a_thumbs[-1].get("url", "") if a_thumbs else ""
             if "w60" in a_thumb or "w120" in a_thumb or "w226" in a_thumb:
-                a_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', a_thumb)
+                a_thumb = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', a_thumb)
             albums_list.append({
                 "title": a.get("title", ""),
                 "browseId": a.get("browseId", ""),
@@ -1307,7 +1320,7 @@ def get_artist(channel_id_or_name):
             r_thumbs = r.get("thumbnails", [])
             r_thumb = r_thumbs[-1].get("url", "") if r_thumbs else ""
             if "w60" in r_thumb or "w120" in r_thumb or "w226" in r_thumb:
-                r_thumb = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', r_thumb)
+                r_thumb = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', r_thumb)
             r_name = r.get("title", "")
             if r_name and r_thumb:
                 cache_artist_avatar(r_name, r_thumb)
@@ -1481,7 +1494,7 @@ def search_categorized(query):
                     a_id = (arts[0].get("id") if arts else "") or r.get("browseId", "")
                     thumbs = r.get("thumbnails", [])
                     turl = thumbs[-1].get("url", "") if thumbs else ""
-                    turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                    turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
                     top_result = {
                         "type": "artist",
                         "browseId": a_id,
@@ -1498,7 +1511,7 @@ def search_categorized(query):
                 elif rtype == "album":
                     thumbs = r.get("thumbnails", [])
                     turl = thumbs[-1].get("url", "") if thumbs else ""
-                    turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                    turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
                     arts = r.get("artists", [])
                     aname = ", ".join(a.get("name", "") for a in arts if isinstance(a, dict)) if arts else ""
                     bid = r.get("browseId", "")
@@ -1520,7 +1533,7 @@ def search_categorized(query):
             elif rtype == "album":
                 thumbs = r.get("thumbnails", [])
                 turl = thumbs[-1].get("url", "") if thumbs else ""
-                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
                 arts = r.get("artists", [])
                 aname = ", ".join(a.get("name", "") for a in arts if isinstance(a, dict)) if arts else ""
                 bid = r.get("browseId", "")
@@ -1540,7 +1553,7 @@ def search_categorized(query):
                 a_id = (arts[0].get("id") if arts else "") or r.get("browseId", "")
                 thumbs = r.get("thumbnails", [])
                 turl = thumbs[-1].get("url", "") if thumbs else ""
-                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
                 artists.append({
                     "type": "artist",
                     "browseId": a_id,
@@ -1552,7 +1565,7 @@ def search_categorized(query):
             elif rtype == "playlist":
                 thumbs = r.get("thumbnails", [])
                 turl = thumbs[-1].get("url", "") if thumbs else ""
-                turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+                turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
                 bid = r.get("browseId", "")
                 author = r.get("author", "") or (r.get("artists", [{}])[0].get("name") if r.get("artists") else "")
                 playlists.append({
@@ -1632,7 +1645,7 @@ def filter_search(query, category="songs"):
             rtype = r.get("resultType")
             thumbs = r.get("thumbnails", [])
             turl = thumbs[-1].get("url", "") if thumbs else ""
-            turl = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', turl)
+            turl = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', turl)
 
             if flt == "songs" or rtype in ("song", "video"):
                 norm = normalize_track(r)
@@ -1768,7 +1781,7 @@ def search_albums(query, limit=10):
             thumbs = item.get("thumbnails", [])
             thumb_url = thumbs[-1].get("url", "") if thumbs else ""
             if "w60" in thumb_url or "w120" in thumb_url or "w226" in thumb_url:
-                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w544-h544-l90-rj', thumb_url)
+                thumb_url = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', thumb_url)
             artists = item.get("artists", [])
             art_name = ", ".join(a.get("name", "") for a in artists if isinstance(a, dict)) if artists else "Unknown Artist"
             bid = item.get("browseId", "")
@@ -2861,6 +2874,14 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
         upgraded = re.sub(r'\d+x\d+bb', '1200x1200bb', curr_img)
         return {"url": upgraded, "is_square": True, "cached": True}
 
+    search_title = clean_for_search(clean_title)
+    if "|" in search_title:
+        search_title = search_title.split("|")[0].strip()
+    if " - " in search_title:
+        parts = [p.strip() for p in search_title.split(" - ") if p.strip()]
+        if len(parts) >= 2:
+            search_title = parts[0]
+
     cache_key = clean_vid if clean_vid else f"{clean_title}_{clean_artist}".lower()
     if cache_key:
         cached_data = _get_square_covers_cache().get(cache_key)
@@ -2869,9 +2890,9 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
 
     # Tier 1: Search official song release on YouTube Music (1:1 Google CDN)
     ytm = get_ytmusic_client()
-    query = f"{clean_title} {clean_artist}".strip()
-    if not query and clean_title:
-        query = clean_title
+    query = f"{search_title} {clean_artist}".strip()
+    if not query and search_title:
+        query = search_title
 
     if query and ytm:
         try:
@@ -2881,7 +2902,7 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
                 r_artists = [a.get("name", "") for a in r.get("artists", []) if isinstance(a, dict)]
                 cand_artist_str = ", ".join(r_artists)
 
-                sc = match_score(t, clean_title)
+                sc = match_score(t, search_title) or match_score(t, clean_title)
                 agree = artist_agrees(cand_artist_str, clean_artist) if clean_artist else True
                 if (sc is not None) and agree:
                     thumbs = r.get("thumbnails", [])
@@ -2919,7 +2940,7 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
                 for r in it_data.get("results", []):
                     t = r.get("trackName", "")
                     cand_artist = r.get("artistName", "")
-                    sc = match_score(t, clean_title)
+                    sc = match_score(t, search_title) or match_score(t, clean_title)
                     agree = artist_agrees(cand_artist, clean_artist) if clean_artist else True
                     if (sc is not None) and agree:
                         art = r.get("artworkUrl100", "")
@@ -2949,6 +2970,20 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
             fallback_url = re.sub(r'/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg', '/maxresdefault.jpg', clean_yt)
         else:
             fallback_url = clean_yt
+
+    # Fast verification: if fallback_url is maxresdefault.jpg, check HEAD
+    if fallback_url and "maxresdefault.jpg" in fallback_url:
+        try:
+            import http.client, urllib.parse
+            p = urllib.parse.urlparse(fallback_url)
+            conn = http.client.HTTPSConnection(p.netloc, timeout=1.0)
+            conn.request("HEAD", p.path)
+            resp = conn.getresponse()
+            conn.close()
+            if resp.status != 200:
+                fallback_url = fallback_url.replace("maxresdefault.jpg", "hqdefault.jpg")
+        except Exception:
+            pass
 
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}

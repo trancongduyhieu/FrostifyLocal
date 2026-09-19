@@ -296,6 +296,26 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif self.path == "/api/notes/delete":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+            try:
+                req_data = json.loads(post_body)
+            except Exception:
+                req_data = {}
+            email = req_data.get("user_email", "").strip().lower()
+            if email:
+                vault = load_notes_vault()
+                vault.pop(f"note:{email}", None)
+                save_notes_vault(vault)
+            res = {"success": True}
+            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         elif self.path == "/api/notes/events":
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""

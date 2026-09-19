@@ -35,6 +35,7 @@ Rectangle {
     signal playlistSelected(var pl)
     signal trackContextMenuRequested(var trk, real globalX, real globalY)
     signal postNoteRequested()
+    signal userNoteDetailRequested()
     signal playFriendTrackRequested(var trk)
     signal addFriendRequested()
     signal openStoryRequested(var friendData, int index)
@@ -170,6 +171,7 @@ Rectangle {
                     userAvatar: root.accountThumb
                     userName: root.accountName
                     onPostNoteClicked: root.postNoteRequested()
+                    onUserNoteDetailClicked: root.userNoteDetailRequested()
                     onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
                     onPlayTrackRequested: track => root.playFriendTrackRequested(track)
                     onAddFriendClicked: root.addFriendRequested()
@@ -556,11 +558,20 @@ Rectangle {
                                             Image {
                                                 id: vCoverImg
                                                 anchors.fill: parent
-                                                source: modelData.image || ""
+                                                source: {
+                                                    var u = modelData.image || "";
+                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1280-h720-l90-rj");
+                                                    }
+                                                    return u;
+                                                }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(360, 202)
+                                                sourceSize: Qt.size(720, 404)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
+                                                mipmap: true
+                                                smooth: true
                                             }
 
                                             Rectangle {
@@ -751,11 +762,20 @@ Rectangle {
                                             Image {
                                                 id: rowImg
                                                 anchors.fill: parent
-                                                source: modelData.image || ""
+                                                source: {
+                                                    var u = modelData.image || "";
+                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+                                                    }
+                                                    return u;
+                                                }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(64, 64)
+                                                sourceSize: Qt.size(256, 256)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
+                                                mipmap: true
+                                                smooth: true
                                             }
 
                                             Rectangle {
@@ -920,11 +940,20 @@ Rectangle {
                                             Image {
                                                 id: aCoverImg
                                                 anchors.fill: parent
-                                                source: modelData.image || ""
+                                                source: {
+                                                    var u = modelData.image || "";
+                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+                                                    }
+                                                    return u;
+                                                }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(260, 260)
+                                                sourceSize: Qt.size(600, 600)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
+                                                mipmap: true
+                                                smooth: true
                                             }
 
                                             Rectangle {

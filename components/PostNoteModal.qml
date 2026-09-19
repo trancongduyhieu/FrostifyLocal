@@ -7,7 +7,7 @@ import "."
 Rectangle {
     id: root
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.70)
+    color: Qt.rgba(0, 0, 0, 0.58)
     visible: false
     z: 10006
 
@@ -17,6 +17,7 @@ Rectangle {
     property string userAvatar: ""
     property string userName: ""
     property color accentColor: Theme.accent
+    property Item backgroundSourceItem: null
 
     property var attachedTrack: null
     property bool isPickingTrack: false
@@ -35,7 +36,7 @@ Rectangle {
     property bool isPreviewPlaying: false
 
     onIsPickingTrackChanged: {
-        if (!isPickingTrack) {
+        if (!isPickingTrack && root.previewingTrack !== null) {
             root.restoreAudioBeforePreviewRequested();
         }
     }
@@ -137,22 +138,65 @@ Rectangle {
         }
     }
 
-    // Modal Main Container (Dark Glass Canvas)
+    // Outer Drop Shadow (MultiEffect standard)
     Rectangle {
+        id: shadowSourceRect
+        anchors.fill: dialogCard
+        radius: dialogCard.radius
+        color: "#000000"
+        visible: false
+    }
+
+    MultiEffect {
+        anchors.fill: shadowSourceRect
+        source: shadowSourceRect
+        shadowEnabled: true
+        shadowColor: "#80000000"
+        shadowVerticalOffset: 6
+        shadowBlur: 0.65
+        z: 1
+    }
+
+    // Modal Main Container: Keo 502 Optical Resin (LiquidGlass, 20px Radius)
+    LiquidGlass {
         id: dialogCard
         width: 440
         height: root.isPickingTrack ? 490 : 390
         anchors.centerIn: parent
-        radius: 18
-        color: Qt.rgba(0.06 + root.accentColor.r * 0.05, 0.06 + root.accentColor.g * 0.05, 0.08 + root.accentColor.b * 0.07, 0.96)
-        border.color: Qt.rgba(255, 255, 255, 0.12)
-        border.width: 1
+        radius: 20
+        displacement: 22.0
+        aberration: 0.03
+        bevelWidth: 26.0
+        tintColor: Qt.rgba(0.04, 0.05, 0.08, 0.92)
+        backgroundSourceItem: root.backgroundSourceItem
+        isFlowActive: (typeof win !== "undefined" && win.isPlaying && win.currentTrack !== null)
+        clip: true
+        z: 2
 
         Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+        // Shaded Tint Overlay: Ensures effortless text contrast
+        Rectangle {
+            anchors.fill: parent
+            radius: dialogCard.radius
+            color: Qt.rgba(0.04, 0.05, 0.08, 0.82)
+            z: 1
+        }
+
+        // 1px Hairline Border: Keo 502 Surface Tension Rim
+        Rectangle {
+            anchors.fill: parent
+            radius: dialogCard.radius
+            color: "transparent"
+            border.color: Qt.rgba(255, 255, 255, 0.18)
+            border.width: 1
+            z: 20
+        }
 
         // Prevent click-through
         MouseArea {
             anchors.fill: parent
+            z: 2
             onClicked: (mouse) => {
                 mouse.accepted = true;
             }
@@ -167,6 +211,7 @@ Rectangle {
             anchors.margins: 20
             spacing: 0
             visible: !root.isPickingTrack
+            z: 5
 
             // TOP BAR: '✕' (Left) | Title (Center) | 'Chia sẻ' (Right) - ALL BORDERLESS
             RowLayout {
@@ -336,14 +381,15 @@ Rectangle {
                     anchors.bottom: dot2.top
                     anchors.bottomMargin: 3
                     width: 340
-                    height: bubbleCol.implicitHeight + 20
+                    height: bubbleCol.implicitHeight + 26
                     radius: 18
-                    color: Qt.rgba(0.08 + root.accentColor.r * 0.10, 0.10 + root.accentColor.g * 0.10, 0.14 + root.accentColor.b * 0.16, 0.95)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, (typeof win !== "undefined" && win.isPlaying) ? 0.24 : 0.14)
                     border.color: root.activeNoteText.length > 60
                         ? "#f43f5e"
-                        : (noteInput.activeFocus ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35))
+                        : (noteInput.activeFocus ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40))
                     border.width: 1.5
 
+                    Behavior on color { ColorAnimation { duration: 250 } }
                     Behavior on border.color { ColorAnimation { duration: 150 } }
 
                     ColumnLayout {
@@ -351,7 +397,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.margins: 12
+                        anchors.margins: 14
                         spacing: 8
 
                         // Text Input Area
@@ -409,87 +455,53 @@ Rectangle {
                         // Attached Track Music Row (Inside thought bubble)
                         Item {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 30
+                            Layout.preferredHeight: 34
+                            visible: root.attachedTrack !== null
 
-                            // Case 1: Track is attached -> Cover art + Title & Artist + Change btn + Detach '✕' btn
                             RowLayout {
                                 anchors.fill: parent
                                 spacing: 8
-                                visible: root.attachedTrack !== null
 
-                                // Album Art Thumbnail (28x28, R=6 with GPU MultiEffect Mask)
-                                Item {
-                                    width: 28; height: 28
-
-                                    Rectangle {
-                                        id: attachedThumbMask
-                                        anchors.fill: parent
-                                        radius: 6
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
+                                // Album Art Thumbnail (28x28, R=6 using unified RoundedImage)
+                                RoundedImage {
+                                    Layout.preferredWidth: 28
+                                    Layout.preferredHeight: 28
+                                    Layout.alignment: Qt.AlignVCenter
+                                    radius: 6
+                                    source: {
+                                        if (!root.attachedTrack) return "";
+                                        if (root.attachedTrack === root.currentTrack && root.resolvedCover) return root.resolvedCover;
+                                        return root.attachedTrack.image || root.attachedTrack.cover || "";
                                     }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: attachedThumbMask
-                                            autoPaddingEnabled: false
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 6
-                                            color: Qt.rgba(1, 1, 1, 0.08)
-                                        }
-
-                                        Image {
-                                            id: attachedCoverImg
-                                            anchors.fill: parent
-                                            source: {
-                                                if (!root.attachedTrack) return "";
-                                                if (root.attachedTrack === root.currentTrack && root.resolvedCover) return root.resolvedCover;
-                                                return root.attachedTrack.image || root.attachedTrack.cover || "";
-                                            }
-                                            fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
-                                            visible: source != ""
-                                        }
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            source: "../assets/icons/folder-music-symbolic.svg"
-                                            iconSize: 12
-                                            color: root.accentColor
-                                            visible: !attachedCoverImg.visible
-                                        }
-                                    }
+                                    placeholderColor: Qt.rgba(1, 1, 1, 0.08)
+                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                                    fallbackIconSize: 12
+                                    fallbackIconColor: root.accentColor
                                 }
 
                                 // Title & Artist
-                                Column {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 1
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 2
 
                                     Text {
+                                        Layout.fillWidth: true
                                         text: root.attachedTrack ? (root.attachedTrack.title || root.attachedTrack.name || "Track") : ""
                                         color: "#ffffff"
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.bold: true
                                         elide: Text.ElideRight
-                                        width: 190
                                     }
 
                                     Text {
+                                        Layout.fillWidth: true
                                         text: root.attachedTrack ? (root.attachedTrack.artist || "") : ""
                                         color: Qt.rgba(1, 1, 1, 0.6)
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         elide: Text.ElideRight
-                                        width: 190
                                         visible: text.length > 0
                                     }
                                 }
@@ -497,7 +509,9 @@ Rectangle {
                                 // 🔍 Change Track Button
                                 MouseArea {
                                     id: changeTrackBtn
-                                    width: 22; height: 22
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    Layout.alignment: Qt.AlignVCenter
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
@@ -511,15 +525,17 @@ Rectangle {
                                     AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/system-search-symbolic.svg"
-                                        iconSize: 12
+                                        iconSize: 13
                                         color: changeTrackBtn.containsMouse ? "#ffffff" : root.accentColor
                                     }
                                 }
 
-                                // ✕ Remove / Detach Track Button (NẰM NGAY CẠNH BÀI HÁT ĐÍNH KÈM!)
+                                // ✕ Remove / Detach Track Button
                                 MouseArea {
                                     id: removeTrackBtn
-                                    width: 22; height: 22
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    Layout.alignment: Qt.AlignVCenter
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
@@ -530,7 +546,7 @@ Rectangle {
                                     AppIcon {
                                         anchors.centerIn: parent
                                         source: "../assets/icons/window-close-symbolic.svg"
-                                        iconSize: 12
+                                        iconSize: 13
                                         color: removeTrackBtn.containsMouse ? "#f43f5e" : Qt.rgba(1, 1, 1, 0.55)
                                         Behavior on color { ColorAnimation { duration: 120 } }
                                     }
@@ -644,16 +660,8 @@ Rectangle {
             anchors.margins: 18
             spacing: 12
             visible: root.isPickingTrack
+            z: 5
 
-            // Shared Mask for Picker Thumbnails (GPU FBO Optimization: 1 single shared texture)
-            Rectangle {
-                id: sharedPickerItemMask
-                width: 44; height: 44
-                radius: 8
-                color: "#ffffff"
-                visible: false
-                layer.enabled: true
-            }
 
             // TOP SEARCH HEADER (Ảnh 1: Back Arrow + Search Pill)
             RowLayout {
@@ -813,42 +821,15 @@ Rectangle {
                         anchors.rightMargin: 8
                         spacing: 12
 
-                        // Album Artwork Thumbnail (44x44, R=8 with Shared GPU MultiEffect Mask)
-                        Item {
+                        // Album Artwork Thumbnail (44x44, R=8 using unified RoundedImage)
+                        RoundedImage {
                             width: 44; height: 44
-
-                            Item {
-                                anchors.fill: parent
-                                layer.enabled: pickerSongImg.status === Image.Ready
-                                layer.effect: MultiEffect {
-                                    maskEnabled: true
-                                    maskSource: sharedPickerItemMask
-                                    autoPaddingEnabled: false
-                                }
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.08)
-                                }
-
-                                Image {
-                                    id: pickerSongImg
-                                    anchors.fill: parent
-                                    source: modelData.image || modelData.cover || ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    visible: (modelData.image || modelData.cover || "") !== ""
-                                }
-
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    source: "../assets/icons/folder-music-symbolic.svg"
-                                    iconSize: 18
-                                    color: root.accentColor
-                                    visible: !pickerSongImg.visible
-                                }
-                            }
+                            radius: 8
+                            source: modelData.image || modelData.cover || ""
+                            placeholderColor: Qt.rgba(1, 1, 1, 0.08)
+                            fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                            fallbackIconSize: 18
+                            fallbackIconColor: root.accentColor
                         }
 
                         // Middle: Song Title (bold, 13px) & Artist (11px, muted)
@@ -910,7 +891,7 @@ Rectangle {
                         }
                     }
 
-                    // MouseArea for row selection (attaches song to note, stops preview)
+                    // MouseArea for row selection (attaches song to note, keeps music playing)
                     MouseArea {
                         id: songRowMouse
                         anchors.left: parent.left
@@ -921,7 +902,15 @@ Rectangle {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            root.restoreAudioBeforePreviewRequested();
+                            // If user is currently previewing this track, promote it to current playing track so it keeps playing!
+                            if (root.previewingTrack && root.isSameTrack(root.previewingTrack, modelData)) {
+                                if (typeof win !== "undefined") {
+                                    win.currentTrack = modelData;
+                                    win.trackBeforeNotePreview = null;
+                                    win.wasPlayingBeforeNotePreview = true;
+                                }
+                                root.previewingTrack = null;
+                            }
                             root.attachedTrack = modelData;
                             root.isPickingTrack = false;
                             noteInput.forceActiveFocus();
@@ -936,7 +925,9 @@ Rectangle {
         if (visible) {
             root.openModal();
         } else {
-            root.restoreAudioBeforePreviewRequested();
+            if (root.previewingTrack !== null) {
+                root.restoreAudioBeforePreviewRequested();
+            }
         }
     }
 }

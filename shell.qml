@@ -77,6 +77,7 @@ Scope {
     property var friendsNotes: []
     property var myLatestNote: null
     property var listeningAlongFriend: null
+    property real pendingListenAlongSeekPosition: 0.0
     property string toastMessage: ""
     property bool toastVisible: false
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
@@ -667,7 +668,7 @@ Scope {
                         } else if (Array.isArray(parsed.friends)) {
                             win.friendsNotes = parsed.friends;
                         }
-                        if (parsed.my_note) {
+                        if (parsed.my_note !== undefined) {
                             win.myLatestNote = parsed.my_note;
                         }
                     }
@@ -689,6 +690,15 @@ Scope {
                 } catch(e) {}
             }
         }
+        onExited: {
+            if (!fetchFriendsNotesProc.running) {
+                fetchFriendsNotesProc.running = true;
+            }
+        }
+    }
+
+    Process {
+        id: deleteNoteProc
         onExited: {
             if (!fetchFriendsNotesProc.running) {
                 fetchFriendsNotesProc.running = true;
@@ -729,6 +739,20 @@ Scope {
         id: toastTimer
         interval: 3200
         onTriggered: win.toastVisible = false
+    }
+
+    Timer {
+        id: listenAlongSeekSafetyTimer
+        property real targetPos: 0
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            if (win.pendingListenAlongSeekPosition > 0 && win.isPlaying) {
+                var p = win.pendingListenAlongSeekPosition;
+                win.pendingListenAlongSeekPosition = 0;
+                win.seekAudio(p);
+            }
+        }
     }
 
     Timer {
@@ -825,14 +849,46 @@ Scope {
 
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
-        var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (rVid && rVid.startsWith("yt_")) {
+            rVid = rVid.replace(/^yt_/, "");
+        }
         if (!rVid) {
             if (trk.path && !trk.path.startsWith("ytdl://")) {
                 win.playTrack(trk);
                 return;
             }
+            if (trk.title) {
+                var searchQuery = trk.title + (trk.artist ? (" " + trk.artist) : "");
+                var xhr = new XMLHttpRequest();
+                var searchUrl = "http://127.0.0.1:17890/api/filter_search?q=" + encodeURIComponent(searchQuery) + "&filter=songs";
+                xhr.open("GET", searchUrl, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                        try {
+                            var res = JSON.parse(xhr.responseText);
+                            if (Array.isArray(res) && res.length > 0 && (res[0].videoId || res[0].id)) {
+                                win.playOnlineTrack(res[0], startRadio);
+                            }
+                        } catch(e) {
+                            console.warn("Nutsty: fallback search parse error", e);
+                        }
+                    }
+                };
+                xhr.send();
+                return;
+            }
             console.warn("Nutsty: playOnlineTrack called without valid videoId or local path", JSON.stringify(trk));
             return;
+        }
+        if (!trk.videoId && rVid) {
+            trk.videoId = rVid;
+        }
+        if (!trk.path && rVid) {
+            trk.path = "ytdl://" + rVid;
+        }
+        if (!trk.image && trk.cover) {
+            trk.image = trk.cover;
         }
         if (win.isLoadingAudio && win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
             // Already resolving / loading this track, do not spawn duplicate player process
@@ -840,6 +896,7 @@ Scope {
         }
         if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
+        win.postLoadGraceTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
         win.isLoadingAudio = true;
@@ -873,7 +930,7 @@ Scope {
         var streamPath = "ytdl://" + rVid;
         var tTitle = trk.title || trk.name || "";
         var tArtist = trk.artist || "";
-        var tImage = trk.image || "";
+        var tImage = trk.image || trk.cover || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
 
         // Pre-warm the next track after 4s delay so current track has 100% bandwidth to start
@@ -935,8 +992,14 @@ Scope {
 
     function postDailyNote(text, track) {
         if (!text) return;
+        var rId = track ? (track.videoId || track.id || (track.path && track.path.startsWith("ytdl://") ? track.path.replace("ytdl://", "") : "")) : "";
+        if (rId && rId.startsWith("yt_")) {
+            rId = rId.replace(/^yt_/, "");
+        }
         var trackObj = track ? {
-            id: track.videoId || track.id || "",
+            id: rId,
+            videoId: rId,
+            path: (rId ? ("ytdl://" + rId) : (track.path || "")),
             title: track.title || track.name || "",
             artist: track.artist || "",
             cover: (track.image || track.cover || win.currentResolvedCover || "")
@@ -949,6 +1012,14 @@ Scope {
         postNoteProc.running = false;
         postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", text, JSON.stringify(trackObj || {})];
         postNoteProc.running = true;
+    }
+
+    function deleteMyNote() {
+        win.myLatestNote = null;
+        deleteNoteProc.running = false;
+        deleteNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "delete"];
+        deleteNoteProc.running = true;
+        win.showToast(I18n.tr("Đã xóa ghi chú", "Note deleted"));
     }
 
     function promptAddFriend() {
@@ -968,19 +1039,50 @@ Scope {
     function startListeningAlong(friend) {
         if (!friend) return;
         win.listeningAlongFriend = friend;
-        if (friend.track) {
-            var vid = friend.track.videoId || friend.track.id || friend.track.video_id || "";
+        var activeTrackObj = friend.now_playing || friend.current_track || friend.track;
+        if (activeTrackObj) {
+            var vid = activeTrackObj.videoId || activeTrackObj.id || activeTrackObj.video_id || "";
+            if (vid && vid.startsWith("yt_")) vid = vid.replace("yt_", "");
+            var path = activeTrackObj.path || (vid ? ("ytdl://" + vid) : "");
             var trk = {
                 id: vid || ("social_" + Date.now()),
                 videoId: vid,
-                title: friend.track.title || "Track",
-                artist: friend.track.artist || friend.user_name || "Artist",
-                image: friend.track.cover || friend.track.cover_url || friend.track.thumbnail || "",
-                cover: friend.track.cover || friend.track.cover_url || friend.track.thumbnail || "",
-                duration: friend.track.duration || 0,
-                path: vid ? ("ytdl://" + vid) : (friend.track.path || "")
+                title: activeTrackObj.title || activeTrackObj.name || "Track",
+                artist: activeTrackObj.artist || friend.user_name || "Artist",
+                image: activeTrackObj.cover || activeTrackObj.image || activeTrackObj.cover_url || activeTrackObj.thumbnail || "",
+                cover: activeTrackObj.cover || activeTrackObj.image || activeTrackObj.cover_url || activeTrackObj.thumbnail || "",
+                duration: activeTrackObj.duration || 0,
+                path: path
             };
-            win.playOnlineTrack(trk, false);
+
+            // Tính toán tiến độ thời gian thực 1:1 (SimpMusic realtime sync)
+            var targetPos = 0;
+            if (activeTrackObj.position !== undefined) {
+                targetPos = Number(activeTrackObj.position);
+            } else if (friend.progress_seconds !== undefined) {
+                targetPos = Number(friend.progress_seconds);
+            }
+            var ts = activeTrackObj.timestamp || friend.updated_at_ts || friend.last_updated || 0;
+            if (ts > 0) {
+                var nowSec = Date.now() / 1000.0;
+                var recordSec = (ts > 1000000000000) ? (ts / 1000.0) : Number(ts);
+                var elapsed = nowSec - recordSec;
+                if (elapsed > 0 && elapsed < (trk.duration || 600)) {
+                    targetPos += elapsed;
+                }
+            }
+
+            if (win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
+                if (targetPos > 0) {
+                    win.seekAudio(targetPos);
+                }
+                if (!win.isPlaying) win.togglePlay();
+            } else {
+                win.pendingListenAlongSeekPosition = targetPos;
+                win.playOnlineTrack(trk, false);
+                listenAlongSeekSafetyTimer.targetPos = targetPos;
+                listenAlongSeekSafetyTimer.restart();
+            }
         }
         win.isNowPlayingOpen = true;
         var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
@@ -1295,6 +1397,10 @@ Scope {
         win.checkAuthStatus();
         win.loadCustomPlaylists();
         win.refreshLocalAlbums();
+    }
+
+    Component.onDestruction: {
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
     }
 
     // Master Container with Nutsty Calm Deep Acrylic Aesthetic
@@ -1844,6 +1950,7 @@ Scope {
                             onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                             onPostNoteRequested: postNoteModal.openModal()
+                            onUserNoteDetailRequested: userNoteDetailModal.openModal(win.myLatestNote)
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
                             onOpenStoryRequested: (friendData, idx) => friendStoryModal.openWithIndex(idx)
@@ -2245,6 +2352,7 @@ Scope {
 
         PostNoteModal {
             id: postNoteModal
+            backgroundSourceItem: nutstyAppSurface
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
@@ -2253,11 +2361,18 @@ Scope {
             accentColor: win.accentColor
             isPreviewPlaying: win.isPlaying && win.isSameTrack(postNoteModal.previewingTrack, win.currentTrack)
             onCloseRequested: {
-                postNoteModal.restoreAudioBeforePreviewRequested();
+                if (postNoteModal.previewingTrack !== null) {
+                    postNoteModal.restoreAudioBeforePreviewRequested();
+                }
                 postNoteModal.visible = false;
             }
             onNoteSubmitted: (text, trk) => {
-                postNoteModal.restoreAudioBeforePreviewRequested();
+                if (postNoteModal.previewingTrack !== null) {
+                    win.currentTrack = postNoteModal.previewingTrack;
+                    win.trackBeforeNotePreview = null;
+                    win.wasPlayingBeforeNotePreview = true;
+                    postNoteModal.previewingTrack = null;
+                }
                 win.postDailyNote(text, trk);
                 postNoteModal.visible = false;
             }
@@ -2290,9 +2405,25 @@ Scope {
                     }
                     win.trackBeforeNotePreview = null;
                     win.wasPlayingBeforeNotePreview = false;
-                } else if (win.isPlaying) {
-                    win.togglePlay();
                 }
+            }
+        }
+
+        UserNoteDetailModal {
+            id: userNoteDetailModal
+            backgroundSourceItem: nutstyAppSurface
+            userAvatar: win.authAccountThumb
+            userName: win.authAccountName
+            accentColor: win.accentColor
+            isTrackPlaying: win.isPlaying
+            onChangeNoteRequested: {
+                postNoteModal.openModal();
+            }
+            onDeleteNoteRequested: {
+                win.deleteMyNote();
+            }
+            onPlayTrackRequested: trk => {
+                win.playOnlineTrack(trk, true);
             }
         }
 
@@ -2354,10 +2485,14 @@ Scope {
 
         FriendStoryModal {
             id: friendStoryModal
+            backgroundSourceItem: nutstyAppSurface
             friendsNotes: win.friendsNotes
             accentColor: win.accentColor
             onListenAlongRequested: friendData => {
                 win.startListeningAlong(friendData);
+            }
+            onPlayTrackRequested: trk => {
+                win.playOnlineTrack(trk, true);
             }
         }
 
@@ -2725,13 +2860,17 @@ Scope {
 
     function togglePlay() {
         if (!win.currentTrack) return;
-        if (win.isLoadingAudio) {
-            // Guard: Audio stream is currently loading in MPV.
-            // Do not toggle or invert isPlaying to prevent race-condition pause loops.
-            return;
-        }
         var targetPath = win.currentTrack.path || "";
         var isOnline = (targetPath && targetPath.startsWith("ytdl://")) || win.currentTrack.videoId;
+
+        if (win.isLoadingAudio) {
+            // User wants to cancel / pause while track is loading
+            win.isLoadingAudio = false;
+            win.isPlaying = false;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+            pollTimer.restart();
+            return;
+        }
 
         if (!win.isPlaying) {
             // User is pressing Play from paused/idle state
@@ -2741,13 +2880,14 @@ Scope {
                 win.trackChangeTimestamp = Date.now();
             }
             win.isPlaying = true;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
         } else {
             // User is pressing Pause
             win.isPlaying = false;
             win.isLoadingAudio = false;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
         }
 
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "toggle", targetPath]);
         pollTimer.restart();
     }
 
@@ -3182,14 +3322,14 @@ Scope {
                     var elapsed = Date.now() - win.trackChangeTimestamp;
 
                     if (win.isLoadingAudio) {
-                        // Giữ loading cho đến khi MPV bắt đầu phát (time_pos > 0 hoặc duration > 0 và is_playing)
-                        // HOẶC timeout 15s để tránh spinner treo vĩnh viễn
-                        if (elapsed > 15000) {
+                        // Giữ loading cho đến khi MPV bắt đầu phát bài mục tiêu (!s.is_loading)
+                        // HOẶC timeout 20s để tránh spinner treo vĩnh viễn nếu mạng rớt
+                        if (elapsed > 20000) {
                             win.isLoadingAudio = false;
                             win.isPlaying = false;
                             return;
                         }
-                        var hasStarted = (s.time_pos && s.time_pos > 0) || (s.is_playing && s.duration && s.duration > 0 && !s.is_loading);
+                        var hasStarted = !s.is_loading && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0));
                         if (!hasStarted) {
                             win.currentTime = 0.0;
                             return;
@@ -3200,16 +3340,24 @@ Scope {
                         win.isPlaying = true;
                         win.currentTime = s.time_pos || 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                    } else {
-                        var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
-                        if (postLoadElapsed < 2000 && !s.is_playing) {
-                            // Grace period 2s: MPV có thể brief-pause khi buffer stream mới.
-                            // Bỏ qua poll này → giữ nguyên win.isPlaying (không flip về false).
-                            // Không gọi resume → không gây infinite loop.
-                            // togglePlay() vẫn hoạt động vì nó set isPlaying trực tiếp, poll sau sẽ update đúng.
-                        } else {
-                            if (s.is_playing !== undefined) win.isPlaying = s.is_playing;
+                        if (win.pendingListenAlongSeekPosition > 0) {
+                            var p = win.pendingListenAlongSeekPosition;
+                            win.pendingListenAlongSeekPosition = 0;
+                            win.seekAudio(p);
                         }
+                    } else {
+                        if (s.is_loading) {
+                            win.isLoadingAudio = true;
+                            win.trackChangeTimestamp = Date.now();
+                            return;
+                        }
+                        if (s.is_playing) {
+                            win.isPlaying = true;
+                        } else if (s.is_paused) {
+                            win.isPlaying = false;
+                        }
+                        // During brief file transitions when neither is_playing nor is_paused is true,
+                        // preserve win.isPlaying to avoid local bounce and false pause loops!
                         if (s.time_pos !== undefined && s.time_pos > 0) {
                             win.currentTime = s.time_pos;
                         }
@@ -3305,15 +3453,31 @@ Scope {
         function toggleSleepTimer() { frostifyIpc.toggleSleepTimer(); }
         function openPostNoteModal() { frostifyIpc.openPostNoteModal(); }
         function closePostNoteModal() { frostifyIpc.closePostNoteModal(); }
+        function openUserNoteDetail() { frostifyIpc.openUserNoteDetail(); }
+        function closeUserNoteDetail() { frostifyIpc.closeUserNoteDetail(); }
         function openFriendNote(idx: int) { frostifyIpc.openFriendNote(idx); }
         function closeFriendNote() { frostifyIpc.closeFriendNote(); }
         function testListenAlong() { frostifyIpc.testListenAlong(); }
         function testExitListenAlong() { frostifyIpc.testExitListenAlong(); }
+        function testPlayUserNote() { frostifyIpc.testPlayUserNote(); }
+        function testPlayFriendNote() { frostifyIpc.testPlayFriendNote(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function testPlayUserNote() {
+            if (userNoteDetailModal.attachedTrack) {
+                userNoteDetailModal.playTrackRequested(userNoteDetailModal.attachedTrack);
+            }
+        }
+        function testPlayFriendNote() {
+            if (friendStoryModal.attachedTrack) {
+                friendStoryModal.playTrackRequested(friendStoryModal.attachedTrack);
+            }
+        }
+        function openUserNoteDetail() { userNoteDetailModal.openModal(win.myLatestNote); }
+        function closeUserNoteDetail() { userNoteDetailModal.closeModal(); }
         function openFriendNote(idx: int) { friendStoryModal.openWithIndex(idx); }
         function closeFriendNote() { friendStoryModal.close(); }
         function testListenAlong() {

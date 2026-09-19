@@ -179,6 +179,34 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
             pass
         return {"success": False, "error": str(e), "note": offline_note}
 
+def delete_note(worker_url: Optional[str] = None) -> Dict[str, Any]:
+    """Xóa ghi chú 24h của bản thân khỏi cache local và server."""
+    user = get_current_user()
+    cache_file = get_cache_file()
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as cf:
+                cache_data = json.load(cf)
+            cache_data["my_latest_note"] = None
+            with open(cache_file, "w", encoding="utf-8") as cf:
+                json.dump(cache_data, cf, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/delete"
+    try:
+        payload = {"user_email": user["email"]}
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"success": True, "offline": True, "error": str(e)}
+
 def fetch_notes(worker_url: Optional[str] = None) -> Dict[str, Any]:
     """Lấy danh sách ghi chú 24h của bạn bè và ghi chú mới nhất của bản thân."""
     friends = load_friends()
@@ -205,12 +233,11 @@ def fetch_notes(worker_url: Optional[str] = None) -> Dict[str, Any]:
                 except Exception:
                     pass
             cache_data["friends_notes"] = notes
-            if my_note:
-                cache_data["my_latest_note"] = my_note
+            cache_data["my_latest_note"] = my_note
             cache_data["last_sync"] = time.time()
             with open(cache_file, "w", encoding="utf-8") as cf:
                 json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-            return {"notes": notes, "my_note": my_note or cache_data.get("my_latest_note")}
+            return {"notes": notes, "my_note": my_note}
     except Exception:
         # Đọc từ cache
         cache_file = get_cache_file()
@@ -290,6 +317,9 @@ def main():
         ev_type = sys.argv[2] if len(sys.argv) > 2 else "leave"
         to_email = sys.argv[3] if len(sys.argv) > 3 else ""
         res = send_social_event(ev_type, to_email)
+        print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "delete":
+        res = delete_note()
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "get_events":
         events = fetch_social_events()

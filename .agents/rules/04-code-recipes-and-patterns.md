@@ -74,3 +74,23 @@ Row {
 }
 ```
 - **Lưu ý**: Dùng `Row` với `anchors.centerIn: parent` và khai báo `implicitWidth: buttonContent.implicitWidth + padding` cho container cha. Tránh dùng fixed width cứng.
+
+---
+
+## Pattern 3: Hình Ảnh Bo Góc Chuẩn Hóa Bằng RoundedImage
+- **Bài toán**: Hiển thị ảnh bìa, thumbnail bài hát, avatar hoặc video với các bán kính bo góc khác nhau (`radius: 6`, `8`, `16`, `width/2`), tự động tối ưu RAM/VRAM mà không sinh cụm mask/MultiEffect thủ công.
+- **Mã nguồn chuẩn**:
+```qml
+RoundedImage {
+    width: 48; height: 48
+    radius: 8
+    source: track.cover || track.image || ""
+    placeholderColor: Qt.rgba(1, 1, 1, 0.08)
+    borderColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.35)
+    borderWidth: 1
+    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+    fallbackIconSize: 18
+    fallbackIconColor: accentColor
+}
+```
+- **Lưu ý**: BẮT BUỘC dùng `RoundedImage` thay vì tự tạo `Rectangle mask + MultiEffect`. Tự động downscale HiDPI 2x tiết kiệm 99% RAM, và tiêu tốn 0 byte VRAM shader khi ảnh chưa tải.

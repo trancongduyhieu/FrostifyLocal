@@ -54,9 +54,13 @@ def ensure_mpv():
         except Exception:
             pass
 
-    # 2. If MPV process is alive, it might just be busy connecting to a remote network stream!
+    # 2. If MPV process is alive but socket is dead/unresponsive, kill it and restart fresh
     if is_mpv_running():
-        return True
+        try:
+            subprocess.run(["pkill", "-9", "-f", "title=nutsty-audio"], capture_output=True)
+            time.sleep(0.1)
+        except Exception:
+            pass
 
     # 3. Only if MPV process is definitely not running, clean up stale socket and start it
     if os.path.exists(MPV_SOCKET):
@@ -282,12 +286,14 @@ def main():
 
         is_online = file_path.startswith("ytdl://") or "youtube.com" in file_path or "youtu.be" in file_path
         initial_state = "loading" if is_online else "playing"
+        target_vid = file_path.replace("ytdl://", "") if is_online else ""
         state_file = "/tmp/nutsty_playback_state.json"
+        state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": time.time()}
         try:
             with open(state_file, "w", encoding="utf-8") as f:
-                json.dump({"state": initial_state, "path": file_path, "timestamp": time.time()}, f)
+                json.dump(state_payload, f)
             with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
-                json.dump({"state": initial_state, "path": file_path, "timestamp": time.time()}, f)
+                json.dump(state_payload, f)
         except Exception:
             pass
 
@@ -377,7 +383,7 @@ def main():
                 try:
                     with open(sfile, "r", encoding="utf-8") as f:
                         st = json.load(f)
-                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 8.0:
+                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
                             is_already_loading = True
                             break
                 except Exception:
@@ -391,10 +397,12 @@ def main():
             if target_file:
                 is_online = target_file.startswith("ytdl://") or "youtube.com" in target_file or "youtu.be" in target_file
                 initial_state = "loading" if is_online else "playing"
+                target_vid = target_file.replace("ytdl://", "") if is_online else ""
+                state_payload = {"state": initial_state, "path": target_file, "target_vid": target_vid, "timestamp": time.time()}
                 for sfile in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
                     try:
                         with open(sfile, "w", encoding="utf-8") as f:
-                            json.dump({"state": initial_state, "path": target_file, "timestamp": time.time()}, f)
+                            json.dump(state_payload, f)
                     except Exception:
                         pass
                 stream_target = resolve_media_path(target_file)
@@ -411,10 +419,48 @@ def main():
             print("Toggled pause to:", new_paused)
 
     elif action == "pause":
+        ensure_mpv()
+        for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
+            try:
+                with open(s_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "paused", "timestamp": time.time()}, f)
+            except Exception:
+                pass
         send_mpv_cmd(["set_property", "pause", True])
+        print("Paused playback")
 
     elif action == "resume":
+        ensure_mpv()
+        target_file = sys.argv[2] if len(sys.argv) > 2 else ""
+        idle = get_mpv_property("idle-active")
+        path = get_mpv_property("path")
+
+        # Mark state file as playing
+        for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
+            try:
+                if os.path.exists(s_file):
+                    with open(s_file, "w", encoding="utf-8") as f:
+                        json.dump({"state": "playing", "path": target_file or path or "", "timestamp": time.time()}, f)
+            except Exception:
+                pass
+
+        if (not path or idle) and target_file:
+            is_online = target_file.startswith("ytdl://") or "youtube.com" in target_file or "youtu.be" in target_file
+            initial_state = "loading" if is_online else "playing"
+            target_vid = target_file.replace("ytdl://", "") if is_online else ""
+            state_payload = {"state": initial_state, "path": target_file, "target_vid": target_vid, "timestamp": time.time()}
+            for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
+                try:
+                    with open(s_file, "w", encoding="utf-8") as f:
+                        json.dump(state_payload, f)
+                except Exception:
+                    pass
+            stream_target = resolve_media_path(target_file)
+            send_mpv_cmd(["loadfile", stream_target, "replace"])
+            update_current_track_metadata(target_file)
+
         send_mpv_cmd(["set_property", "pause", False])
+        print("Resumed playback")
 
     elif action == "stop":
         send_mpv_cmd(["stop"])
@@ -445,13 +491,17 @@ def main():
 
     elif action == "status":
         is_loading = False
+        target_vid = ""
+        target_path = ""
         for state_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
             if os.path.exists(state_file):
                 try:
                     with open(state_file, "r", encoding="utf-8") as f:
                         st = json.load(f)
-                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 8.0:
+                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
                             is_loading = True
+                            target_vid = st.get("target_vid", "")
+                            target_path = st.get("path", "")
                             break
                 except Exception:
                     pass
@@ -467,25 +517,31 @@ def main():
         vol = batch.get("volume") if batch.get("volume") is not None else 100
         idle = batch.get("idle-active")
 
-        # Auto-clear is_loading state once audio has actually started playing in MPV
-        if is_loading and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
+        # Crucial check: verify if MPV has actually switched to the target track
+        is_target_active = True
+        if target_vid:
+            is_target_active = (target_vid in path) or (target_vid in filename)
+        elif target_path:
+            is_target_active = (path == target_path) or (filename and target_path.endswith(filename))
+
+        # Auto-clear is_loading state once the TARGET audio has actually started playing in MPV
+        if is_loading and is_target_active and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
             is_loading = False
             for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
                 try:
                     with open(s_file, "w", encoding="utf-8") as f:
-                        json.dump({"state": "playing", "path": path, "timestamp": time.time()}, f)
+                        json.dump({"state": "playing", "path": path, "target_vid": target_vid, "timestamp": time.time()}, f)
                 except Exception:
                     pass
 
-        # has_file is True if path exists and not idle, or if time_pos > 0 has started
-        has_file = bool(path and not idle) and (not is_loading or (time_pos is not None and time_pos > 0))
+        has_file = bool((path or filename) and not idle and is_target_active) and (not is_loading or (time_pos is not None and time_pos > 0))
 
         status = {
             "is_playing": (pause is False) and has_file,
-            "is_paused": (pause is True) and has_file,
-            "time_pos": round(time_pos, 1) if has_file else 0.0,
-            "duration": round(duration, 1) if has_file else 0.0,
-            "filename": filename if has_file else "",
+            "is_paused": (pause is True) and bool((path or filename) and not idle and is_target_active),
+            "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
+            "duration": round(duration, 1) if (has_file and is_target_active) else 0.0,
+            "filename": (filename or path) if (has_file and is_target_active) else "",
             "volume": vol,
             "is_loading": is_loading
         }

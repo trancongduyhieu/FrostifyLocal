@@ -1053,6 +1053,7 @@ Rectangle {
                                             transformOrigin: Item.Center
                                             asynchronous: true
                                             visible: status === Image.Ready
+                                            sourceSize: Qt.size(360, 360)
                                         }
 
                                         Rectangle {
