@@ -21,6 +21,7 @@ Rectangle {
     property Item backgroundSourceItem: null
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property string accountName: ""
+    property string accountThumb: ""
     property int arrowStylePreset: 1
     readonly property real accentLum: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
@@ -162,6 +163,8 @@ Rectangle {
                     friendsNotes: root.friendsNotes
                     myLatestNote: root.myLatestNote
                     accentColor: root.accentColor
+                    userAvatar: root.accountThumb
+                    userName: root.accountName
                     onPostNoteClicked: root.postNoteRequested()
                     onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
                     onPlayTrackRequested: track => root.playFriendTrackRequested(track)

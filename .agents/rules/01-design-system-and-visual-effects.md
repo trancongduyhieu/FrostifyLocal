@@ -68,3 +68,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống đồ họa, ngôn ngữ 
 - Mọi nút lướt ngang carousel `<` và `>` bắt buộc dùng `NavArrowButton.qml`.
 - Tự động liên kết `accentColor`, hiệu ứng hover scale 1.06x và tự động làm mờ (`opacity: 0.28`, `enabled: false`) khi chạm giới hạn cuộn (`canScroll`).
 - Không dùng nút `< >` tại `CategorizedSearchView.qml` để giữ giao diện tối giản, người dùng lọc danh mục trực tiếp qua Filter Chips.
+
+---
+
+## 7. Cấm Tự Tiện Dùng Hình Con Nhộng (Anti-Capsule Mandate) & Bố Cục Đồng Phẳng
+- **Tuyệt đối cấm hình con nhộng (Pill / Capsule)**: Không dùng `radius = height / 2` trên nút bấm, thẻ, khung hay badge trừ khi được người dùng yêu cầu rõ ràng (như Mood Chips).
+- **Chuẩn hóa nút bấm & badge**: Nút bấm dùng $R = 8\text{px}$ (`rounded-lg`), badge $R = 4\text{px}$/6px (`rounded-md`).
+- **Bố cục đồng phẳng (Planar Purity)**: Không lồng các khối hộp nổi viền dày chồng chéo (box-in-a-box). Phân vùng bằng khoảng trắng hệ 8pt/16pt và đường kẻ viền siêu mảnh hairline 1px `Qt.rgba(1, 1, 1, 0.08)`.

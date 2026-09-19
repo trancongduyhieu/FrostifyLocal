@@ -83,18 +83,18 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                // Close Button (Organic tinted glass with AppIcon)
+                // Close Button (Planar square icon button R=6)
                 Rectangle {
-                    width: 32; height: 32; radius: 16
-                    color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                    border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                    width: 28; height: 28; radius: 6
+                    color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.18) : Qt.rgba(1, 1, 1, 0.05)
+                    border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.40) : Qt.rgba(1, 1, 1, 0.10)
                     border.width: 1
 
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 12
-                        color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.75)
+                        color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.70)
                     }
 
                     MouseArea {
@@ -107,13 +107,13 @@ Rectangle {
                 }
             }
 
-            // Text Input Box (Max 60 chars)
+            // Text Input Box (Max 60 chars - Planar R=8)
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 88
-                radius: 12
-                color: Qt.rgba(0.03 + root.accentColor.r * 0.04, 0.03 + root.accentColor.g * 0.04, 0.05 + root.accentColor.b * 0.06, 0.85)
-                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                radius: 8
+                color: Qt.rgba(0.02, 0.02, 0.04, 0.75)
+                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(1, 1, 1, 0.08)
                 border.width: 1
 
                 ColumnLayout {
@@ -169,13 +169,13 @@ Rectangle {
                 }
             }
 
-            // Attached Track Preview Card (Concentric radius R_con = 10, chromatic glass)
+            // Attached Track Preview Card (Planar R=8, concentric R_con=4 on cover, NO CAPSULE)
             Rectangle {
                 Layout.fillWidth: true
-                height: 54
-                radius: 10
-                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                height: 52
+                radius: 8
+                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
                 border.width: 1
 
                 RowLayout {
@@ -185,9 +185,9 @@ Rectangle {
 
                     // Album Cover Image with fallback icon
                     Rectangle {
-                        width: 38; height: 38; radius: 6
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        width: 36; height: 36; radius: 4
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
                         border.width: 1
                         clip: true
 
@@ -230,35 +230,36 @@ Rectangle {
                         }
                     }
 
+                    // Attached Badge (Planar badge R=4, strictly NO pill/capsule)
                     Rectangle {
-                        width: 76; height: 24; radius: 12
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                        border.color: root.accentColor
+                        width: 68; height: 22; radius: 4
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
                         border.width: 1
                         Text {
                             anchors.centerIn: parent
                             text: I18n.tr("Đính Kèm", "Attached")
                             color: "#ffffff"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             font.bold: true
                         }
                     }
                 }
             }
 
-            // Action Buttons Row (Optical padding px = 2 * py)
+            // Action Buttons Row (Standard rectangular buttons R=8 per ui-layout-design-rules)
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
 
                 Item { Layout.fillWidth: true }
 
-                // Cancel Button (Dynamic Chromatic Glass)
+                // Cancel Button (Planar modern button R=8)
                 Rectangle {
-                    width: 96; height: 38; radius: 10
-                    color: cancelArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
-                    border.color: cancelArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                    width: 88; height: 36; radius: 8
+                    color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.04)
+                    border.color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
                     border.width: 1
 
                     Text {
@@ -278,14 +279,14 @@ Rectangle {
                     }
                 }
 
-                // Submit Button (Dynamic Accent)
+                // Submit Button (Planar modern button R=8, NO pill)
                 Rectangle {
-                    width: 160; height: 38; radius: 10
-                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.42) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                    width: 154; height: 36; radius: 8
+                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                     border.color: root.accentColor
                     border.width: 1
-                    scale: submitArea.containsMouse ? 1.03 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 150 } }
+                    scale: submitArea.containsMouse ? 1.02 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
 
                     Row {
                         anchors.centerIn: parent

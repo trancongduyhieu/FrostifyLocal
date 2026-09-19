@@ -12,6 +12,8 @@ Item {
     property var friendsNotes: []
     property color accentColor: Theme.accent
     property var myLatestNote: null
+    property string userAvatar: ""
+    property string userName: ""
 
     signal postNoteClicked()
     signal addFriendClicked()
@@ -24,114 +26,136 @@ Item {
         }
     }
 
-    RowLayout {
+    // Scroll Left Arrow Button
+    NavArrowButton {
+        id: leftNavBtn
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        z: 10
+        direction: "left"
+        accentColor: root.accentColor
+        visible: friendsFlickable.contentWidth > friendsFlickable.width && friendsFlickable.contentX > 8
+        canScroll: friendsFlickable.contentX > 0
+        onClicked: {
+            var targetX = Math.max(0, friendsFlickable.contentX - 220);
+            scrollAnim.to = targetX;
+            scrollAnim.restart();
+        }
+    }
+
+    // Scroll Right Arrow Button
+    NavArrowButton {
+        id: rightNavBtn
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        z: 10
+        direction: "right"
+        accentColor: root.accentColor
+        visible: friendsFlickable.contentWidth > friendsFlickable.width && friendsFlickable.contentX < (friendsFlickable.contentWidth - friendsFlickable.width - 8)
+        canScroll: friendsFlickable.contentX < (friendsFlickable.contentWidth - friendsFlickable.width)
+        onClicked: {
+            var maxScroll = Math.max(0, friendsFlickable.contentWidth - friendsFlickable.width);
+            var targetX = Math.min(maxScroll, friendsFlickable.contentX + 220);
+            scrollAnim.to = targetX;
+            scrollAnim.restart();
+        }
+    }
+
+    NumberAnimation {
+        id: scrollAnim
+        target: friendsFlickable
+        property: "contentX"
+        duration: 220
+        easing.type: Easing.OutCubic
+    }
+
+    // Horizontal Scrollable Container
+    Flickable {
+        id: friendsFlickable
         anchors.fill: parent
-        spacing: 16
+        anchors.leftMargin: leftNavBtn.visible ? 36 : 0
+        anchors.rightMargin: rightNavBtn.visible ? 36 : 0
+        contentWidth: itemsRow.width + 16
+        contentHeight: height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.HorizontalFlick
 
-        // 1. MY NOTE / POST NOTE ACTION CARD
-        Rectangle {
-            Layout.preferredWidth: 80
-            Layout.fillHeight: true
-            radius: 14
-            color: postCardArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1, 1, 1, 0.03)
-            border.color: postCardArea.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.08)
-            border.width: 1
+        Behavior on anchors.leftMargin { NumberAnimation { duration: 150 } }
+        Behavior on anchors.rightMargin { NumberAnimation { duration: 150 } }
 
-            Column {
-                anchors.centerIn: parent
-                spacing: 6
-
-                // Add Circle Icon
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 44; height: 44; radius: 22
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-                    border.color: root.accentColor
-                    border.width: 1.5
-                    scale: postCardArea.containsMouse ? 1.08 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 150 } }
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/list-add-symbolic.svg"
-                        iconSize: 18
-                        color: "#ffffff"
-                    }
-                }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.myLatestNote ? I18n.tr("Note của bạn", "Your Note") : I18n.tr("Đăng Note", "Share Note")
-                    color: postCardArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 10
-                    font.bold: true
-                }
-            }
-
-            MouseArea {
-                id: postCardArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.postNoteClicked()
+        // Desktop Linux Mouse Wheel Handler (Captures Vertical Wheel Delta Y to Scroll Horizontally)
+        WheelHandler {
+            target: friendsFlickable
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: event => {
+                var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
+                var maxScroll = Math.max(0, friendsFlickable.contentWidth - friendsFlickable.width);
+                friendsFlickable.contentX = Math.max(0, Math.min(maxScroll, friendsFlickable.contentX - delta * 1.2));
             }
         }
 
-        // Hairline Vertical Divider
-        Rectangle {
-            Layout.preferredWidth: 1
-            Layout.preferredHeight: 64
-            Layout.alignment: Qt.AlignVCenter
-            color: Qt.rgba(1, 1, 1, 0.08)
+        // Touchpad / Mouse Drag Handler
+        DragHandler {
+            target: null
+            grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+            property real startContentX: 0
+            onActiveChanged: {
+                if (active) startContentX = friendsFlickable.contentX;
+            }
+            onTranslationChanged: {
+                if (active) {
+                    var maxScroll = Math.max(0, friendsFlickable.contentWidth - friendsFlickable.width);
+                    friendsFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
+                }
+            }
         }
 
-        // 2. HORIZONTAL LIST OF FRIENDS NOTES (Clean Avatar + Mini Thought Bubble)
-        ListView {
-            id: friendsListView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            orientation: ListView.Horizontal
+        Row {
+            id: itemsRow
+            height: parent.height
             spacing: 16
-            clip: false
-            boundsBehavior: Flickable.StopAtBounds
 
-            model: root.friendsNotes
+            // ==========================================
+            // ITEM 0: CURRENT USER NOTE / POST NOTE (Messenger Pattern - Ảnh 2)
+            // ==========================================
+            Item {
+                id: userNoteItem
+                width: Math.max(88, Math.min(136, userBubbleBox.width + 12))
+                height: friendsFlickable.height
 
-            delegate: Item {
-                width: Math.max(90, Math.min(140, bubbleBox.width + 12))
-                height: friendsListView.height
-
-                // Mini Thought Bubble (Floating above avatar, no heavy pill clutter)
+                // Mini Thought Bubble above user avatar
                 Rectangle {
-                    id: bubbleBox
+                    id: userBubbleBox
                     anchors.top: parent.top
                     anchors.topMargin: 4
-                    anchors.horizontalCenter: avatarWrapper.horizontalCenter
-                    width: Math.max(76, Math.min(130, noteTextItem.implicitWidth + 22))
+                    anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
+                    width: Math.max(82, Math.min(130, userBubbleText.implicitWidth + 24))
                     height: 24
                     radius: 12
-                    color: friendArea.containsMouse
+                    color: userMouseArea.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                    border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
+                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.05))
+                    border.color: userMouseArea.containsMouse
+                        ? root.accentColor
+                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.16))
                     border.width: 1
-                    scale: friendArea.containsMouse ? 1.05 : 1.0
+                    scale: userMouseArea.containsMouse ? 1.05 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    // Tiny bubble connector dots
+                    // Bubble connector dot
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: bubbleBox.bottom
+                        anchors.top: userBubbleBox.bottom
                         anchors.topMargin: -1
                         width: 5; height: 5; radius: 2.5
-                        color: bubbleBox.color
+                        color: userBubbleBox.color
                     }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 6
-                        anchors.rightMargin: 6
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
                         spacing: 4
 
                         AppIcon {
@@ -139,55 +163,56 @@ Item {
                             source: "../assets/icons/folder-music-symbolic.svg"
                             iconSize: 10
                             color: root.accentColor
-                            visible: modelData.track !== null && modelData.track !== undefined
+                            visible: root.myLatestNote && root.myLatestNote.track !== null && root.myLatestNote.track !== undefined
                         }
 
                         Text {
-                            id: noteTextItem
+                            id: userBubbleText
                             Layout.fillWidth: true
-                            text: modelData.note_text || ""
-                            color: "#ffffff"
+                            text: root.myLatestNote ? (root.myLatestNote.note_text || "") : I18n.tr("Chia sẻ suy nghĩ...", "Share a thought...")
+                            color: root.myLatestNote ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
-                            font.bold: true
+                            font.bold: root.myLatestNote !== null
                             elide: Text.ElideRight
                         }
                     }
                 }
 
-                // AVATAR WRAPPER (48px circle with breathing pulse ring if sharing track)
+                // User Circular Avatar Wrapper (48x48)
                 Item {
-                    id: avatarWrapper
+                    id: userAvatarWrapper
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 14
+                    anchors.bottomMargin: 18
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 48; height: 48
-                    scale: friendArea.containsMouse ? 1.08 : 1.0
+                    scale: userMouseArea.containsMouse ? 1.08 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    // Outer Pulse Ring when music is attached
+                    // Outer Border / Pulse Ring if track is attached
                     Rectangle {
                         anchors.fill: parent
                         radius: 24
                         color: "transparent"
-                        border.color: friendArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                        border.color: userMouseArea.containsMouse
+                            ? root.accentColor
+                            : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.55) : Qt.rgba(1, 1, 1, 0.16))
                         border.width: 1.5
                     }
 
-                    // Avatar Inner Circle Image
+                    // Avatar Image or Fallback Letter
                     Item {
                         anchors.fill: parent
                         anchors.margins: 2
 
                         Rectangle {
-                            id: avatarBg
                             anchors.fill: parent
                             radius: 22
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
 
                             Text {
                                 anchors.centerIn: parent
-                                text: (modelData.user_name && modelData.user_name.length > 0) ? modelData.user_name.substring(0, 1).toUpperCase() : "F"
+                                text: (root.userName && root.userName.length > 0) ? root.userName.substring(0, 1).toUpperCase() : "U"
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 16
@@ -196,21 +221,20 @@ Item {
                         }
 
                         Image {
-                            id: avatarImg
+                            id: userAvatarImg
                             anchors.fill: parent
-                            source: modelData.avatar_url || ""
+                            source: root.userAvatar || ""
                             fillMode: Image.PreserveAspectCrop
                             visible: status === Image.Ready && source != ""
                         }
 
-                        // Mask avatar to round circle (chống vỡ viền đen theo rule #01)
                         MultiEffect {
-                            anchors.fill: avatarImg
-                            source: avatarImg
+                            anchors.fill: userAvatarImg
+                            source: userAvatarImg
                             maskEnabled: true
                             maskThresholdMin: 0.5
                             maskSpreadAtMin: 1.0
-                            visible: avatarImg.visible
+                            visible: userAvatarImg.visible
                             maskSource: Rectangle {
                                 width: 44; height: 44
                                 radius: 22
@@ -219,76 +243,275 @@ Item {
                         }
                     }
 
-                    // Green Online Indicator Dot
+                    // Plus / Edit Action Badge at bottom-right of avatar
                     Rectangle {
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        width: 12; height: 12; radius: 6
-                        color: "#10b981"
+                        width: 16; height: 16; radius: 8
+                        color: root.accentColor
                         border.color: "#08090d"
-                        border.width: 2
+                        border.width: 1.5
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: root.myLatestNote ? "../assets/icons/document-edit-symbolic.svg" : "../assets/icons/list-add-symbolic.svg"
+                            iconSize: 9
+                            color: "#ffffff"
+                        }
                     }
                 }
 
-                // Friend Name below avatar
+                // Label below user avatar
                 Text {
-                    anchors.top: avatarWrapper.bottom
+                    anchors.top: userAvatarWrapper.bottom
                     anchors.topMargin: 2
-                    anchors.horizontalCenter: avatarWrapper.horizontalCenter
-                    text: modelData.user_name || "Friend"
-                    color: friendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                    anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
+                    text: root.myLatestNote ? I18n.tr("Note của bạn", "Your Note") : I18n.tr("Ghi chú của bạn", "Your note")
+                    color: userMouseArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.70)
                     font.family: Theme.fontFamily
                     font.pixelSize: 9
+                    font.bold: true
+                    elide: Text.ElideRight
+                    width: 76
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                MouseArea {
+                    id: userMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.postNoteClicked()
+                }
+            }
+
+            // ==========================================
+            // ITEMS 1..N: FRIENDS NOTES
+            // ==========================================
+            Repeater {
+                model: root.friendsNotes
+
+                delegate: Item {
+                    width: Math.max(88, Math.min(136, friendBubbleBox.width + 12))
+                    height: friendsFlickable.height
+
+                    // Mini Thought Bubble above friend avatar
+                    Rectangle {
+                        id: friendBubbleBox
+                        anchors.top: parent.top
+                        anchors.topMargin: 4
+                        anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
+                        width: Math.max(78, Math.min(130, friendNoteText.implicitWidth + 24))
+                        height: 24
+                        radius: 12
+                        color: friendArea.containsMouse
+                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                        border.color: friendArea.containsMouse
+                            ? root.accentColor
+                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
+                        border.width: 1
+                        scale: friendArea.containsMouse ? 1.05 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 150 } }
+
+                        // Bubble connector dot
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: friendBubbleBox.bottom
+                            anchors.topMargin: -1
+                            width: 5; height: 5; radius: 2.5
+                            color: friendBubbleBox.color
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 4
+
+                            AppIcon {
+                                Layout.alignment: Qt.AlignVCenter
+                                source: "../assets/icons/folder-music-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                visible: modelData.track !== null && modelData.track !== undefined
+                            }
+
+                            Text {
+                                id: friendNoteText
+                                Layout.fillWidth: true
+                                text: modelData.note_text || ""
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // Friend Circular Avatar Wrapper (48x48)
+                    Item {
+                        id: friendAvatarWrapper
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 18
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 48; height: 48
+                        scale: friendArea.containsMouse ? 1.08 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 150 } }
+
+                        // Outer Pulse Ring when music is attached
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 24
+                            color: "transparent"
+                            border.color: friendArea.containsMouse
+                                ? root.accentColor
+                                : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                            border.width: 1.5
+                        }
+
+                        // Avatar Image or Fallback Letter
+                        Item {
+                            anchors.fill: parent
+                            anchors.margins: 2
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 22
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: (modelData.user_name && modelData.user_name.length > 0) ? modelData.user_name.substring(0, 1).toUpperCase() : "F"
+                                    color: "#ffffff"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                            }
+
+                            Image {
+                                id: friendAvatarImg
+                                anchors.fill: parent
+                                source: modelData.avatar_url || ""
+                                fillMode: Image.PreserveAspectCrop
+                                visible: status === Image.Ready && source != ""
+                            }
+
+                            MultiEffect {
+                                anchors.fill: friendAvatarImg
+                                source: friendAvatarImg
+                                maskEnabled: true
+                                maskThresholdMin: 0.5
+                                maskSpreadAtMin: 1.0
+                                visible: friendAvatarImg.visible
+                                maskSource: Rectangle {
+                                    width: 44; height: 44
+                                    radius: 22
+                                    color: "#000000"
+                                }
+                            }
+                        }
+
+                        // Green Online Indicator Dot
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            width: 12; height: 12; radius: 6
+                            color: "#10b981"
+                            border.color: "#08090d"
+                            border.width: 2
+                        }
+                    }
+
+                    // Friend Name below avatar
+                    Text {
+                        anchors.top: friendAvatarWrapper.bottom
+                        anchors.topMargin: 2
+                        anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
+                        text: modelData.user_name || "Friend"
+                        color: friendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 9
+                        elide: Text.ElideRight
+                        width: 74
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    MouseArea {
+                        id: friendArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openStoryRequested(modelData, index)
+                    }
+                }
+            }
+
+            // ==========================================
+            // TAIL ITEM: ADD FRIEND ACTION (Tích Hợp Vào Cuối Hàng)
+            // ==========================================
+            Item {
+                id: addFriendItem
+                width: 76
+                height: friendsFlickable.height
+
+                // Placeholder space matching thought bubble height to preserve exact avatar baseline
+                Item {
+                    anchors.top: parent.top
+                    anchors.topMargin: 4
+                    width: parent.width
+                    height: 24
+                }
+
+                // Circular Add Friend Avatar Container (48x48)
+                Rectangle {
+                    id: addFriendCircle
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 18
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 48; height: 48; radius: 24
+                    color: addFriendMouse.containsMouse
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                        : Qt.rgba(1, 1, 1, 0.04)
+                    border.color: addFriendMouse.containsMouse
+                        ? root.accentColor
+                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                    border.width: 1.5
+                    scale: addFriendMouse.containsMouse ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/list-add-symbolic.svg"
+                        iconSize: 16
+                        color: addFriendMouse.containsMouse ? "#ffffff" : root.accentColor
+                    }
+                }
+
+                // Label below Add Friend avatar
+                Text {
+                    anchors.top: addFriendCircle.bottom
+                    anchors.topMargin: 2
+                    anchors.horizontalCenter: addFriendCircle.horizontalCenter
+                    text: I18n.tr("Thêm bạn", "Add friend")
+                    color: addFriendMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.60)
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 9
+                    font.bold: true
                     elide: Text.ElideRight
                     width: 70
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 MouseArea {
-                    id: friendArea
+                    id: addFriendMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.openStoryRequested(modelData, index);
-                    }
+                    onClicked: root.addFriendClicked()
                 }
-            }
-
-            // Empty state placeholder
-            Text {
-                anchors.centerIn: parent
-                text: I18n.tr("Chưa có bạn bè nào đăng note hôm nay", "No friends have posted a note today")
-                color: Qt.rgba(1, 1, 1, 0.35)
-                font.family: Theme.fontFamily
-                font.pixelSize: 12
-                visible: !root.friendsNotes || root.friendsNotes.length === 0
-            }
-        }
-
-        // 3. ADD FRIEND BUTTON
-        Rectangle {
-            Layout.preferredWidth: 36
-            Layout.preferredHeight: 36
-            Layout.alignment: Qt.AlignVCenter
-            radius: 18
-            color: addFriendArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(1, 1, 1, 0.04)
-            border.color: addFriendArea.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.12)
-            border.width: 1
-
-            AppIcon {
-                anchors.centerIn: parent
-                source: "../assets/icons/list-add-symbolic.svg"
-                iconSize: 14
-                color: addFriendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
-            }
-
-            MouseArea {
-                id: addFriendArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.addFriendClicked()
             }
         }
     }

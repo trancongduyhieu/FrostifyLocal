@@ -1809,6 +1809,7 @@ Scope {
                             isPlaying: win.isPlaying
                             accentColor: win.accentColor
                             accountName: win.authAccountName
+                            accountThumb: win.authAccountThumb
                             friendsNotes: win.friendsNotes
                             myLatestNote: win.myLatestNote
 
