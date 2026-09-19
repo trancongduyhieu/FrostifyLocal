@@ -43,6 +43,15 @@ Rectangle {
         return root.activeNoteText;
     }
 
+    function submitCurrentNote() {
+        noteInput.focus = false;
+        var t = getCurrentNoteText();
+        if (!t) return;
+        var clean = t.replace(/[\r\n]+/g, " ").trim();
+        if (!clean || clean.length > 60) return;
+        root.noteSubmitted(clean, root.attachedTrack);
+    }
+
     function openModal() {
         root.isPickingTrack = false;
         root.trackSearchQuery = "";
@@ -190,10 +199,9 @@ Rectangle {
                         hoverEnabled: true
                         cursorShape: shareBtnText.canSubmit ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
-                            noteInput.focus = false;
-                            var t = root.getCurrentNoteText();
-                            if (!t || t.length > 60) return;
-                            root.noteSubmitted(t, root.attachedTrack);
+                            if (shareBtnText.canSubmit) {
+                                root.submitCurrentNote();
+                            }
                         }
                     }
                 }
@@ -351,6 +359,13 @@ Rectangle {
                                 onTextChanged: root.updateActiveNoteText()
                                 onPreeditTextChanged: root.updateActiveNoteText()
                                 onInputMethodComposingChanged: root.updateActiveNoteText()
+
+                                Keys.onReturnPressed: (event) => {
+                                    event.accepted = true;
+                                    if (shareBtnText.canSubmit) {
+                                        root.submitCurrentNote();
+                                    }
+                                }
                             }
                         }
 
