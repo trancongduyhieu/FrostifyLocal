@@ -228,10 +228,12 @@ Item {
                 return url + "=w1200-h1200-l90-rj";
             }
         }
+        if (url.indexOf("mzstatic.com") !== -1) {
+            return url.replace(/\d+x\d+bb/, "1200x1200bb");
+        }
         if (url.indexOf("i.ytimg.com") !== -1) {
             var clean = url.split("?")[0];
-            if (clean.indexOf("maxresdefault.jpg") !== -1) return clean;
-            return clean.replace(/(mqdefault|sddefault|default)\.jpg/, "hqdefault.jpg");
+            return clean.replace(/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg/, "maxresdefault.jpg");
         }
         return url;
     }
@@ -318,6 +320,11 @@ Item {
                                 root.resolvedSquareImage = resUrl;
                                 root.resolvedIsSquare = true;
                                 root.squareCoverResolved(resUrl, true);
+                            } else if (res && res.url) {
+                                var fallbackUrl = root.getHighResImage(res.url);
+                                root.resolvedSquareImage = fallbackUrl;
+                                root.resolvedIsSquare = false;
+                                root.squareCoverResolved(fallbackUrl, false);
                             } else {
                                 root.resolvedSquareImage = "";
                                 root.resolvedIsSquare = false;
@@ -798,9 +805,18 @@ Item {
                                 return (targetImg.startsWith("/") && !targetImg.startsWith("file://")) ? ("file://" + targetImg) : targetImg;
                             }
                             fillMode: Image.PreserveAspectCrop
-                            scale: (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
-                                   ? 1.0
-                                   : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.25)) ? 1.48 : 1.0)
+                            scale: {
+                                if (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20)) {
+                                    return 1.0;
+                                }
+                                // If 4:3 letterboxed thumbnail (e.g. hqdefault.jpg 480x360), zoom 1.34x to crop black bars
+                                if (implicitWidth > 0 && implicitHeight > 0) {
+                                    var r = implicitWidth / implicitHeight;
+                                    if (r > 1.25 && r < 1.45) return 1.34;
+                                }
+                                // True 16:9 HD thumbnail (maxresdefault.jpg 1280x720, ratio ~1.78): PreserveAspectCrop fills square cleanly
+                                return 1.0;
+                            }
                             Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                             transformOrigin: Item.Center
                             asynchronous: true

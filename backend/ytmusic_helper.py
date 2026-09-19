@@ -2847,7 +2847,7 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
     clean_vid = str(video_id or "").strip().replace("ytdl://", "").replace("yt_", "")
     curr_img = str(current_image or "").strip()
 
-    # Tier 0: Already native square Google CDN image
+    # Tier 0: Already native square Google CDN or Apple Music image
     if curr_img and ("googleusercontent.com" in curr_img or "ggpht.com" in curr_img):
         upgraded = re.sub(r'=w\d+-h\d+.*', '=w1200-h1200-l90-rj', curr_img)
         if "=w1200-h1200-l90-rj" not in upgraded:
@@ -2857,13 +2857,17 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
                 upgraded = upgraded + "=w1200-h1200-l90-rj"
         return {"url": upgraded, "is_square": True, "cached": True}
 
+    if curr_img and "mzstatic.com" in curr_img:
+        upgraded = re.sub(r'\d+x\d+bb', '1200x1200bb', curr_img)
+        return {"url": upgraded, "is_square": True, "cached": True}
+
     cache_key = clean_vid if clean_vid else f"{clean_title}_{clean_artist}".lower()
     if cache_key:
         cached_data = _get_square_covers_cache().get(cache_key)
         if cached_data and cached_data.get("is_square"):
             return cached_data
 
-    # Tier 1: Search official song release on YouTube Music
+    # Tier 1: Search official song release on YouTube Music (1:1 Google CDN)
     ytm = get_ytmusic_client()
     query = f"{clean_title} {clean_artist}".strip()
     if not query and clean_title:
@@ -2895,23 +2899,53 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
                                 "is_square": True,
                                 "title": t,
                                 "videoId": r.get("videoId", ""),
-                                "match": "official_song"
+                                "match": "official_ytm_song"
                             }
                             if cache_key:
                                 _get_square_covers_cache()[cache_key] = res
                                 _save_square_covers_cache()
                             return res
         except Exception as e:
-            sys.stderr.write(f"[resolve_square_cover error]: {e}\n")
+            sys.stderr.write(f"[resolve_square_cover YTM error]: {e}\n")
 
-    # Tier 2 Fallback: return current_image (safe hqdefault that exists 100% of the time)
+    # Tier 1.5: Search official song release on iTunes / Apple Music (1200x1200bb 1:1)
+    if query:
+        try:
+            import urllib.request, urllib.parse
+            itunes_url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=song&limit=5"
+            it_req = urllib.request.Request(itunes_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(it_req, timeout=3.5) as resp:
+                it_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                for r in it_data.get("results", []):
+                    t = r.get("trackName", "")
+                    cand_artist = r.get("artistName", "")
+                    sc = match_score(t, clean_title)
+                    agree = artist_agrees(cand_artist, clean_artist) if clean_artist else True
+                    if (sc is not None) and agree:
+                        art = r.get("artworkUrl100", "")
+                        if art:
+                            art1200 = re.sub(r'\d+x\d+bb', '1200x1200bb', art)
+                            res = {
+                                "url": art1200,
+                                "is_square": True,
+                                "title": t,
+                                "artist": cand_artist,
+                                "match": "official_itunes_song"
+                            }
+                            if cache_key:
+                                _get_square_covers_cache()[cache_key] = res
+                                _save_square_covers_cache()
+                            return res
+        except Exception as e:
+            sys.stderr.write(f"[resolve_square_cover iTunes error]: {e}\n")
+
+    # Tier 2 Fallback: YouTube HD Thumbnail (maxresdefault.jpg 1280x720)
     fallback_url = curr_img
     if not fallback_url and clean_vid:
-        fallback_url = f"https://i.ytimg.com/vi/{clean_vid}/hqdefault.jpg"
+        fallback_url = f"https://i.ytimg.com/vi/{clean_vid}/maxresdefault.jpg"
     elif fallback_url and "i.ytimg.com" in fallback_url:
         clean_yt = fallback_url.split("?")[0]
-        # Keep hqdefault.jpg to ensure no 404 errors for obscure or older YouTube tracks
-        fallback_url = clean_yt
+        fallback_url = re.sub(r'(hqdefault|mqdefault|sddefault|default|hq720)\.jpg', 'maxresdefault.jpg', clean_yt)
 
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}

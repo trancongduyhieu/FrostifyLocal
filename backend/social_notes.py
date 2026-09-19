@@ -179,18 +179,22 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
             pass
         return {"success": False, "error": str(e), "note": offline_note}
 
-def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Lấy danh sách ghi chú 24h của tất cả bạn bè."""
+def fetch_notes(worker_url: Optional[str] = None) -> Dict[str, Any]:
+    """Lấy danh sách ghi chú 24h của bạn bè và ghi chú mới nhất của bản thân."""
     friends = load_friends()
-    if not friends:
-        return []
+    user = get_current_user()
+    user_email = user.get("email", "").strip().lower()
 
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes?friends=" + urllib.parse.quote(",".join(friends))
+    if user_email:
+        url += "&user_email=" + urllib.parse.quote(user_email)
+
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Nutsty-Desktop/1.0"})
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             notes = data.get("notes", [])
+            my_note = data.get("my_note", None)
             # Lưu cache
             cache_file = get_cache_file()
             cache_data = {}
@@ -201,21 +205,30 @@ def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]
                 except Exception:
                     pass
             cache_data["friends_notes"] = notes
+            if my_note:
+                cache_data["my_latest_note"] = my_note
             cache_data["last_sync"] = time.time()
             with open(cache_file, "w", encoding="utf-8") as cf:
                 json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-            return notes
-    except Exception as e:
+            return {"notes": notes, "my_note": my_note or cache_data.get("my_latest_note")}
+    except Exception:
         # Đọc từ cache
         cache_file = get_cache_file()
         if cache_file.exists():
             try:
                 with open(cache_file, "r", encoding="utf-8") as cf:
                     cache_data = json.load(cf)
-                    return cache_data.get("friends_notes", [])
+                    return {
+                        "notes": cache_data.get("friends_notes", []),
+                        "my_note": cache_data.get("my_latest_note")
+                    }
             except Exception:
                 pass
-        return []
+        return {"notes": [], "my_note": None}
+
+def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Lấy danh sách ghi chú 24h của tất cả bạn bè (backward compatibility)."""
+    return fetch_notes(worker_url).get("notes", [])
 
 def send_social_event(event_type: str, to_email: str, worker_url: Optional[str] = None) -> Dict[str, Any]:
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events"
@@ -255,8 +268,8 @@ def main():
 
     cmd = sys.argv[1].lower()
     if cmd == "get":
-        notes = fetch_friends_notes()
-        print(json.dumps(notes, ensure_ascii=False))
+        notes_data = fetch_notes()
+        print(json.dumps(notes_data, ensure_ascii=False))
     elif cmd == "post":
         text = sys.argv[2] if len(sys.argv) > 2 else "Chilling with Nutsty"
         track = None

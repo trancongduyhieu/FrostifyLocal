@@ -162,6 +162,8 @@ Rectangle {
                     Layout.fillWidth: true
                     friendsNotes: root.friendsNotes
                     myLatestNote: root.myLatestNote
+                    currentTrack: root.currentTrack
+                    isPlaying: root.isPlaying
                     accentColor: root.accentColor
                     userAvatar: root.accountThumb
                     userName: root.accountName

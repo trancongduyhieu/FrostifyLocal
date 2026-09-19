@@ -179,18 +179,23 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         elif path == "/api/notes":
             friends_raw = query.get("friends", [""])[0]
             friends = [f.strip().lower() for f in friends_raw.split(",") if f.strip()]
+            user_email = query.get("user_email", [""])[0].strip().lower()
             vault = load_notes_vault()
             now = time.time()
             valid_notes = []
+            my_note = None
             cleaned_vault = {}
             for k, item in vault.items():
                 if item.get("_expires_ts", 0) > now:
                     cleaned_vault[k] = item
-                    if item.get("user_email", "").strip().lower() in friends:
+                    iem = item.get("user_email", "").strip().lower()
+                    if iem in friends:
                         valid_notes.append(item)
+                    if user_email and iem == user_email:
+                        my_note = item
             if len(cleaned_vault) != len(vault):
                 save_notes_vault(cleaned_vault)
-            data = {"count": len(valid_notes), "notes": valid_notes}
+            data = {"count": len(valid_notes), "notes": valid_notes, "my_note": my_note}
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self._send_cors_headers()

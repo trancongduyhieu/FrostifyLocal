@@ -12,6 +12,8 @@ Item {
     property var friendsNotes: []
     property color accentColor: Theme.accent
     property var myLatestNote: null
+    property var currentTrack: null
+    property bool isPlaying: false
     property string userAvatar: ""
     property string userName: ""
 
@@ -121,18 +123,47 @@ Item {
             // ==========================================
             Item {
                 id: userNoteItem
-                width: 72
+                property string noteStr: root.myLatestNote ? String(root.myLatestNote.note_text || "").replace(/[\r\n]+/g, " ").trim() : I18n.tr("Chia sẻ suy nghĩ...", "Share a thought...")
+                property var effectiveTrack: (root.myLatestNote && root.myLatestNote.track) ? root.myLatestNote.track : (root.currentTrack || null)
+                property string trackStr: effectiveTrack ? String(effectiveTrack.title || effectiveTrack.name || "").trim() : ""
+                property bool hasTrack: trackStr.length > 0
+
+                // Measurement texts for dynamic elastic sizing
+                Text {
+                    id: userMeasureNote
+                    visible: false
+                    text: userNoteItem.noteStr
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 9
+                    font.bold: root.myLatestNote !== null
+                }
+                Text {
+                    id: userMeasureTrack
+                    visible: false
+                    text: userNoteItem.trackStr
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 8
+                    font.bold: true
+                }
+
+                readonly property real contentNeededWidth: Math.max(
+                    userMeasureNote.implicitWidth,
+                    userNoteItem.hasTrack ? (userMeasureTrack.implicitWidth + 14) : 0
+                )
+                readonly property real bubbleWidth: Math.max(56, Math.min(220, contentNeededWidth + 20))
+
+                width: Math.max(72, bubbleWidth + 14)
                 height: friendsFlickable.height
 
-                // Mini Thought Bubble above user avatar (Compact 64-76px)
+                // Mini Thought Bubble above user avatar (Dynamic width 56-220px, height 24 or 38px)
                 Rectangle {
                     id: userBubbleBox
                     anchors.top: parent.top
                     anchors.topMargin: 4
                     anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
-                    width: Math.max(64, Math.min(76, userBubbleText.implicitWidth + 18))
-                    height: 24
-                    radius: 12
+                    width: userNoteItem.bubbleWidth
+                    height: userNoteItem.hasTrack ? 38 : 24
+                    radius: userNoteItem.hasTrack ? 14 : 12
                     color: userMouseArea.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                         : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.05))
@@ -152,29 +183,52 @@ Item {
                         color: userBubbleBox.color
                     }
 
-                    RowLayout {
+                    ColumnLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 6
-                        anchors.rightMargin: 6
-                        spacing: 3
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        anchors.topMargin: userNoteItem.hasTrack ? 4 : 2
+                        anchors.bottomMargin: userNoteItem.hasTrack ? 4 : 2
+                        spacing: 1
 
-                        AppIcon {
-                            Layout.alignment: Qt.AlignVCenter
-                            source: "../assets/icons/folder-music-symbolic.svg"
-                            iconSize: 9
-                            color: root.accentColor
-                            visible: root.myLatestNote && root.myLatestNote.track !== null && root.myLatestNote.track !== undefined
-                        }
-
+                        // Line 1: Note Text
                         Text {
                             id: userBubbleText
                             Layout.fillWidth: true
-                            text: root.myLatestNote ? (root.myLatestNote.note_text || "") : I18n.tr("Chia sẻ...", "Share...")
+                            text: userNoteItem.noteStr
                             color: root.myLatestNote ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
                             font.bold: root.myLatestNote !== null
                             elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        // Line 2: Attached / Currently Playing Track (ở dưới note)
+                        RowLayout {
+                            id: userTrackRow
+                            Layout.fillWidth: true
+                            spacing: 3
+                            visible: userNoteItem.hasTrack
+                            Layout.alignment: Qt.AlignHCenter
+
+                            AppIcon {
+                                source: "../assets/icons/folder-music-symbolic.svg"
+                                iconSize: 8
+                                color: root.accentColor
+                            }
+
+                            Text {
+                                id: userTrackText
+                                Layout.fillWidth: true
+                                text: userNoteItem.trackStr
+                                color: root.accentColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 8
+                                font.bold: true
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                            }
                         }
                     }
                 }
@@ -260,7 +314,7 @@ Item {
 
                         AppIcon {
                             anchors.centerIn: parent
-                            source: root.myLatestNote ? "../assets/icons/document-edit-symbolic.svg" : "../assets/icons/list-add-symbolic.svg"
+                            source: "../assets/icons/list-add-symbolic.svg"
                             iconSize: 9
                             color: "#ffffff"
                         }
@@ -292,24 +346,54 @@ Item {
             }
 
             // ==========================================
-            // ITEMS 1..N: FRIENDS NOTES (Compact 72px width)
+            // ITEMS 1..N: FRIENDS NOTES (Dynamic width 64-144px)
             // ==========================================
             Repeater {
                 model: root.friendsNotes
 
                 delegate: Item {
-                    width: 72
+                    id: friendDelegateItem
+                    property string friendNoteStr: String(modelData.note_text || "").replace(/[\r\n]+/g, " ").trim()
+                    property var friendTrackObj: modelData.track
+                    property string friendTrackStr: friendTrackObj ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
+                    property bool hasFriendTrack: friendTrackStr.length > 0
+
+                    // Measurement texts for dynamic elastic sizing
+                    Text {
+                        id: friendMeasureNote
+                        visible: false
+                        text: friendDelegateItem.friendNoteStr
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                    Text {
+                        id: friendMeasureTrack
+                        visible: false
+                        text: friendDelegateItem.friendTrackStr
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 8
+                        font.bold: true
+                    }
+
+                    readonly property real friendContentWidth: Math.max(
+                        friendMeasureNote.implicitWidth,
+                        friendDelegateItem.hasFriendTrack ? (friendMeasureTrack.implicitWidth + 14) : 0
+                    )
+                    readonly property real friendBubbleWidth: Math.max(56, Math.min(220, friendContentWidth + 20))
+
+                    width: Math.max(72, friendBubbleWidth + 14)
                     height: friendsFlickable.height
 
-                    // Mini Thought Bubble above friend avatar (Compact 64-76px)
+                    // Mini Thought Bubble above friend avatar (Dynamic width 56-220px, height 24 or 38px)
                     Rectangle {
                         id: friendBubbleBox
                         anchors.top: parent.top
                         anchors.topMargin: 4
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
-                        width: Math.max(64, Math.min(76, friendNoteText.implicitWidth + 18))
-                        height: 24
-                        radius: 12
+                        width: friendDelegateItem.friendBubbleWidth
+                        height: friendDelegateItem.hasFriendTrack ? 38 : 24
+                        radius: friendDelegateItem.hasFriendTrack ? 14 : 12
                         color: friendArea.containsMouse
                             ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
@@ -329,32 +413,56 @@ Item {
                             color: friendBubbleBox.color
                         }
 
-                        RowLayout {
+                        ColumnLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 6
-                            spacing: 3
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.topMargin: friendDelegateItem.hasFriendTrack ? 4 : 2
+                            anchors.bottomMargin: friendDelegateItem.hasFriendTrack ? 4 : 2
+                            spacing: 1
 
-                            AppIcon {
-                                Layout.alignment: Qt.AlignVCenter
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 9
-                                color: root.accentColor
-                                visible: modelData.track !== null && modelData.track !== undefined
-                            }
-
+                            // Line 1: Note Text
                             Text {
                                 id: friendNoteText
                                 Layout.fillWidth: true
-                                text: modelData.note_text || ""
+                                text: friendDelegateItem.friendNoteStr
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 9
                                 font.bold: true
                                 elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            // Line 2: Attached Track (ở dưới note)
+                            RowLayout {
+                                id: friendTrackRow
+                                Layout.fillWidth: true
+                                spacing: 3
+                                visible: friendDelegateItem.hasFriendTrack
+                                Layout.alignment: Qt.AlignHCenter
+
+                                AppIcon {
+                                    source: "../assets/icons/folder-music-symbolic.svg"
+                                    iconSize: 8
+                                    color: root.accentColor
+                                }
+
+                                Text {
+                                    id: friendTrackText
+                                    Layout.fillWidth: true
+                                    text: friendDelegateItem.friendTrackStr
+                                    color: root.accentColor
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 8
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
                             }
                         }
                     }
+
 
                     // Friend Circular Avatar Wrapper (48x48)
                     Item {

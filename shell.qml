@@ -658,6 +658,15 @@ Scope {
                     var parsed = JSON.parse(data);
                     if (Array.isArray(parsed)) {
                         win.friendsNotes = parsed;
+                    } else if (parsed && typeof parsed === "object") {
+                        if (Array.isArray(parsed.notes)) {
+                            win.friendsNotes = parsed.notes;
+                        } else if (Array.isArray(parsed.friends)) {
+                            win.friendsNotes = parsed.friends;
+                        }
+                        if (parsed.my_note) {
+                            win.myLatestNote = parsed.my_note;
+                        }
                     }
                 } catch(e) {}
             }
@@ -1826,7 +1835,7 @@ Scope {
                             }
                             onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
-                            onPostNoteRequested: postNoteModal.visible = true
+                            onPostNoteRequested: postNoteModal.openModal()
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
                             onOpenStoryRequested: (friendData, idx) => friendStoryModal.openWithIndex(idx)
@@ -2230,6 +2239,9 @@ Scope {
             id: postNoteModal
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
+            availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.allSongs
+            userAvatar: win.authAccountThumb
+            userName: win.authAccountName
             accentColor: win.accentColor
             onCloseRequested: postNoteModal.visible = false
             onNoteSubmitted: (text, trk) => {
@@ -3233,7 +3245,7 @@ Scope {
         function testExitListenAlong() {
             win.exitListeningAlong();
         }
-        function openPostNoteModal() { postNoteModal.visible = true; }
+        function openPostNoteModal() { postNoteModal.openModal(); }
         function closePostNoteModal() { postNoteModal.visible = false; }
         function toggleSleepTimer() {
             if (sleepTimerPopover.isOpen) sleepTimerPopover.close();
