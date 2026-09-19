@@ -73,6 +73,64 @@ export default {
       }
     }
 
+    // 1b. POST /api/now_playing - Real-time active playback heartbeat
+    if (request.method === "POST" && url.pathname === "/api/now_playing") {
+      try {
+        const body = await request.json();
+        const { user_email, now_playing, user_name, avatar_url } = body;
+        if (!user_email) {
+          return new Response(JSON.stringify({ error: "Missing user_email" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const cleanEmail = user_email.trim().toLowerCase();
+        let existingNote = null;
+        if (env && env.NUTSTY_NOTES) {
+          const raw = await env.NUTSTY_NOTES.get(`note:${cleanEmail}`);
+          if (raw) {
+            try { existingNote = JSON.parse(raw); } catch (_) {}
+          }
+        }
+
+        const nowMs = Date.now();
+        const ttlSeconds = 86400;
+        let noteData = existingNote;
+        if (noteData) {
+          noteData.now_playing = now_playing || null;
+          noteData.last_active_ts = nowMs / 1000;
+        } else {
+          noteData = {
+            user_email: cleanEmail,
+            user_name: (user_name || cleanEmail.split("@")[0]).substring(0, 40),
+            avatar_url: avatar_url || "",
+            note_text: "",
+            track: now_playing || null,
+            now_playing: now_playing || null,
+            created_at: new Date(nowMs).toISOString(),
+            expires_at: new Date(nowMs + ttlSeconds * 1000).toISOString(),
+            last_active_ts: nowMs / 1000
+          };
+        }
+
+        if (env && env.NUTSTY_NOTES) {
+          await env.NUTSTY_NOTES.put(`note:${cleanEmail}`, JSON.stringify(noteData), {
+            expirationTtl: ttlSeconds
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, note: noteData }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     // 2. GET /api/notes - Fetch active notes for given friend emails
     if (request.method === "GET" && url.pathname === "/api/notes") {
       const friendsParam = url.searchParams.get("friends") || "";

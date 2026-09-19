@@ -575,7 +575,12 @@ Item {
                 // ==========================================
                 Rectangle {
                     id: liveListenBtn
-                    readonly property var liveTrack: root.currentFriend ? (root.currentFriend.now_playing || root.currentFriend.current_track || null) : null
+                    readonly property var liveTrack: {
+                        if (!root.currentFriend) return null;
+                        var np = root.currentFriend.now_playing;
+                        if (np && (np.title || np.name) && np.is_playing !== false) return np;
+                        return null;
+                    }
                     Layout.fillWidth: true
                     Layout.preferredHeight: liveTrack ? 46 : 40
                     radius: 20

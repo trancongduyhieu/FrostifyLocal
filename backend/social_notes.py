@@ -45,8 +45,21 @@ def get_current_user() -> Dict[str, str]:
     profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
     suffix = get_profile_suffix()
 
-    # 1. Đọc từ ytmusic_auth{suffix}.json nếu có để lấy info chính chủ
+    # 1. Đọc từ cache người dùng nếu còn hiệu lực để đạt tốc độ phản hồi micro-giây (< 1ms)
+    user_cache_file = get_config_dir() / f"nutsty_user_cache{suffix}.json"
     auth_file = get_config_dir() / f"ytmusic_auth{suffix}.json"
+    if user_cache_file.exists():
+        try:
+            # Nếu auth_file không mới hơn user_cache_file thì dùng cache
+            if not auth_file.exists() or auth_file.stat().st_mtime <= user_cache_file.stat().st_mtime:
+                with open(user_cache_file, "r", encoding="utf-8") as ucf:
+                    cached_u = json.load(ucf)
+                    if cached_u.get("email") or cached_u.get("name"):
+                        return cached_u
+        except Exception:
+            pass
+
+    # 2. Đọc từ ytmusic_auth{suffix}.json nếu có để lấy info chính chủ
     if auth_file.exists():
         try:
             from ytmusicapi import YTMusic
@@ -61,7 +74,13 @@ def get_current_user() -> Dict[str, str]:
                 safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
                 email = f"{safe_name or (profile or 'user')}@gmail.com"
             if email or name:
-                return {"email": (email or f"{profile or 'user'}@gmail.com").strip().lower(), "name": name or "Me", "avatar": thumb}
+                res_user = {"email": (email or f"{profile or 'user'}@gmail.com").strip().lower(), "name": name or "Me", "avatar": thumb}
+                try:
+                    with open(user_cache_file, "w", encoding="utf-8") as ucf:
+                        json.dump(res_user, ucf, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
+                return res_user
         except Exception:
             pass
 
@@ -337,9 +356,57 @@ def fetch_social_events(worker_url: Optional[str] = None) -> List[Dict[str, Any]
     except Exception:
         return []
 
+def update_now_playing(now_playing_data: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
+    """Cập nhật trạng thái bài hát đang phát theo thời gian thực (Heartbeat)."""
+    user = get_current_user()
+    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/now_playing"
+
+    if now_playing_data is None:
+        suffix = get_profile_suffix()
+        cur_track_file = Path(f"/tmp/nutsty_current_track{suffix}.json")
+        if cur_track_file.exists():
+            try:
+                with open(cur_track_file, "r", encoding="utf-8") as f:
+                    cur_meta = json.load(f)
+                    if cur_meta.get("title"):
+                        vid = cur_meta.get("path", "")
+                        if vid.startswith("ytdl://"):
+                            vid = vid.replace("ytdl://", "")
+                        now_playing_data = {
+                            "title": cur_meta.get("title", ""),
+                            "artist": cur_meta.get("artist", ""),
+                            "cover": cur_meta.get("artUrl", ""),
+                            "path": cur_meta.get("path", ""),
+                            "id": vid,
+                            "videoId": vid,
+                            "is_playing": True,
+                            "timestamp": time.time()
+                        }
+            except Exception:
+                pass
+
+    payload = {
+        "user_email": user["email"],
+        "user_name": user["name"],
+        "avatar_url": user["avatar"],
+        "now_playing": now_playing_data
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: social_notes.py [get | post <text> [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events]")
+        print("Usage: social_notes.py [get | post <text> [track_json] | now_playing [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
@@ -355,6 +422,15 @@ def main():
             except Exception:
                 pass
         res = publish_note(text, track)
+        print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "now_playing":
+        data = None
+        if len(sys.argv) > 2 and sys.argv[2].strip():
+            try:
+                data = json.loads(sys.argv[2])
+            except Exception:
+                data = {"title": sys.argv[2], "is_playing": True}
+        res = update_now_playing(data)
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "add_friend":
         if len(sys.argv) > 2:

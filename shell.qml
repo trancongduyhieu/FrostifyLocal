@@ -80,6 +80,9 @@ Scope {
     property real pendingListenAlongSeekPosition: 0.0
     property string toastMessage: ""
     property bool toastVisible: false
+    property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
+    property real lastNowPlayingSyncTime: 0
+    property bool isFetchingNotesFast: false
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
@@ -755,19 +758,143 @@ Scope {
         }
     }
 
+    function syncNowPlaying(force) {
+        var now = Date.now();
+        if (!force && (now - win.lastNowPlayingSyncTime < 800)) return;
+        win.lastNowPlayingSyncTime = now;
+
+        var email = win.authAccountEmail;
+        if (!email) {
+            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+            email = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
+        }
+        if (!email) return;
+
+        var cur = win.currentTrack;
+        var npData = null;
+        if (cur && (win.isPlaying || win.isLoadingAudio)) {
+            var vid = cur.videoId || cur.id || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+            if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
+            npData = {
+                id: vid,
+                videoId: vid,
+                path: cur.path || (vid ? ("ytdl://" + vid) : ""),
+                title: cur.title || cur.name || "Track",
+                artist: cur.artist || "Artist",
+                cover: cur.image || cur.cover || "",
+                position: win.currentTime || 0,
+                duration: win.totalDuration || cur.duration || 0,
+                is_playing: win.isPlaying,
+                timestamp: Date.now() / 1000.0
+            };
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/now_playing", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify({
+            user_email: email,
+            user_name: win.authAccountName || "",
+            avatar_url: win.authAccountThumb || "",
+            now_playing: npData
+        }));
+    }
+
+    function fetchFriendsNotesFast() {
+        if (win.isFetchingNotesFast) return;
+        win.isFetchingNotesFast = true;
+
+        var email = win.authAccountEmail;
+        if (!email) {
+            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+            email = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
+        }
+        var friendsParam = (win.friendsList && win.friendsList.length > 0)
+            ? win.friendsList.join(",")
+            : "@shiraori618,hiutrn@gmail.com,friend@gmail.com,me@gmail.com";
+
+        var url = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes?friends=" + encodeURIComponent(friendsParam) + (email ? ("&user_email=" + encodeURIComponent(email)) : "");
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                win.isFetchingNotesFast = false;
+                if (xhr.status === 200) {
+                    try {
+                        var parsed = JSON.parse(xhr.responseText);
+                        if (parsed && typeof parsed === "object") {
+                            if (Array.isArray(parsed.notes)) {
+                                win.friendsNotes = parsed.notes;
+                            }
+                            if (parsed.my_note !== undefined) {
+                                win.myLatestNote = parsed.my_note;
+                            }
+                            // Auto-follow when listening along
+                            if (win.listeningAlongFriend && Array.isArray(parsed.notes)) {
+                                var targetEmail = (win.listeningAlongFriend.user_email || "").toLowerCase();
+                                var targetName = win.listeningAlongFriend.user_name;
+                                var updated = parsed.notes.find(function(f) {
+                                    return (targetEmail && f.user_email && f.user_email.toLowerCase() === targetEmail) ||
+                                           (targetName && f.user_name === targetName);
+                                });
+                                if (updated) {
+                                    win.listeningAlongFriend = updated;
+                                    var np = updated.now_playing;
+                                    if (np && (np.title || np.name) && np.is_playing !== false) {
+                                        var npVid = np.videoId || np.id || "";
+                                        if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
+                                        var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
+                                        if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
+                                        if (npVid && curVid && npVid !== curVid) {
+                                            win.startListeningAlong(updated);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch(e) {}
+                }
+            }
+        };
+        xhr.send();
+
+        // Fetch social events fast
+        if (email) {
+            var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email);
+            var evXhr = new XMLHttpRequest();
+            evXhr.open("GET", evUrl, true);
+            evXhr.onreadystatechange = function() {
+                if (evXhr.readyState === XMLHttpRequest.DONE && evXhr.status === 200) {
+                    try {
+                        var evData = JSON.parse(evXhr.responseText);
+                        var events = (evData && Array.isArray(evData.events)) ? evData.events : [];
+                        for (var i = 0; i < events.length; i++) {
+                            var ev = events[i];
+                            if (ev && ev.event === "leave") {
+                                var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
+                                win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
+                                if (win.listeningAlongFriend && (win.listeningAlongFriend.user_email === ev.from_email || win.listeningAlongFriend.user_name === ev.from_name)) {
+                                    win.listeningAlongFriend = null;
+                                }
+                            }
+                        }
+                    } catch(e) {}
+                }
+            };
+            evXhr.send();
+        }
+    }
+
     Timer {
         id: friendsNotesTimer
-        interval: 30000
+        interval: 800
         repeat: true
         running: true
         triggeredOnStart: true
         onTriggered: {
-            if (!fetchFriendsNotesProc.running) {
-                fetchFriendsNotesProc.running = true;
-            }
-            if (!fetchSocialEventsProc.running) {
-                fetchSocialEventsProc.running = true;
-            }
+            win.fetchFriendsNotesFast();
+            win.syncNowPlaying(false);
         }
     }
 
@@ -1012,6 +1139,8 @@ Scope {
         postNoteProc.running = false;
         postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", text, JSON.stringify(trackObj || {})];
         postNoteProc.running = true;
+        win.syncNowPlaying(true);
+        Qt.callLater(function() { win.fetchFriendsNotesFast(); });
     }
 
     function deleteMyNote() {
@@ -1019,14 +1148,13 @@ Scope {
         deleteNoteProc.running = false;
         deleteNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "delete"];
         deleteNoteProc.running = true;
+        Qt.callLater(function() { win.fetchFriendsNotesFast(); });
         win.showToast(I18n.tr("Đã xóa ghi chú", "Note deleted"));
     }
 
     function promptAddFriend() {
         Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "add_friend", "friend@gmail.com"]);
-        if (!fetchFriendsNotesProc.running) {
-            fetchFriendsNotesProc.running = true;
-        }
+        Qt.callLater(function() { win.fetchFriendsNotesFast(); });
     }
 
     function showToast(msg) {
@@ -1039,10 +1167,17 @@ Scope {
     function startListeningAlong(friend) {
         if (!friend) return;
         win.listeningAlongFriend = friend;
-        var activeTrackObj = friend.now_playing || friend.current_track || friend.track;
+        var activeTrackObj = null;
+        if (friend.now_playing && (friend.now_playing.title || friend.now_playing.name) && friend.now_playing.is_playing !== false) {
+            activeTrackObj = friend.now_playing;
+        } else if (friend.track && (friend.track.title || friend.track.name)) {
+            activeTrackObj = friend.track;
+        } else if (friend.now_playing && (friend.now_playing.title || friend.now_playing.name)) {
+            activeTrackObj = friend.now_playing;
+        }
         if (activeTrackObj) {
             var vid = activeTrackObj.videoId || activeTrackObj.id || activeTrackObj.video_id || "";
-            if (vid && vid.startsWith("yt_")) vid = vid.replace("yt_", "");
+            if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
             var path = activeTrackObj.path || (vid ? ("ytdl://" + vid) : "");
             var trk = {
                 id: vid || ("social_" + Date.now()),
@@ -1057,13 +1192,13 @@ Scope {
 
             // Tính toán tiến độ thời gian thực 1:1 (SimpMusic realtime sync)
             var targetPos = 0;
-            if (activeTrackObj.position !== undefined) {
+            if (activeTrackObj.position !== undefined && activeTrackObj.position !== null) {
                 targetPos = Number(activeTrackObj.position);
             } else if (friend.progress_seconds !== undefined) {
                 targetPos = Number(friend.progress_seconds);
             }
             var ts = activeTrackObj.timestamp || friend.updated_at_ts || friend.last_updated || 0;
-            if (ts > 0) {
+            if (ts > 0 && activeTrackObj.is_playing !== false) {
                 var nowSec = Date.now() / 1000.0;
                 var recordSec = (ts > 1000000000000) ? (ts / 1000.0) : Number(ts);
                 var elapsed = nowSec - recordSec;
@@ -1073,7 +1208,7 @@ Scope {
             }
 
             if (win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
-                if (targetPos > 0) {
+                if (targetPos > 0 && Math.abs(win.currentTime - targetPos) > 3.0) {
                     win.seekAudio(targetPos);
                 }
                 if (!win.isPlaying) win.togglePlay();
@@ -1360,8 +1495,12 @@ Scope {
         } else {
             win.songAccentColor = win.wallpaperAccentColor;
         }
+        win.syncNowPlaying(true);
     }
     property bool isPlaying: false
+    onIsPlayingChanged: {
+        win.syncNowPlaying(true);
+    }
     property real currentTime: 0.0
     property real totalDuration: 0.0
     property real volume: 100.0

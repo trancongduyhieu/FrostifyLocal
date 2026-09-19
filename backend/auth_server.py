@@ -345,6 +345,53 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif self.path == "/api/now_playing":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+            try:
+                req_data = json.loads(post_body)
+            except Exception:
+                req_data = {}
+
+            email = req_data.get("user_email", "").strip().lower()
+            now_playing = req_data.get("now_playing")
+            if not email:
+                res = {"success": False, "error": "Missing user_email"}
+                status_code = 400
+            else:
+                vault = load_notes_vault()
+                key = f"note:{email}"
+                now = time.time()
+                if key in vault:
+                    vault[key]["now_playing"] = now_playing
+                    vault[key]["last_active_ts"] = now
+                    record = vault[key]
+                else:
+                    ttl = 86400
+                    record = {
+                        "user_email": email,
+                        "user_name": req_data.get("user_name") or email.split("@")[0],
+                        "avatar_url": req_data.get("avatar_url", ""),
+                        "note_text": "",
+                        "track": now_playing,
+                        "now_playing": now_playing,
+                        "created_at": datetime.fromtimestamp(now).isoformat(),
+                        "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
+                        "_expires_ts": now + ttl,
+                        "last_active_ts": now
+                    }
+                    vault[key] = record
+                save_notes_vault(vault)
+                res = {"success": True, "note": record}
+                status_code = 200
+
+            payload = json.dumps(res, ensure_ascii=False).encode("utf-8")
+            self.send_response(status_code)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         else:
             self.send_response(404)
             self._send_cors_headers()
