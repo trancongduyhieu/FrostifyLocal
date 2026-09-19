@@ -7,7 +7,10 @@ import "."
 Item {
     id: root
     width: parent ? parent.width : 800
-    height: 96
+    height: 130
+    implicitHeight: 130
+    Layout.fillWidth: true
+    Layout.preferredHeight: height
 
     property var friendsNotes: []
     property color accentColor: Theme.accent
@@ -115,6 +118,7 @@ Item {
 
         Row {
             id: itemsRow
+            x: 8
             height: parent.height
             spacing: 12
 
@@ -128,45 +132,22 @@ Item {
                 property string trackStr: effectiveTrack ? String(effectiveTrack.title || effectiveTrack.name || "").trim() : ""
                 property bool hasTrack: trackStr.length > 0
 
-                // Measurement texts for dynamic elastic sizing
-                Text {
-                    id: userMeasureNote
-                    visible: false
-                    text: userNoteItem.noteStr
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 9
-                    font.bold: root.myLatestNote !== null
-                }
-                Text {
-                    id: userMeasureTrack
-                    visible: false
-                    text: userNoteItem.trackStr
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 8
-                    font.bold: true
-                }
-
-                readonly property real contentNeededWidth: Math.max(
-                    userMeasureNote.implicitWidth,
-                    userNoteItem.hasTrack ? (userMeasureTrack.implicitWidth + 14) : 0
-                )
-                readonly property real bubbleWidth: Math.max(56, Math.min(220, contentNeededWidth + 20))
-
-                width: Math.max(72, bubbleWidth + 14)
+                width: 80
                 height: friendsFlickable.height
 
-                // Mini Thought Bubble above user avatar (Dynamic width 56-220px, height 24 or 38px)
+                // Mini Thought Bubble above user avatar (Messenger Compact: 80px width, 2-line wrap, z: 10 layer trên)
                 Rectangle {
                     id: userBubbleBox
-                    anchors.top: parent.top
-                    anchors.topMargin: 4
+                    anchors.bottom: userAvatarWrapper.top
+                    anchors.bottomMargin: 6
                     anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
-                    width: userNoteItem.bubbleWidth
-                    height: userNoteItem.hasTrack ? 38 : 24
-                    radius: userNoteItem.hasTrack ? 14 : 12
+                    z: 10
+                    width: 80
+                    height: Math.max(24, Math.min(48, userBubbleCol.implicitHeight + 8))
+                    radius: Math.min(14, height / 2)
                     color: userMouseArea.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.05))
+                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.06))
                     border.color: userMouseArea.containsMouse
                         ? root.accentColor
                         : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.16))
@@ -174,24 +155,37 @@ Item {
                     scale: userMouseArea.containsMouse ? 1.05 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
 
-                    // Bubble connector dot
+                    // Connector Dot 1 (top dot)
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: userBubbleBox.bottom
-                        anchors.topMargin: -1
+                        anchors.top: parent.bottom
+                        anchors.topMargin: 1
                         width: 5; height: 5; radius: 2.5
                         color: userBubbleBox.color
+                        border.color: userBubbleBox.border.color
+                        border.width: 0.5
+                        z: 10
+                    }
+
+                    // Connector Dot 2 (bottom dot, closer to avatar)
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.bottom
+                        anchors.topMargin: 5
+                        width: 3.5; height: 3.5; radius: 1.75
+                        color: userBubbleBox.color
+                        border.color: userBubbleBox.border.color
+                        border.width: 0.5
+                        z: 10
                     }
 
                     ColumnLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        anchors.topMargin: userNoteItem.hasTrack ? 4 : 2
-                        anchors.bottomMargin: userNoteItem.hasTrack ? 4 : 2
+                        id: userBubbleCol
+                        anchors.centerIn: parent
+                        width: parent.width - 8
                         spacing: 1
 
-                        // Line 1: Note Text
+                        // Line 1 & 2: Note Text with 2-line wrapping
                         Text {
                             id: userBubbleText
                             Layout.fillWidth: true
@@ -200,11 +194,14 @@ Item {
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
                             font.bold: root.myLatestNote !== null
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            lineHeight: 1.05
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
                         }
 
-                        // Line 2: Attached / Currently Playing Track (ở dưới note)
+                        // Line 2 (or 3): Attached / Currently Playing Track (sóng âm visualizer)
                         RowLayout {
                             id: userTrackRow
                             Layout.fillWidth: true
@@ -212,10 +209,45 @@ Item {
                             visible: userNoteItem.hasTrack
                             Layout.alignment: Qt.AlignHCenter
 
-                            AppIcon {
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 8
-                                color: root.accentColor
+                            // Audio Waveform Visualizer (Sóng âm 3 cột chuyển động)
+                            Row {
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 1.5
+                                height: 8
+
+                                Rectangle {
+                                    width: 1.8; height: 5; radius: 0.9
+                                    color: root.accentColor
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: userNoteItem.hasTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 1.8; height: 8; radius: 0.9
+                                    color: root.accentColor
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: userNoteItem.hasTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 1.8; height: 6; radius: 0.9
+                                    color: root.accentColor
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: userNoteItem.hasTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }
+                                    }
+                                }
                             }
 
                             Text {
@@ -233,12 +265,13 @@ Item {
                     }
                 }
 
-                // User Circular Avatar Wrapper (48x48)
+                // User Circular Avatar Wrapper (48x48, z: 1 so bubble at z: 10 is on top)
                 Item {
                     id: userAvatarWrapper
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 18
                     anchors.horizontalCenter: parent.horizontalCenter
+                    z: 1
                     width: 48; height: 48
                     scale: userMouseArea.containsMouse ? 1.08 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
@@ -346,7 +379,7 @@ Item {
             }
 
             // ==========================================
-            // ITEMS 1..N: FRIENDS NOTES (Dynamic width 64-144px)
+            // ITEMS 1..N: FRIENDS NOTES (Messenger Pattern - 74px column, 80px bubble, 2-line wrap)
             // ==========================================
             Repeater {
                 model: root.friendsNotes
@@ -358,42 +391,19 @@ Item {
                     property string friendTrackStr: friendTrackObj ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
                     property bool hasFriendTrack: friendTrackStr.length > 0
 
-                    // Measurement texts for dynamic elastic sizing
-                    Text {
-                        id: friendMeasureNote
-                        visible: false
-                        text: friendDelegateItem.friendNoteStr
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 9
-                        font.bold: true
-                    }
-                    Text {
-                        id: friendMeasureTrack
-                        visible: false
-                        text: friendDelegateItem.friendTrackStr
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 8
-                        font.bold: true
-                    }
-
-                    readonly property real friendContentWidth: Math.max(
-                        friendMeasureNote.implicitWidth,
-                        friendDelegateItem.hasFriendTrack ? (friendMeasureTrack.implicitWidth + 14) : 0
-                    )
-                    readonly property real friendBubbleWidth: Math.max(56, Math.min(220, friendContentWidth + 20))
-
-                    width: Math.max(72, friendBubbleWidth + 14)
+                    width: 80
                     height: friendsFlickable.height
 
-                    // Mini Thought Bubble above friend avatar (Dynamic width 56-220px, height 24 or 38px)
+                    // Mini Thought Bubble above friend avatar (Messenger Compact: 80px width, 2-line wrap, z: 10 layer trên)
                     Rectangle {
                         id: friendBubbleBox
-                        anchors.top: parent.top
-                        anchors.topMargin: 4
+                        anchors.bottom: friendAvatarWrapper.top
+                        anchors.bottomMargin: 6
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
-                        width: friendDelegateItem.friendBubbleWidth
-                        height: friendDelegateItem.hasFriendTrack ? 38 : 24
-                        radius: friendDelegateItem.hasFriendTrack ? 14 : 12
+                        z: 10
+                        width: 80
+                        height: Math.max(24, Math.min(48, friendBubbleCol.implicitHeight + 8))
+                        radius: Math.min(14, height / 2)
                         color: friendArea.containsMouse
                             ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
@@ -404,24 +414,37 @@ Item {
                         scale: friendArea.containsMouse ? 1.05 : 1.0
                         Behavior on scale { NumberAnimation { duration: 150 } }
 
-                        // Bubble connector dot
+                        // Connector Dot 1 (top dot)
                         Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: friendBubbleBox.bottom
-                            anchors.topMargin: -1
+                            anchors.top: parent.bottom
+                            anchors.topMargin: 1
                             width: 5; height: 5; radius: 2.5
                             color: friendBubbleBox.color
+                            border.color: friendBubbleBox.border.color
+                            border.width: 0.5
+                            z: 10
+                        }
+
+                        // Connector Dot 2 (bottom dot, closer to avatar)
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.bottom
+                            anchors.topMargin: 5
+                            width: 3.5; height: 3.5; radius: 1.75
+                            color: friendBubbleBox.color
+                            border.color: friendBubbleBox.border.color
+                            border.width: 0.5
+                            z: 10
                         }
 
                         ColumnLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            anchors.topMargin: friendDelegateItem.hasFriendTrack ? 4 : 2
-                            anchors.bottomMargin: friendDelegateItem.hasFriendTrack ? 4 : 2
+                            id: friendBubbleCol
+                            anchors.centerIn: parent
+                            width: parent.width - 8
                             spacing: 1
 
-                            // Line 1: Note Text
+                            // Line 1 & 2: Note Text with 2-line wrapping
                             Text {
                                 id: friendNoteText
                                 Layout.fillWidth: true
@@ -430,11 +453,14 @@ Item {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 9
                                 font.bold: true
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
+                                lineHeight: 1.05
                                 elide: Text.ElideRight
                                 horizontalAlignment: Text.AlignHCenter
                             }
 
-                            // Line 2: Attached Track (ở dưới note)
+                            // Line 2 (or 3): Attached Track (sóng âm visualizer)
                             RowLayout {
                                 id: friendTrackRow
                                 Layout.fillWidth: true
@@ -442,34 +468,69 @@ Item {
                                 visible: friendDelegateItem.hasFriendTrack
                                 Layout.alignment: Qt.AlignHCenter
 
-                                AppIcon {
-                                    source: "../assets/icons/folder-music-symbolic.svg"
-                                    iconSize: 8
-                                    color: root.accentColor
-                                }
+                                // Audio Waveform Visualizer (Sóng âm 3 cột chuyển động)
+                                Row {
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 1.5
+                                height: 8
 
-                                Text {
-                                    id: friendTrackText
-                                    Layout.fillWidth: true
-                                    text: friendDelegateItem.friendTrackStr
+                                Rectangle {
+                                    width: 1.8; height: 5; radius: 0.9
                                     color: root.accentColor
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 8
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                    horizontalAlignment: Text.AlignHCenter
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: friendDelegateItem.hasFriendTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
+                                    }
                                 }
+                                Rectangle {
+                                    width: 1.8; height: 8; radius: 0.9
+                                    color: root.accentColor
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: friendDelegateItem.hasFriendTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 1.8; height: 6; radius: 0.9
+                                    color: root.accentColor
+                                    anchors.bottom: parent.bottom
+                                    SequentialAnimation on height {
+                                        running: friendDelegateItem.hasFriendTrack
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                id: friendTrackText
+                                Layout.fillWidth: true
+                                text: friendDelegateItem.friendTrackStr
+                                color: root.accentColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 8
+                                font.bold: true
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
                             }
                         }
                     }
+                }
 
-
-                    // Friend Circular Avatar Wrapper (48x48)
+                    // Friend Circular Avatar Wrapper (48x48, z: 1 so bubble at z: 10 is on top)
                     Item {
                         id: friendAvatarWrapper
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 18
                         anchors.horizontalCenter: parent.horizontalCenter
+                        z: 1
                         width: 48; height: 48
                         scale: friendArea.containsMouse ? 1.08 : 1.0
                         Behavior on scale { NumberAnimation { duration: 150 } }
@@ -568,11 +629,11 @@ Item {
             }
 
             // ==========================================
-            // TAIL ITEM: ADD FRIEND ACTION (Compact 72px width)
+            // TAIL ITEM: ADD FRIEND ACTION (74px width)
             // ==========================================
             Item {
                 id: addFriendItem
-                width: 72
+                width: 80
                 height: friendsFlickable.height
 
                 // Placeholder space matching thought bubble height to preserve exact avatar baseline

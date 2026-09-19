@@ -391,31 +391,53 @@ Rectangle {
                                 spacing: 8
                                 visible: root.attachedTrack !== null
 
-                                // Album Art Thumbnail (28x28, R=4)
-                                Rectangle {
-                                    width: 28; height: 28; radius: 4
-                                    color: Qt.rgba(1, 1, 1, 0.08)
-                                    clip: true
+                                // Album Art Thumbnail (28x28, R=6 with GPU MultiEffect Mask)
+                                Item {
+                                    width: 28; height: 28
 
-                                    Image {
+                                    Rectangle {
+                                        id: attachedThumbMask
                                         anchors.fill: parent
-                                        source: {
-                                            if (!root.attachedTrack) return "";
-                                            if (root.attachedTrack === root.currentTrack && root.resolvedCover) return root.resolvedCover;
-                                            return root.attachedTrack.image || root.attachedTrack.cover || "";
-                                        }
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
+                                        radius: 6
+                                        color: "#ffffff"
+                                        visible: false
+                                        layer.enabled: true
                                     }
 
-                                    AppIcon {
-                                        anchors.centerIn: parent
-                                        source: "../assets/icons/folder-music-symbolic.svg"
-                                        iconSize: 12
-                                        color: root.accentColor
-                                        visible: {
-                                            var c = (root.attachedTrack === root.currentTrack && root.resolvedCover) ? root.resolvedCover : (root.attachedTrack ? (root.attachedTrack.image || root.attachedTrack.cover) : "");
-                                            return !c;
+                                    Item {
+                                        anchors.fill: parent
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            maskEnabled: true
+                                            maskSource: attachedThumbMask
+                                            autoPaddingEnabled: false
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 6
+                                            color: Qt.rgba(1, 1, 1, 0.08)
+                                        }
+
+                                        Image {
+                                            id: attachedCoverImg
+                                            anchors.fill: parent
+                                            source: {
+                                                if (!root.attachedTrack) return "";
+                                                if (root.attachedTrack === root.currentTrack && root.resolvedCover) return root.resolvedCover;
+                                                return root.attachedTrack.image || root.attachedTrack.cover || "";
+                                            }
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            visible: source != ""
+                                        }
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/folder-music-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: !attachedCoverImg.visible
                                         }
                                     }
                                 }
@@ -754,26 +776,50 @@ Rectangle {
                         anchors.rightMargin: 8
                         spacing: 12
 
-                        // Album Artwork Thumbnail (44x44, R=8, Ảnh 1)
-                        Rectangle {
+                        // Album Artwork Thumbnail (44x44, R=8 with GPU MultiEffect Mask)
+                        Item {
                             width: 44; height: 44
-                            radius: 8
-                            color: Qt.rgba(1, 1, 1, 0.08)
-                            clip: true
 
-                            Image {
+                            Rectangle {
+                                id: pickerItemMask
                                 anchors.fill: parent
-                                source: modelData.image || modelData.cover || ""
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
+                                radius: 8
+                                color: "#ffffff"
+                                visible: false
+                                layer.enabled: true
                             }
 
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 18
-                                color: root.accentColor
-                                visible: !(modelData.image || modelData.cover)
+                            Item {
+                                anchors.fill: parent
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: pickerItemMask
+                                    autoPaddingEnabled: false
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 8
+                                    color: Qt.rgba(1, 1, 1, 0.08)
+                                }
+
+                                Image {
+                                    id: pickerSongImg
+                                    anchors.fill: parent
+                                    source: modelData.image || modelData.cover || ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    visible: (modelData.image || modelData.cover || "") !== ""
+                                }
+
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/folder-music-symbolic.svg"
+                                    iconSize: 18
+                                    color: root.accentColor
+                                    visible: !pickerSongImg.visible
+                                }
                             }
                         }
 

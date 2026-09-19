@@ -89,9 +89,7 @@ def ensure_mpv():
         "--title=nutsty-audio",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
-        f"--ytdl-format={ytdl_fmt}",
-        f"--user-agent={DEFAULT_UA}",
-        "--referrer=https://www.youtube.com/"
+        f"--ytdl-format={ytdl_fmt}"
     ]
     if cookie_file and os.path.exists(cookie_file):
         cmd.append(f"--cookies-file={cookie_file}")
@@ -169,34 +167,10 @@ def resolve_media_path(file_path):
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
-        try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-            import ytmusic_helper
-            vid = file_path.replace("ytdl://", "")
-            if "watch?v=" in vid:
-                vid = vid.split("watch?v=")[1].split("&")[0]
-
-            streaming_quality = get_current_streaming_quality()
-
-            # Instant cache lookup with quality fallback
-            cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
-            cached = cache.get(f"{vid}_{streaming_quality}") or cache.get(vid)
-            if not cached:
-                for k, v in cache.items():
-                    if k.startswith(f"{vid}_") and isinstance(v, dict) and v.get("stream_url"):
-                        cached = v
-                        break
-            if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
-                return cached.get("stream_url")
-
-            # Resolve direct stream URL using authenticated format picker
-            res = ytmusic_helper.resolve_stream_url(vid, streaming_quality)
-            if res and res.get("stream_url"):
-                return res.get("stream_url")
-
-            return f"https://www.youtube.com/watch?v={vid}"
-        except Exception as e:
-            sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
+        vid = file_path.replace("ytdl://", "")
+        if "watch?v=" in vid:
+            vid = vid.split("watch?v=")[1].split("&")[0]
+        return f"ytdl://{vid}"
     return file_path
 
 def update_current_track_metadata(file_path, title="", artist="", art_url=""):
@@ -317,14 +291,11 @@ def main():
         artist_arg = sys.argv[4] if len(sys.argv) > 4 else ""
         art_arg = sys.argv[5] if len(sys.argv) > 5 else ""
 
-        # Stop current playback cleanly so old audio ceases immediately
-        # (dùng stop thay vì pause=True để MPV về idle state rõ ràng,
-        #  tránh QML polling bị confused khi poll thấy pause=True rồi thấy pause=False)
-        send_mpv_cmd(["stop"])
-
-        state_file = "/tmp/frostify_playback_state.json"
+        state_file = "/tmp/nutsty_playback_state.json"
         try:
             with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "loading", "path": file_path, "timestamp": time.time()}, f)
+            with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                 json.dump({"state": "loading", "path": file_path, "timestamp": time.time()}, f)
         except Exception:
             pass
@@ -343,6 +314,8 @@ def main():
 
         try:
             with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
+            with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                 json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
         except Exception:
             pass
@@ -371,10 +344,11 @@ def main():
                 pass
 
         if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
-            send_mpv_cmd(["stop"])
             state_file = "/tmp/nutsty_playback_state.json"
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
+                with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                     json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
             except Exception:
                 pass
@@ -388,6 +362,8 @@ def main():
 
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump({"state": "playing", "path": tracks[idx], "timestamp": time.time()}, f)
+                with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                     json.dump({"state": "playing", "path": tracks[idx], "timestamp": time.time()}, f)
             except Exception:
                 pass
@@ -409,6 +385,23 @@ def main():
         path = get_mpv_property("path")
         idle = get_mpv_property("idle-active")
         target_file = sys.argv[2] if len(sys.argv) > 2 else ""
+
+        # Check if daemon is already loading a track to prevent duplicate loading loops
+        is_already_loading = False
+        for sfile in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
+            if os.path.exists(sfile):
+                try:
+                    with open(sfile, "r", encoding="utf-8") as f:
+                        st = json.load(f)
+                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 8.0:
+                            is_already_loading = True
+                            break
+                except Exception:
+                    pass
+
+        if is_already_loading:
+            print("Track is currently loading, skipping duplicate toggle")
+            sys.exit(0)
 
         if not path or idle:
             if target_file:
@@ -460,15 +453,16 @@ def main():
 
     elif action == "status":
         is_loading = False
-        state_file = "/tmp/frostify_playback_state.json"
-        if os.path.exists(state_file):
-            try:
-                with open(state_file, "r", encoding="utf-8") as f:
-                    st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 10.0:
-                        is_loading = True
-            except Exception:
-                pass
+        for state_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
+            if os.path.exists(state_file):
+                try:
+                    with open(state_file, "r", encoding="utf-8") as f:
+                        st = json.load(f)
+                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 8.0:
+                            is_loading = True
+                            break
+                except Exception:
+                    pass
 
         props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
         batch = get_mpv_properties_batch(props)
@@ -481,8 +475,8 @@ def main():
         vol = batch.get("volume") if batch.get("volume") is not None else 100
         idle = batch.get("idle-active")
 
-        # has_file=False khi is_loading để QML không thấy stale time_pos/is_playing
-        has_file = bool(path and not idle) and not is_loading
+        # has_file is True if path exists and not idle, or if time_pos > 0 has started
+        has_file = bool(path and not idle) and (not is_loading or (time_pos is not None and time_pos > 0))
 
         status = {
             "is_playing": (pause is False) and has_file,

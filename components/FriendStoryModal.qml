@@ -333,28 +333,52 @@ Item {
                         anchors.margins: 8
                         spacing: 12
 
-                        // Track Cover Artwork
-                        Rectangle {
-                            width: 50; height: 50; radius: 8
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.24)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
-                            border.width: 1
-                            clip: true
+                        // Track Cover Artwork (50x50, R=8 with GPU MultiEffect Mask)
+                        Item {
+                            width: 50; height: 50
 
-                            Image {
-                                id: songCoverImg
+                            Rectangle {
+                                id: storySongMask
                                 anchors.fill: parent
-                                source: (root.currentFriend && root.currentFriend.track) ? (root.currentFriend.track.cover || root.currentFriend.track.image || "") : ""
-                                fillMode: Image.PreserveAspectCrop
-                                visible: status === Image.Ready && source != ""
+                                radius: 8
+                                color: "#ffffff"
+                                visible: false
+                                layer.enabled: true
                             }
 
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 20
-                                color: root.accentColor
-                                visible: !songCoverImg.visible
+                            Item {
+                                anchors.fill: parent
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: storySongMask
+                                    autoPaddingEnabled: false
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 8
+                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.24)
+                                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
+                                    border.width: 1
+                                }
+
+                                Image {
+                                    id: songCoverImg
+                                    anchors.fill: parent
+                                    source: (root.currentFriend && root.currentFriend.track) ? (root.currentFriend.track.cover || root.currentFriend.track.image || "") : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    visible: status === Image.Ready && source != ""
+                                }
+
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/folder-music-symbolic.svg"
+                                    iconSize: 20
+                                    color: root.accentColor
+                                    visible: !songCoverImg.visible
+                                }
                             }
                         }
 

@@ -160,6 +160,7 @@ Rectangle {
                 FriendsPulseBar {
                     id: friendsPulseBar
                     Layout.fillWidth: true
+                    Layout.preferredHeight: height
                     friendsNotes: root.friendsNotes
                     myLatestNote: root.myLatestNote
                     currentTrack: root.currentTrack
