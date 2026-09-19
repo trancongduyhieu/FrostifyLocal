@@ -56,8 +56,12 @@ def get_current_user() -> Dict[str, str]:
             thumbs = user.get("thumbnails", [])
             thumb = user.get("accountPhotoUrl") or (thumbs[-1].get("url") if thumbs else "")
             email = user.get("email") or user.get("channelHandle") or ""
-            if email:
-                return {"email": email.strip().lower(), "name": name or "Me", "avatar": thumb}
+            if not email and name:
+                import re
+                safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
+                email = f"{safe_name or (profile or 'user')}@gmail.com"
+            if email or name:
+                return {"email": (email or f"{profile or 'user'}@gmail.com").strip().lower(), "name": name or "Me", "avatar": thumb}
         except Exception:
             pass
 

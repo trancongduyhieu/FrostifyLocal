@@ -138,6 +138,9 @@ def get_auth_status():
             thumbs = user.get("thumbnails", [])
             thumb = thumbs[-1].get("url") if thumbs else ""
         email = user.get("email") or user.get("channelHandle") or ""
+        if not email:
+            safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
+            email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
         return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
     except Exception:
         try:
@@ -157,10 +160,22 @@ def save_auth(raw_text):
     try:
         import ytmusicapi
         from ytmusicapi.auth.browser import initialize_headers
-
         headers = dict(initialize_headers())
         headers["user-agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
-        headers["x-goog-authuser"] = "0"
+
+        # Dynamic authuser selection: user2 -> authuser 1, user3 -> authuser 2, or explicit parameter
+        target_authuser = "0"
+        if PROFILE_NAME == "user2" or "2" in PROFILE_NAME or PROFILE_NAME == "friend":
+            target_authuser = "1"
+        elif PROFILE_NAME == "user3" or "3" in PROFILE_NAME:
+            target_authuser = "2"
+
+        # Check if authuser is explicitly passed in raw_text
+        authuser_match = re.search(r'(?:x-goog-)?authuser[=:\s]+(["\']?)(\d+)\1', raw_text, re.IGNORECASE)
+        if authuser_match:
+            target_authuser = authuser_match.group(2)
+
+        headers["x-goog-authuser"] = str(target_authuser)
 
         if "\n" in raw_text and (": " in raw_text or "cookie:" in raw_text.lower()):
             for line in raw_text.splitlines():
