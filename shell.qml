@@ -139,6 +139,9 @@ Scope {
     property string searchViewMode: "results" // "results", "suggestions"
     property var searchSuggestions: []
     property var searchRecommendedSuggestions: []
+    property var trackBeforeNotePreview: null
+    property bool wasPlayingBeforeNotePreview: false
+    property var queueBeforeNotePreview: null
 
     Process {
         id: songPaletteProc
@@ -831,6 +834,10 @@ Scope {
             console.warn("Nutsty: playOnlineTrack called without valid videoId or local path", JSON.stringify(trk));
             return;
         }
+        if (win.isLoadingAudio && win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
+            // Already resolving / loading this track, do not spawn duplicate player process
+            return;
+        }
         if (startRadio === undefined) startRadio = false;
         win.trackChangeTimestamp = Date.now();
         win.currentTrack = trk;
@@ -1345,7 +1352,7 @@ Scope {
                     width: parent.width * 1.75
                     height: parent.height * 1.75
                     source: (win.currentResolvedCover !== "") ? win.currentResolvedCover : ((win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : "")
-                    sourceSize: Qt.size(64, 64)
+                    sourceSize: Qt.size(512, 512)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                 }
@@ -1816,6 +1823,7 @@ Scope {
                             isLoading: win.isLoadingHome
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
+                            isLoadingAudio: win.isLoadingAudio
                             accentColor: win.accentColor
                             accountName: win.authAccountName
                             accountThumb: win.authAccountThumb
@@ -1848,6 +1856,7 @@ Scope {
                             tracks: win.browsingTracks
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
+                            isLoadingAudio: win.isLoadingAudio
                             sectionTitle: win.mainSectionTitle
                             isLoading: win.isSearchingYT
                             albumMetadata: win.currentAlbumMetadata
@@ -1964,6 +1973,7 @@ Scope {
                             accentColor: win.accentColor
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
+                            isLoadingAudio: win.isLoadingAudio
                             viewMode: win.searchViewMode
                             backgroundSourceItem: glassCompositeBackdrop
 
@@ -2079,10 +2089,8 @@ Scope {
                     onDownloadRequested: trk => win.downloadTrack(trk)
                     onQueueUpdated: newTracks => { win.currentTracks = newTracks; }
                     onSquareCoverResolved: (url, isSquare) => {
-                        if (url && isSquare) {
+                        if (url) {
                             win.currentResolvedCover = url;
-                            win.fetchSongPalette(url);
-                        } else if (url) {
                             win.fetchSongPalette(url);
                         }
                     }
@@ -2239,14 +2247,52 @@ Scope {
             id: postNoteModal
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
-            availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.allSongs
+            availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
             userAvatar: win.authAccountThumb
             userName: win.authAccountName
             accentColor: win.accentColor
-            onCloseRequested: postNoteModal.visible = false
+            isPreviewPlaying: win.isPlaying && win.isSameTrack(postNoteModal.previewingTrack, win.currentTrack)
+            onCloseRequested: {
+                postNoteModal.restoreAudioBeforePreviewRequested();
+                postNoteModal.visible = false;
+            }
             onNoteSubmitted: (text, trk) => {
+                postNoteModal.restoreAudioBeforePreviewRequested();
                 win.postDailyNote(text, trk);
                 postNoteModal.visible = false;
+            }
+            onPreviewTrackRequested: trk => {
+                if (win.trackBeforeNotePreview === null) {
+                    win.trackBeforeNotePreview = win.currentTrack;
+                    win.wasPlayingBeforeNotePreview = win.isPlaying;
+                    win.queueBeforeNotePreview = win.currentTracks ? win.currentTracks.slice() : [];
+                }
+                postNoteModal.previewingTrack = trk;
+                win.playOnlineTrack(trk, false);
+                win.showAmberolDetails = false;
+            }
+            onTogglePreviewRequested: {
+                win.togglePlay();
+            }
+            onRestoreAudioBeforePreviewRequested: {
+                postNoteModal.previewingTrack = null;
+                if (win.trackBeforeNotePreview !== null) {
+                    if (win.queueBeforeNotePreview !== null) {
+                        win.currentTracks = win.queueBeforeNotePreview;
+                        win.queueBeforeNotePreview = null;
+                    }
+                    if (win.wasPlayingBeforeNotePreview) {
+                        win.playOnlineTrack(win.trackBeforeNotePreview, false);
+                        win.showAmberolDetails = false;
+                    } else {
+                        if (win.isPlaying) win.togglePlay();
+                        win.currentTrack = win.trackBeforeNotePreview;
+                    }
+                    win.trackBeforeNotePreview = null;
+                    win.wasPlayingBeforeNotePreview = false;
+                } else if (win.isPlaying) {
+                    win.togglePlay();
+                }
             }
         }
 
@@ -2650,6 +2696,9 @@ Scope {
 
     function playTrack(trk) {
         if (!trk) return;
+        if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
+            return;
+        }
         win.trackChangeTimestamp = Date.now();
         win.postLoadGraceTimestamp = Date.now(); // Grace period bắt đầu ngay (bài local phát tức thì)
         win.currentTrack = trk;
@@ -2676,9 +2725,29 @@ Scope {
 
     function togglePlay() {
         if (!win.currentTrack) return;
+        if (win.isLoadingAudio) {
+            // Guard: Audio stream is currently loading in MPV.
+            // Do not toggle or invert isPlaying to prevent race-condition pause loops.
+            return;
+        }
         var targetPath = win.currentTrack.path || "";
+        var isOnline = (targetPath && targetPath.startsWith("ytdl://")) || win.currentTrack.videoId;
+
+        if (!win.isPlaying) {
+            // User is pressing Play from paused/idle state
+            win.postLoadGraceTimestamp = Date.now();
+            if (isOnline && (win.currentTime === 0.0 || win.totalDuration === 0.0)) {
+                win.isLoadingAudio = true;
+                win.trackChangeTimestamp = Date.now();
+            }
+            win.isPlaying = true;
+        } else {
+            // User is pressing Pause
+            win.isPlaying = false;
+            win.isLoadingAudio = false;
+        }
+
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "toggle", targetPath]);
-        win.isPlaying = !win.isPlaying;
         pollTimer.restart();
     }
 
@@ -3113,23 +3182,23 @@ Scope {
                     var elapsed = Date.now() - win.trackChangeTimestamp;
 
                     if (win.isLoadingAudio) {
-                        // Giữ loading cho đến khi time_pos thực sự > 0 (bài đang phát)
+                        // Giữ loading cho đến khi MPV bắt đầu phát (time_pos > 0 hoặc duration > 0 và is_playing)
                         // HOẶC timeout 15s để tránh spinner treo vĩnh viễn
                         if (elapsed > 15000) {
                             win.isLoadingAudio = false;
                             win.isPlaying = false;
                             return;
                         }
-                        // Chưa có time_pos > 0 → chưa phát → giữ spinner
-                        if (!s.time_pos || s.time_pos <= 0) {
+                        var hasStarted = (s.time_pos && s.time_pos > 0) || (s.is_playing && s.duration && s.duration > 0 && !s.is_loading);
+                        if (!hasStarted) {
                             win.currentTime = 0.0;
                             return;
                         }
-                        // time_pos > 0: bài đã thực sự bắt đầu phát!
+                        // Bài đã thực sự bắt đầu phát!
                         win.isLoadingAudio = false;
                         win.postLoadGraceTimestamp = Date.now();
                         win.isPlaying = true;
-                        win.currentTime = s.time_pos;
+                        win.currentTime = s.time_pos || 0.0;
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
                     } else {
                         var postLoadElapsed = Date.now() - win.postLoadGraceTimestamp;
@@ -3149,9 +3218,19 @@ Scope {
 
 
                     // Cold-start recovery
-                    if (!win.currentTrack && s.filename && win.allTracks && win.allTracks.length > 0) {
-                        var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
-                        if (matched) win.currentTrack = matched;
+                    if (!win.currentTrack && (s.is_playing || s.is_paused || (s.time_pos && s.time_pos > 0))) {
+                        if (s.filename && win.allTracks && win.allTracks.length > 0) {
+                            var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
+                            if (matched) win.currentTrack = matched;
+                        }
+                        if (!win.currentTrack && sessionFileView.loaded && sessionFileView.text()) {
+                            try {
+                                var sTrack = JSON.parse(sessionFileView.text());
+                                if (sTrack && (sTrack.title || sTrack.name)) {
+                                    win.currentTrack = sTrack;
+                                }
+                            } catch(e) {}
+                        }
                     }
 
                     // High-precision fade trigger cho sleep timer
@@ -3246,6 +3325,27 @@ Scope {
             win.exitListeningAlong();
         }
         function openPostNoteModal() { postNoteModal.openModal(); }
+        function openPostNotePicker() { postNoteModal.openModal(); postNoteModal.isPickingTrack = true; }
+        function testNoteSearch(query: string) {
+            postNoteModal.openModal();
+            postNoteModal.isPickingTrack = true;
+            postNoteModal.trackSearchQuery = query;
+            postNoteModal.performOnlineSearch();
+        }
+        function testPreviewNoteTrack(index: int) {
+            if (postNoteModal.onlineSearchResults && postNoteModal.onlineSearchResults.length > index) {
+                var trk = postNoteModal.onlineSearchResults[index];
+                postNoteModal.previewTrackRequested(trk);
+            }
+        }
+        function testSelectNoteTrack(index: int) {
+            if (postNoteModal.onlineSearchResults && postNoteModal.onlineSearchResults.length > index) {
+                var trk = postNoteModal.onlineSearchResults[index];
+                postNoteModal.restoreAudioBeforePreviewRequested();
+                postNoteModal.attachedTrack = trk;
+                postNoteModal.isPickingTrack = false;
+            }
+        }
         function closePostNoteModal() { postNoteModal.visible = false; }
         function toggleSleepTimer() {
             if (sleepTimerPopover.isOpen) sleepTimerPopover.close();

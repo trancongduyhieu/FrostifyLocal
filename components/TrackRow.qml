@@ -18,6 +18,7 @@ Rectangle {
     property string trackPath: ""
     property bool isCurrentTrack: false
     property bool isPlaying: false
+    property bool isLoadingAudio: (typeof win !== "undefined" && win.isLoadingAudio) ? win.isLoadingAudio : false
     property var rawTrack: null
     property bool isQueueItem: false
 
@@ -52,9 +53,18 @@ Rectangle {
             width: 24
             height: 24
 
+            CircularSpinner {
+                anchors.centerIn: parent
+                size: 14
+                strokeWidth: 2.0
+                color: row.accentColor
+                visible: row.isCurrentTrack && row.isLoadingAudio
+                running: row.isCurrentTrack && row.isLoadingAudio
+            }
+
             AppIcon {
                 anchors.centerIn: parent
-                visible: mouseArea.containsMouse || row.isCurrentTrack
+                visible: !(row.isCurrentTrack && row.isLoadingAudio) && (mouseArea.containsMouse || row.isCurrentTrack)
                 source: (row.isCurrentTrack && row.isPlaying)
                         ? "../assets/icons/media-playback-pause-symbolic.svg"
                         : "../assets/icons/media-playback-start-symbolic.svg"
@@ -64,7 +74,7 @@ Rectangle {
 
             Text {
                 anchors.centerIn: parent
-                visible: !mouseArea.containsMouse && !row.isCurrentTrack
+                visible: !(row.isCurrentTrack && row.isLoadingAudio) && !mouseArea.containsMouse && !row.isCurrentTrack
                 text: String(row.indexNumber)
                 color: Theme.textSecondary
                 font.pixelSize: 12

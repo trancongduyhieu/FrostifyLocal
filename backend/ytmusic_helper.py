@@ -2945,7 +2945,10 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
         fallback_url = f"https://i.ytimg.com/vi/{clean_vid}/maxresdefault.jpg"
     elif fallback_url and "i.ytimg.com" in fallback_url:
         clean_yt = fallback_url.split("?")[0]
-        fallback_url = re.sub(r'(hqdefault|mqdefault|sddefault|default|hq720)\.jpg', 'maxresdefault.jpg', clean_yt)
+        if "maxresdefault.jpg" not in clean_yt:
+            fallback_url = re.sub(r'/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg', '/maxresdefault.jpg', clean_yt)
+        else:
+            fallback_url = clean_yt
 
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}

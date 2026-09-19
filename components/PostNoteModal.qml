@@ -27,6 +27,30 @@ Rectangle {
 
     signal closeRequested()
     signal noteSubmitted(string text, var track)
+    signal previewTrackRequested(var track)
+    signal togglePreviewRequested()
+    signal restoreAudioBeforePreviewRequested()
+
+    property var previewingTrack: null
+    property bool isPreviewPlaying: false
+
+    onIsPickingTrackChanged: {
+        if (!isPickingTrack) {
+            root.restoreAudioBeforePreviewRequested();
+        }
+    }
+
+    function isSameTrack(a, b) {
+        if (!a || !b) return false;
+        if (a.path && b.path && a.path === b.path) return true;
+        var vidA = a.videoId || (a.path && a.path.startsWith("ytdl://") ? a.path.replace("ytdl://", "") : "");
+        var vidB = b.videoId || (b.path && b.path.startsWith("ytdl://") ? b.path.replace("ytdl://", "") : "");
+        if (vidA && vidB && vidA === vidB) return true;
+        var nameA = a.title || a.name || "";
+        var nameB = b.title || b.name || "";
+        if (nameA && nameB && nameA === nameB && a.artist && b.artist && a.artist === b.artist) return true;
+        return false;
+    }
 
     function updateActiveNoteText() {
         var pt = (noteInput.preeditText !== undefined && noteInput.preeditText !== null) ? String(noteInput.preeditText).trim() : "";
@@ -57,6 +81,8 @@ Rectangle {
         root.trackSearchQuery = "";
         root.onlineSearchResults = [];
         root.isSearchingOnline = false;
+        root.previewingTrack = null;
+        root.isPreviewPlaying = false;
         noteInput.text = "";
         root.activeNoteText = "";
         root.attachedTrack = root.currentTrack;
@@ -619,6 +645,16 @@ Rectangle {
             spacing: 12
             visible: root.isPickingTrack
 
+            // Shared Mask for Picker Thumbnails (GPU FBO Optimization: 1 single shared texture)
+            Rectangle {
+                id: sharedPickerItemMask
+                width: 44; height: 44
+                radius: 8
+                color: "#ffffff"
+                visible: false
+                layer.enabled: true
+            }
+
             // TOP SEARCH HEADER (Ảnh 1: Back Arrow + Search Pill)
             RowLayout {
                 Layout.fillWidth: true
@@ -766,7 +802,8 @@ Rectangle {
                     width: pickerListView.width
                     height: 56
                     radius: 10
-                    color: songRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                    readonly property bool isThisPreviewing: root.isSameTrack(root.previewingTrack, modelData) && root.isPreviewPlaying
+                    color: songRowCard.isThisPreviewing ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : (songRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
 
                     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -776,25 +813,16 @@ Rectangle {
                         anchors.rightMargin: 8
                         spacing: 12
 
-                        // Album Artwork Thumbnail (44x44, R=8 with GPU MultiEffect Mask)
+                        // Album Artwork Thumbnail (44x44, R=8 with Shared GPU MultiEffect Mask)
                         Item {
                             width: 44; height: 44
 
-                            Rectangle {
-                                id: pickerItemMask
-                                anchors.fill: parent
-                                radius: 8
-                                color: "#ffffff"
-                                visible: false
-                                layer.enabled: true
-                            }
-
                             Item {
                                 anchors.fill: parent
-                                layer.enabled: true
+                                layer.enabled: pickerSongImg.status === Image.Ready
                                 layer.effect: MultiEffect {
                                     maskEnabled: true
-                                    maskSource: pickerItemMask
+                                    maskSource: sharedPickerItemMask
                                     autoPaddingEnabled: false
                                 }
 
@@ -830,7 +858,7 @@ Rectangle {
 
                             Text {
                                 text: modelData.title || modelData.name || "Track"
-                                color: "#ffffff"
+                                color: songRowCard.isThisPreviewing ? root.accentColor : "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -848,29 +876,52 @@ Rectangle {
                             }
                         }
 
-                        // Right: Circular Action Button (32x32, R=16, Ảnh 1)
+                        // Right: Circular Action Button (32x32, R=16, Play / Pause Preview)
                         Rectangle {
+                            id: playBtn
                             width: 32; height: 32
                             radius: 16
-                            color: songRowMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.10)
+                            color: songRowCard.isThisPreviewing ? root.accentColor : (playBtnMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.10))
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             AppIcon {
                                 anchors.centerIn: parent
-                                anchors.horizontalCenterOffset: 1
-                                source: "../assets/icons/media-playback-start-symbolic.svg"
+                                anchors.horizontalCenterOffset: songRowCard.isThisPreviewing ? 0 : 1
+                                source: songRowCard.isThisPreviewing ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                                 iconSize: 12
                                 color: "#ffffff"
+                            }
+
+                            MouseArea {
+                                id: playBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (songRowCard.isThisPreviewing) {
+                                        root.togglePreviewRequested();
+                                    } else if (root.isSameTrack(root.previewingTrack, modelData)) {
+                                        root.togglePreviewRequested();
+                                    } else {
+                                        root.previewTrackRequested(modelData);
+                                    }
+                                }
                             }
                         }
                     }
 
+                    // MouseArea for row selection (attaches song to note, stops preview)
                     MouseArea {
                         id: songRowMouse
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.right: parent.right
+                        anchors.rightMargin: 48 // leaves space for playBtn so click won't clash
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            root.restoreAudioBeforePreviewRequested();
                             root.attachedTrack = modelData;
                             root.isPickingTrack = false;
                             noteInput.forceActiveFocus();
@@ -884,6 +935,8 @@ Rectangle {
     onVisibleChanged: {
         if (visible) {
             root.openModal();
+        } else {
+            root.restoreAudioBeforePreviewRequested();
         }
     }
 }

@@ -232,8 +232,11 @@ Item {
             return url.replace(/\d+x\d+bb/, "1200x1200bb");
         }
         if (url.indexOf("i.ytimg.com") !== -1) {
+            if (url.indexOf("maxresdefault.jpg") !== -1) {
+                return url.split("?")[0];
+            }
             var clean = url.split("?")[0];
-            return clean.replace(/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg/, "maxresdefault.jpg");
+            return clean.replace(/\/(hqdefault|mqdefault|sddefault|default|hq720)\.jpg/, "/maxresdefault.jpg");
         }
         return url;
     }

@@ -11,6 +11,7 @@ Rectangle {
     property var tracks: []
     property var currentTrack: null
     property bool isPlaying: false
+    property bool isLoadingAudio: false
     property string sectionTitle: "Featured & Popular"
     property bool isLoading: false
     signal trackPlayRequested(var trk)
@@ -1175,6 +1176,7 @@ Rectangle {
 
                             readonly property bool isCurrentTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
                             readonly property bool isCurrentPlaying: isCurrentTrack && root.isPlaying
+                            readonly property bool isCurrentLoading: isCurrentTrack && root.isLoadingAudio
                             readonly property bool isSelected: !!(modelData && modelData.path && root.selectedTrackPaths.indexOf(modelData.path) !== -1)
 
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -1223,9 +1225,18 @@ Rectangle {
                                         anchors.fill: parent
                                         visible: !root.isSelectionMode
 
+                                        CircularSpinner {
+                                            anchors.centerIn: parent
+                                            size: 15
+                                            strokeWidth: 2.0
+                                            color: root.accentColor
+                                            visible: dlRow.isCurrentLoading
+                                            running: dlRow.isCurrentLoading
+                                        }
+
                                         AppIcon {
                                             anchors.centerIn: parent
-                                            visible: dlRowMouse.containsMouse || dlRow.isCurrentTrack
+                                            visible: !dlRow.isCurrentLoading && (dlRowMouse.containsMouse || dlRow.isCurrentTrack)
                                             source: dlRow.isCurrentPlaying
                                                     ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                     : "../assets/icons/media-playback-start-symbolic.svg"
@@ -1235,7 +1246,7 @@ Rectangle {
 
                                         Text {
                                             anchors.centerIn: parent
-                                            visible: !dlRowMouse.containsMouse && !dlRow.isCurrentTrack
+                                            visible: !dlRow.isCurrentLoading && !dlRowMouse.containsMouse && !dlRow.isCurrentTrack
                                             text: String(index + 1)
                                             color: Theme.textSecondary
                                             font.pixelSize: 13

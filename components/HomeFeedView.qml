@@ -18,6 +18,7 @@ Rectangle {
     property bool isLoading: false
     property var currentTrack: null
     property bool isPlaying: false
+    property bool isLoadingAudio: false
     property Item backgroundSourceItem: null
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property string accountName: ""
@@ -601,10 +602,23 @@ Rectangle {
                                             Behavior on opacity { NumberAnimation { duration: 120 } }
                                             Behavior on scale { NumberAnimation { duration: 120 } }
 
+                                            readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                            readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                            CircularSpinner {
+                                                anchors.centerIn: parent
+                                                size: 22
+                                                strokeWidth: 2.5
+                                                color: "#ffffff"
+                                                visible: parent.isThisLoading
+                                                running: parent.isThisLoading
+                                            }
+
                                             AppIcon {
                                                 anchors.centerIn: parent
                                                 anchors.horizontalCenterOffset: 1
-                                                source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
+                                                visible: !parent.isThisLoading
+                                                source: (parent.isThisTrack && root.isPlaying)
                                                         ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                         : "../assets/icons/media-playback-start-symbolic.svg"
                                                 iconSize: 20
@@ -761,11 +775,24 @@ Rectangle {
                                             anchors.fill: parent
                                             radius: 6
                                             color: Qt.rgba(0, 0, 0, 0.45)
-                                            visible: rowMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
+                                            visible: rowMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+
+                                            readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                            readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                            CircularSpinner {
+                                                anchors.centerIn: parent
+                                                size: 18
+                                                strokeWidth: 2.2
+                                                color: root.accentColor
+                                                visible: parent.isThisLoading
+                                                running: parent.isThisLoading
+                                            }
 
                                             AppIcon {
                                                 anchors.centerIn: parent
-                                                source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
+                                                visible: !parent.isThisLoading
+                                                source: (parent.isThisTrack && root.isPlaying)
                                                         ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                         : "../assets/icons/media-playback-start-symbolic.svg"
                                                 iconSize: 18
@@ -1099,11 +1126,24 @@ Rectangle {
                                     Rectangle {
                                         anchors.fill: parent
                                         color: Qt.rgba(0, 0, 0, 0.4)
-                                        visible: qpMouse.containsMouse || (root.currentTrack && root.currentTrack.path === modelData.path)
+                                        visible: qpMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+
+                                        readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                        readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                        CircularSpinner {
+                                            anchors.centerIn: parent
+                                            size: 18
+                                            strokeWidth: 2.2
+                                            color: root.accentColor
+                                            visible: parent.isThisLoading
+                                            running: parent.isThisLoading
+                                        }
 
                                         AppIcon {
                                             anchors.centerIn: parent
-                                            source: (root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying)
+                                            visible: !parent.isThisLoading
+                                            source: (parent.isThisTrack && root.isPlaying)
                                                     ? "../assets/icons/media-playback-pause-symbolic.svg"
                                                     : "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 18

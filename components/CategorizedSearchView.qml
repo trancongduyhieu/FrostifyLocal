@@ -19,6 +19,7 @@ Rectangle {
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property var currentTrack: null
     property bool isPlaying: false
+    property bool isLoadingAudio: false
     property alias searchInputText: searchTextInput.text
     readonly property bool isInputActiveFocus: searchTextInput ? searchTextInput.activeFocus : false
     property Item backgroundSourceItem: null
@@ -1692,8 +1693,18 @@ Rectangle {
                                                                 color: Qt.rgba(0, 0, 0, 0.45)
                                                                 visible: topTrackM.containsMouse || topTrackRow.isCurrent
 
+                                                                CircularSpinner {
+                                                                    anchors.centerIn: parent
+                                                                    size: 14
+                                                                    strokeWidth: 2.0
+                                                                    color: "#ffffff"
+                                                                    visible: topTrackRow.isCurrent && searchRoot.isLoadingAudio
+                                                                    running: topTrackRow.isCurrent && searchRoot.isLoadingAudio
+                                                                }
+
                                                                 AppIcon {
                                                                     anchors.centerIn: parent
+                                                                    visible: !(topTrackRow.isCurrent && searchRoot.isLoadingAudio)
                                                                     source: (topTrackRow.isCurrent && searchRoot.isPlaying) ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                                                                     iconSize: 14
                                                                     color: "#ffffff"
@@ -2380,8 +2391,18 @@ Rectangle {
                                             color: Qt.rgba(0, 0, 0, 0.45)
                                             visible: fullSongM.containsMouse || fullSongRow.isCurrent
 
+                                            CircularSpinner {
+                                                anchors.centerIn: parent
+                                                size: 14
+                                                strokeWidth: 2.0
+                                                color: "#ffffff"
+                                                visible: fullSongRow.isCurrent && searchRoot.isLoadingAudio
+                                                running: fullSongRow.isCurrent && searchRoot.isLoadingAudio
+                                            }
+
                                             AppIcon {
                                                 anchors.centerIn: parent
+                                                visible: !(fullSongRow.isCurrent && searchRoot.isLoadingAudio)
                                                 source: (fullSongRow.isCurrent && searchRoot.isPlaying) ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                                                 iconSize: 14
                                                 color: "#ffffff"
