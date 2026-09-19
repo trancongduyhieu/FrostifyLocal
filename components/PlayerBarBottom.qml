@@ -28,6 +28,9 @@ Item {
     property bool isLoadingAudio: false
     property bool isSleepTimerActive: false
     property var listeningAlongFriend: null
+    property var activeCoListenersDetails: []
+    property bool isChatInputOpen: false
+    readonly property bool isCoListeningActive: (root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined) || (root.activeCoListenersDetails && root.activeCoListenersDetails.length > 0)
     property int sleepTimerRemainingSeconds: 0
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
@@ -47,6 +50,8 @@ Item {
     signal openArtistRequested(string artistName, string channelId)
     signal sleepTimerClicked()
     signal exitListeningAlongRequested()
+    signal openCoListenersRequested(real targetX, real targetY)
+    signal sendChatMessageRequested(string messageText)
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -547,7 +552,7 @@ Item {
                 // Volume Bar
                 Item {
                     id: volSlider
-                    width: root.listeningAlongFriend ? 42 : 52
+                    width: root.isCoListeningActive ? 42 : 52
                     height: 18
                     anchors.verticalCenter: parent.verticalCenter
 
@@ -675,86 +680,81 @@ Item {
                 }
             }
 
-            // --- Listen Along Sync Indicator (Position 2: Bottom Player Bar) ---
-            Rectangle {
-                id: listenAlongBadge
-                visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+            // --- Co-Listening Section (Listener: Host Avatar + [✕] | Host: Overlapping Avatars + Live Pulse | Mini Chat Button) ---
+            Row {
+                id: coListenRow
+                visible: root.isCoListeningActive
                 anchors.verticalCenter: parent.verticalCenter
-                height: 22
-                width: Math.min(130, badgeRow.implicitWidth + 12)
-                radius: 11
-                color: Qt.rgba(16/255, 185/255, 129/255, 0.16)
-                border.color: Qt.rgba(16/255, 185/255, 129/255, 0.40)
-                border.width: 1
-                clip: true
+                spacing: 6
+                layoutDirection: Qt.LeftToRight
 
+                // Mini Chat Button [ 💬 ]
+                Rectangle {
+                    width: 24
+                    height: 24
+                    radius: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: root.isChatInputOpen ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : (chatBtnHover.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
+                    border.color: root.isChatInputOpen ? root.accentColor : (chatBtnHover.hovered ? Qt.rgba(1, 1, 1, 0.20) : "transparent")
+                    border.width: 1
+
+                    HoverHandler { id: chatBtnHover }
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/chat-message-new-symbolic.svg"
+                        iconSize: 12
+                        color: root.isChatInputOpen ? root.accentColor : (chatBtnHover.hovered ? "#ffffff" : "#b3b3b3")
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.isChatInputOpen = !root.isChatInputOpen;
+                            if (root.isChatInputOpen) chatTextInput.forceActiveFocus();
+                        }
+                    }
+                }
+
+                // 1. Phía Listener: 1 Host Avatar tròn 24px + Chấm xanh Live Pulse + Nút icon [✕] nhỏ gọn 18px Muted Rose
                 Row {
-                    id: badgeRow
-                    anchors.centerIn: parent
+                    id: listenerPill
+                    visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+                    anchors.verticalCenter: parent.verticalCenter
                     spacing: 5
 
-                    // Live Pulse Dot (Emerald 10B981)
-                    Rectangle {
-                        width: 5; height: 5; radius: 2.5
-                        color: "#10b981"
+                    Item {
+                        width: 24
+                        height: 24
                         anchors.verticalCenter: parent.verticalCenter
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            NumberAnimation { from: 0.4; to: 1.0; duration: 900; easing.type: Easing.InOutSine }
-                            NumberAnimation { from: 1.0; to: 0.4; duration: 900; easing.type: Easing.InOutSine }
-                        }
-                    }
 
-                    // Mini Friend Avatar
-                    Rectangle {
-                        width: 14; height: 14; radius: 7
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-                        anchors.verticalCenter: parent.verticalCenter
-                        clip: true
-
-                        Image {
+                        RoundedImage {
                             anchors.fill: parent
-                            source: root.listeningAlongFriend ? (root.listeningAlongFriend.avatar_url || "") : ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready && source != ""
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.listeningAlongFriend && root.listeningAlongFriend.user_name ? root.listeningAlongFriend.user_name.charAt(0).toUpperCase() : "F"
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 8
-                            font.bold: true
-                            visible: !(root.listeningAlongFriend && root.listeningAlongFriend.avatar_url)
+                            radius: 12
+                            borderColor: root.accentColor
+                            borderWidth: 1.5
+                            source: root.listeningAlongFriend ? (root.listeningAlongFriend.avatar_url || root.listeningAlongFriend.avatar || "") : ""
+                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                            placeholderColor: "#27272a"
                         }
                     }
 
-                    // Friend Name
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.listeningAlongFriend ? (root.listeningAlongFriend.user_name || "Friend") : ""
-                        color: "#10b981"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                        font.bold: true
-                        elide: Text.ElideRight
-                        width: Math.min(50, implicitWidth)
-                    }
-
-                    // Leave Button [ ✕ ]
+                    // Leave Button [✕] nhỏ gọn 18px Muted Rose
                     Rectangle {
-                        width: 14; height: 14; radius: 7
+                        width: 18
+                        height: 18
+                        radius: 9
                         anchors.verticalCenter: parent.verticalCenter
-                        color: exitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.30) : Qt.rgba(1, 1, 1, 0.08)
-                        border.color: exitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.50) : "transparent"
+                        color: exitMouse.containsMouse ? Qt.rgba(244/255, 63/255, 94/255, 0.30) : Qt.rgba(244/255, 63/255, 94/255, 0.16)
+                        border.color: Qt.rgba(244/255, 63/255, 94/255, 0.40)
                         border.width: 1
 
                         AppIcon {
                             anchors.centerIn: parent
                             source: "../assets/icons/window-close-symbolic.svg"
-                            iconSize: 7
-                            color: exitMouse.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.7)
+                            iconSize: 8
+                            color: "#fda4af"
                         }
 
                         MouseArea {
@@ -764,6 +764,181 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.exitListeningAlongRequested()
                         }
+                    }
+                }
+
+                // 2. Phía Host: Cụm Overlapping Avatars tròn 24px xếp chồng so le (-8px offset) + Chấm Live Pulse
+                Item {
+                    id: hostAvatarsCluster
+                    visible: !root.listeningAlongFriend && root.activeCoListenersDetails && root.activeCoListenersDetails.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    property int count: root.activeCoListenersDetails ? root.activeCoListenersDetails.length : 0
+                    width: count <= 1 ? 24 : (count === 2 ? 40 : 58)
+                    height: 24
+
+                    // Avatar 1
+                    RoundedImage {
+                        x: 0
+                        width: 24; height: 24; radius: 12
+                        borderColor: "#141416"
+                        borderWidth: 1.5
+                        source: (hostAvatarsCluster.count > 0 && root.activeCoListenersDetails[0]) ? (root.activeCoListenersDetails[0].avatar || "") : ""
+                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                        placeholderColor: "#27272a"
+                        visible: hostAvatarsCluster.count > 0
+                    }
+
+                    // Avatar 2 (Overlapping with -8px offset -> x = 16)
+                    RoundedImage {
+                        x: 16
+                        width: 24; height: 24; radius: 12
+                        borderColor: "#141416"
+                        borderWidth: 1.5
+                        source: (hostAvatarsCluster.count > 1 && root.activeCoListenersDetails[1]) ? (root.activeCoListenersDetails[1].avatar || "") : ""
+                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                        placeholderColor: "#27272a"
+                        visible: hostAvatarsCluster.count > 1
+                    }
+
+                    // Badge +N (if count > 2)
+                    Rectangle {
+                        x: 34
+                        width: 22; height: 22; radius: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: "#27272a"
+                        border.color: "#141416"
+                        border.width: 1.5
+                        visible: hostAvatarsCluster.count > 2
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "+" + (hostAvatarsCluster.count - 2)
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            font.weight: Font.Bold
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            var pt = hostAvatarsCluster.mapToItem(null, hostAvatarsCluster.width / 2, 0);
+                            root.openCoListenersRequested(pt.x, pt.y);
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Floating Chat Input Capsule (Danmaku Messenger Bar)
+        // =====================================================================
+        Rectangle {
+            id: chatInputCapsule
+            visible: root.isChatInputOpen && root.isCoListeningActive
+            anchors.bottom: parent.top
+            anchors.bottomMargin: 8
+            anchors.right: parent.right
+            anchors.rightMargin: 16
+            width: 260
+            height: 36
+            radius: 18
+            color: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+            border.color: root.accentColor
+            border.width: 1
+            z: 100
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 8
+                spacing: 6
+
+                AppIcon {
+                    source: "../assets/icons/chat-message-new-symbolic.svg"
+                    iconSize: 13
+                    color: root.accentColor
+                }
+
+                TextInput {
+                    id: chatTextInput
+                    Layout.fillWidth: true
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    color: "#ffffff"
+                    clip: true
+                    selectByMouse: true
+
+                    Text {
+                        anchors.fill: parent
+                        text: I18n.tr("Nhập tin nhắn bay...", "Send flying message...")
+                        color: "#71717a"
+                        font: parent.font
+                        visible: !parent.text && !parent.activeFocus
+                    }
+
+                    onAccepted: {
+                        if (text.trim() !== "") {
+                            root.sendChatMessageRequested(text.trim());
+                            text = "";
+                            root.isChatInputOpen = false;
+                        }
+                    }
+
+                    Keys.onEscapePressed: {
+                        root.isChatInputOpen = false;
+                    }
+                }
+
+                // Send button
+                Rectangle {
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    radius: 11
+                    color: sendHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+
+                    HoverHandler { id: sendHover }
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/media-playback-start-symbolic.svg"
+                        iconSize: 9
+                        color: root.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (chatTextInput.text.trim() !== "") {
+                                root.sendChatMessageRequested(chatTextInput.text.trim());
+                                chatTextInput.text = "";
+                                root.isChatInputOpen = false;
+                            }
+                        }
+                    }
+                }
+
+                // Close button
+                Rectangle {
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 18
+                    radius: 9
+                    color: "transparent"
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 8
+                        color: "#a1a1aa"
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.isChatInputOpen = false
                     }
                 }
             }

@@ -312,6 +312,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             ev_type = req_data.get("event", "leave")
             from_email = req_data.get("from_email", "").strip()
             from_name = req_data.get("from_name", "").strip()
+            from_avatar = req_data.get("from_avatar", "").strip()
             to_email = req_data.get("to_email", "").strip()
             if not to_email:
                 self._send_json({"success": False, "error": "Missing to_email"}, 400)
@@ -322,6 +323,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "event": ev_type,
                     "from_email": from_email,
                     "from_name": from_name,
+                    "from_avatar": from_avatar,
                     "to_email": to_email,
                     "data": req_data.get("data"),
                     "timestamp": time.time(),

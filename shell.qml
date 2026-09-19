@@ -78,6 +78,7 @@ Scope {
     property var myLatestNote: null
     property var listeningAlongFriend: null
     property real pendingListenAlongSeekPosition: 0.0
+    property real lastTrackSwitchTimestamp: 0.0
     property string toastMessage: ""
     property bool toastVisible: false
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
@@ -85,6 +86,8 @@ Scope {
     property bool isFetchingNotesFast: false
     property bool isSyncingFromFriend: false
     property var activeCoListeners: []
+    property var activeCoListenersDetails: []
+    readonly property bool isCoListeningActive: (win.listeningAlongFriend !== null && win.listeningAlongFriend !== undefined) || (win.activeCoListeners && win.activeCoListeners.length > 0)
     readonly property bool isContextMenuActive: trackContextMenu.isOpen || trackContextMenu.closingGuard
 
     property var playlists: []
@@ -752,12 +755,15 @@ Scope {
         interval: 1500
         repeat: false
         onTriggered: {
-            if (win.pendingListenAlongSeekPosition > 0 && win.isPlaying) {
-                var p = win.pendingListenAlongSeekPosition;
-                win.pendingListenAlongSeekPosition = 0;
-                win.seekAudio(p);
-            }
+            // Disabled: StatusProcess handles accurate seek once MPV has finished loading (!s.is_loading)
         }
+    }
+
+    function formatPlaybackTime(sec) {
+        if (isNaN(sec) || sec < 0) return "0:00";
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
     function sendSocialEventFast(ev_type, to_email, extra_data) {
@@ -772,10 +778,15 @@ Scope {
             var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
             myName = (profileN === "user2") ? "Hiếu Trần" : (profileN === "user1" ? "Shiraori" : "Nutsty User");
         }
+        var myAvatar = win.authAccountAvatar || "";
+        if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
+            myAvatar = win.myLatestNote.avatar_url;
+        }
         var payload = {
             event: ev_type,
             from_email: myEmail,
             from_name: myName,
+            from_avatar: myAvatar,
             to_email: to_email,
             data: extra_data || null
         };
@@ -860,6 +871,9 @@ Scope {
 
                             // Auto-follow and real-time co-listening synchronization (Play/Pause/Seek)
                             if (win.listeningAlongFriend && Array.isArray(parsed.notes)) {
+                                if (Date.now() - win.lastTrackSwitchTimestamp < 4000) {
+                                    return;
+                                }
                                 var targetEmail = (win.listeningAlongFriend.user_email || "").toLowerCase();
                                 var targetName = win.listeningAlongFriend.user_name;
                                 var updated = parsed.notes.find(function(f) {
@@ -876,7 +890,9 @@ Scope {
 
                                     if (npVid && curVid && npVid !== curVid) {
                                         // Host switched to a new track!
+                                        win.isSyncingFromFriend = true;
                                         win.startListeningAlong(updated);
+                                        win.isSyncingFromFriend = false;
                                     } else if (npVid && curVid && npVid === curVid) {
                                         // Same track: Reconcile Play/Pause and Seek Drift!
                                         win.isSyncingFromFriend = true;
@@ -891,7 +907,7 @@ Scope {
                                             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
                                         }
 
-                                        // 2. Real-time Seek Drift Reconciliation (Tua nhạc đồng bộ)
+                                        // 2. Real-time Seek Drift Reconciliation (Tua nhạc đồng bộ an toàn)
                                         var expectedPos = Number(np.position || 0);
                                         if (np.is_playing === true && np.timestamp) {
                                             var nowSec = Date.now() / 1000.0;
@@ -901,10 +917,14 @@ Scope {
                                                 expectedPos += elapsed;
                                             }
                                         }
-                                        var drift = Math.abs(win.currentTime - expectedPos);
-                                        if (drift > 2.0 && expectedPos >= 0) {
-                                            win.currentTime = expectedPos;
-                                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(expectedPos)]);
+                                        if (win.isLoadingAudio) {
+                                            // Đang nạp stream: Chỉ lưu vị trí chờ nạp xong, không tua MPV để tránh reset nạp lại từ đầu!
+                                            win.pendingListenAlongSeekPosition = expectedPos;
+                                        } else {
+                                            var drift = Math.abs(win.currentTime - expectedPos);
+                                            if (drift > 2.5 && expectedPos >= 0) {
+                                                win.seekLocalOnly(expectedPos);
+                                            }
                                         }
 
                                         win.isSyncingFromFriend = false;
@@ -935,27 +955,64 @@ Scope {
                                 var jEmail = (ev.from_email || "").trim().toLowerCase();
                                 if (jEmail) {
                                     var existing = win.activeCoListeners ? win.activeCoListeners.slice(0) : [];
-                                    if (existing.indexOf(jEmail) === -1) {
+                                    var isNewListener = (existing.indexOf(jEmail) === -1);
+                                    if (isNewListener) {
                                         existing.push(jEmail);
                                         win.activeCoListeners = existing;
                                     }
                                     var jName = ev.from_name || jEmail;
-                                    win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
+                                    var jAvatar = ev.from_avatar || "";
+                                    if (!jAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+                                        var matchNote = win.friendsNotes.find(function(n) {
+                                            return (n.user_email && n.user_email.toLowerCase() === jEmail) ||
+                                                   (n.user_name && n.user_name === jName);
+                                        });
+                                        if (matchNote) {
+                                            jAvatar = matchNote.avatar_url || "";
+                                            if (!ev.from_name && matchNote.user_name) jName = matchNote.user_name;
+                                        }
+                                    }
+                                    var curDetails = win.activeCoListenersDetails ? win.activeCoListenersDetails.slice(0) : [];
+                                    var existIdx = curDetails.findIndex(function(d) { return d.email === jEmail; });
+                                    if (existIdx === -1) {
+                                        curDetails.push({ email: jEmail, name: jName, avatar: jAvatar });
+                                    } else {
+                                        curDetails[existIdx] = { email: jEmail, name: jName, avatar: jAvatar };
+                                    }
+                                    win.activeCoListenersDetails = curDetails;
+
+                                    // Chỉ hiện Toast thông báo khi người nghe mới tham gia lần đầu
+                                    if (isNewListener) {
+                                        win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
+                                    }
                                     win.syncNowPlaying(true);
                                     if (win.currentTrack) {
                                         win.sendSocialEventFast(win.isPlaying ? "play" : "pause", jEmail);
                                         win.sendSocialEventFast("seek", jEmail, { position: win.currentTime });
                                     }
                                 }
-                            } else if (ev.event === "leave") {
+                            } else if (ev.event === "leave" || ev.event === "kick") {
                                 var lEmail = (ev.from_email || "").trim().toLowerCase();
-                                if (lEmail && win.activeCoListeners) {
-                                    win.activeCoListeners = win.activeCoListeners.filter(function(e) { return e !== lEmail; });
+                                if (lEmail) {
+                                    if (win.activeCoListeners) {
+                                        win.activeCoListeners = win.activeCoListeners.filter(function(e) { return (e || "").toLowerCase() !== lEmail; });
+                                    }
+                                    if (win.activeCoListenersDetails) {
+                                        win.activeCoListenersDetails = win.activeCoListenersDetails.filter(function(d) { return (d.email || "").toLowerCase() !== lEmail; });
+                                    }
+                                    if (coListenersPopover.visible) {
+                                        coListenersPopover.openAt(win.activeCoListenersDetails);
+                                    }
                                 }
                                 var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
-                                win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
-                                if (win.listeningAlongFriend && (win.listeningAlongFriend.user_email === ev.from_email || win.listeningAlongFriend.user_name === ev.from_name)) {
+                                if (win.listeningAlongFriend && (((win.listeningAlongFriend.user_email || "").toLowerCase() === lEmail) || win.listeningAlongFriend.user_name === ev.from_name)) {
                                     win.listeningAlongFriend = null;
+                                    var leaveMsg = (ev.event === "kick")
+                                        ? I18n.tr("Bạn đã bị mời ra khỏi phòng nghe cùng", "You were removed from the co-listening session")
+                                        : I18n.tr(fromName + " đã dừng phát cùng bạn", fromName + " stopped co-listening with you");
+                                    win.showToast(leaveMsg);
+                                } else {
+                                    win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                                 }
                             } else if (ev.event === "pause") {
                                 if (win.isPlaying) {
@@ -964,27 +1021,34 @@ Scope {
                                     win.isLoadingAudio = false;
                                     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
                                     win.isSyncingFromFriend = false;
-                                    var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                                    win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                                 }
+                                var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                             } else if (ev.event === "play" || ev.event === "resume") {
                                 if (!win.isPlaying && win.currentTrack) {
                                     win.isSyncingFromFriend = true;
                                     win.isPlaying = true;
                                     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
                                     win.isSyncingFromFriend = false;
-                                    var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                                    win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
                                 }
+                                var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
                             } else if (ev.event === "seek") {
                                 var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
                                 if (sPos >= 0) {
                                     win.isSyncingFromFriend = true;
-                                    win.currentTime = sPos;
-                                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sPos)]);
+                                    if (win.isLoadingAudio) {
+                                        win.pendingListenAlongSeekPosition = sPos;
+                                    } else {
+                                        win.seekLocalOnly(sPos);
+                                    }
                                     win.isSyncingFromFriend = false;
+                                    var skName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                    var timeStr = win.formatPlaybackTime(sPos);
+                                    win.showToast(I18n.tr(skName + " đã tua đến " + timeStr, skName + " seeked to " + timeStr));
                                 }
                             } else if (ev.event === "track_change") {
+                                // CHỈ NGƯỜI NGHE mới nhận lệnh chuyển bài từ Host (Host là người duy nhất điều khiển bài hát)
                                 if (ev.data && ev.data.track && win.listeningAlongFriend) {
                                     var newTrk = ev.data.track;
                                     var newVid = newTrk.videoId || newTrk.id || "";
@@ -992,10 +1056,45 @@ Scope {
                                     var myVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
                                     if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
                                     if (newVid !== myVid) {
-                                        win.playOnlineTrack(newTrk, false);
-                                        var tcName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                        win.isSyncingFromFriend = true;
+                                        win.pendingListenAlongSeekPosition = 0;
+                                        win.lastTrackSwitchTimestamp = Date.now();
+                                        if ((newTrk.path && newTrk.path.startsWith("ytdl://")) || newTrk.videoId) {
+                                            win.playOnlineTrack(newTrk, false);
+                                        } else {
+                                            win.playTrack(newTrk);
+                                        }
+                                        win.isSyncingFromFriend = false;
+                                        var tcName = ev.from_name || I18n.tr("Host", "Host");
                                         win.showToast(I18n.tr(tcName + " đã chuyển bài hát", tcName + " changed track"));
                                     }
+                                }
+                            } else if (ev.event === "track_suggest") {
+                                if (ev.data && ev.data.track) {
+                                    var sFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                    var sAvatar = ev.from_avatar || "";
+                                    if (!sAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+                                        var matchS = win.friendsNotes.find(function(n) {
+                                            return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
+                                                   (n.user_name && n.user_name === sFrom);
+                                        });
+                                        if (matchS) sAvatar = matchS.avatar_url || "";
+                                    }
+                                    suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
+                                }
+                            } else if (ev.event === "chat_message") {
+                                var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                                var cAvatar = ev.from_avatar || "";
+                                var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
+                                if (!cAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+                                    var matchC = win.friendsNotes.find(function(n) {
+                                        return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
+                                               (n.user_name && n.user_name === cFrom);
+                                    });
+                                    if (matchC) cAvatar = matchC.avatar_url || "";
+                                }
+                                if (cText) {
+                                    floatingChatContainer.spawnBubble(cFrom, cAvatar, cText);
                                 }
                             }
                         }
@@ -1096,6 +1195,25 @@ Scope {
 
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
+            var hostObj = win.listeningAlongFriend;
+            var hostTrack = hostObj.now_playing || hostObj.track;
+            var hostVid = hostTrack ? (hostTrack.videoId || hostTrack.id || "") : "";
+            if (hostVid.startsWith("yt_")) hostVid = hostVid.replace(/^yt_/, "");
+            var myVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+            if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
+
+            // Nếu người nghe chọn bài khác với bài Host đang phát: Chặn lại hoàn toàn, không đụng tới Host!
+            if ((hostVid && myVid && hostVid !== myVid) || (win.currentTrack && !win.isSameTrack(win.currentTrack, trk))) {
+                var hName = hostObj.user_name || I18n.tr("Host", "Host");
+                win.showToast(I18n.tr("Đang nghe cùng " + hName + " (Host điều khiển bài hát)", "Listening along with " + hName + " (Host controls tracks)"));
+                return;
+            }
+        }
+        if (!win.isSyncingFromFriend) {
+            win.pendingListenAlongSeekPosition = 0.0;
+            win.lastTrackSwitchTimestamp = Date.now();
+        }
         var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         if (rVid && rVid.startsWith("yt_")) {
             rVid = rVid.replace(/^yt_/, "");
@@ -1292,6 +1410,10 @@ Scope {
 
     function startListeningAlong(friend) {
         if (!friend) return;
+        var wasAlreadyListening = (win.listeningAlongFriend !== null && win.listeningAlongFriend !== undefined &&
+            ((win.listeningAlongFriend.user_email && friend.user_email && win.listeningAlongFriend.user_email.toLowerCase() === friend.user_email.toLowerCase()) ||
+             (win.listeningAlongFriend.user_name && friend.user_name && win.listeningAlongFriend.user_name === friend.user_name)));
+
         win.listeningAlongFriend = friend;
         var activeTrackObj = null;
         if (friend.now_playing && (friend.now_playing.title || friend.now_playing.name) && friend.now_playing.is_playing !== false) {
@@ -1335,21 +1457,27 @@ Scope {
 
             if (win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
                 if (targetPos > 0 && Math.abs(win.currentTime - targetPos) > 3.0) {
-                    win.seekAudio(targetPos);
+                    if (!win.isLoadingAudio) {
+                        win.seekLocalOnly(targetPos);
+                    } else {
+                        win.pendingListenAlongSeekPosition = targetPos;
+                    }
                 }
                 if (!win.isPlaying) win.togglePlay();
             } else {
                 win.pendingListenAlongSeekPosition = targetPos;
+                win.isSyncingFromFriend = true;
                 win.playOnlineTrack(trk, false);
-                listenAlongSeekSafetyTimer.targetPos = targetPos;
-                listenAlongSeekSafetyTimer.restart();
+                win.isSyncingFromFriend = false;
             }
         }
         win.isNowPlayingOpen = true;
-        var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
-        win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
-        if (friend.user_email) {
-            win.sendSocialEventFast("join", friend.user_email);
+        if (!wasAlreadyListening) {
+            var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
+            win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
+            if (friend.user_email) {
+                win.sendSocialEventFast("join", friend.user_email);
+            }
         }
     }
 
@@ -1363,6 +1491,72 @@ Scope {
         if (friendEmail) {
             win.sendSocialEventFast("leave", friendEmail);
         }
+    }
+
+    function stopAllCoListening() {
+        if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+            for (var i = 0; i < win.activeCoListeners.length; i++) {
+                win.sendSocialEventFast("leave", win.activeCoListeners[i]);
+            }
+        }
+        win.activeCoListeners = [];
+        win.activeCoListenersDetails = [];
+        win.showToast(I18n.tr("Đã dừng phát cùng tất cả bạn bè", "Ended co-listening session with all friends"));
+    }
+
+    function kickCoListener(kEmail, kName) {
+        if (!kEmail) return;
+        var cleanEmail = kEmail.toLowerCase().trim();
+        if (win.activeCoListeners) {
+            win.activeCoListeners = win.activeCoListeners.filter(function(e) { return (e || "").toLowerCase() !== cleanEmail; });
+        }
+        if (win.activeCoListenersDetails) {
+            win.activeCoListenersDetails = win.activeCoListenersDetails.filter(function(d) { return (d.email || "").toLowerCase() !== cleanEmail; });
+        }
+        win.sendSocialEventFast("kick", kEmail);
+        win.sendSocialEventFast("leave", kEmail);
+        if (coListenersPopover.visible) {
+            coListenersPopover.openAt(win.activeCoListenersDetails);
+        }
+        var displayName = kName || kEmail;
+        win.showToast(I18n.tr("Đã mời " + displayName + " ra khỏi phiên nghe cùng", "Removed " + displayName + " from co-listening session"));
+    }
+
+    function suggestTrackToHost(trk) {
+        if (!win.listeningAlongFriend || !win.listeningAlongFriend.user_email) return;
+        var hostEmail = win.listeningAlongFriend.user_email;
+        var hostName = win.listeningAlongFriend.user_name || I18n.tr("Host", "Host");
+        win.sendSocialEventFast("track_suggest", hostEmail, { track: trk });
+        win.showToast(I18n.tr("Đã gửi đề xuất bài hát cho " + hostName, "Suggested track to " + hostName));
+    }
+
+    function sendChatMessage(text) {
+        if (!text || text.trim() === "") return;
+        var cleanText = text.trim();
+        var myName = win.authAccountName;
+        if (!myName) {
+            var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+            myName = (profileN === "user2") ? "Hiếu Trần" : (profileN === "user1" ? "Shiraori" : I18n.tr("Tôi", "Me"));
+        }
+        var myAvatar = win.authAccountAvatar || "";
+        if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
+            myAvatar = win.myLatestNote.avatar_url;
+        }
+
+        // 1. Gửi cho Host (nếu mình là Listener)
+        if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
+            win.sendSocialEventFast("chat_message", win.listeningAlongFriend.user_email, { text: cleanText });
+        }
+
+        // 2. Gửi cho các Listeners (nếu mình là Host)
+        if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+            for (var ci = 0; ci < win.activeCoListeners.length; ci++) {
+                win.sendSocialEventFast("chat_message", win.activeCoListeners[ci], { text: cleanText });
+            }
+        }
+
+        // 3. Hiển thị bong bóng bay của chính mình
+        floatingChatContainer.spawnBubble(myName, myAvatar, cleanText);
     }
 
     function playArtistShuffle(artistItem, candidateTracks) {
@@ -2478,7 +2672,7 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(win.listeningAlongFriend ? 820 : 600, parent.width - 48)
+            width: Math.min(win.isCoListeningActive ? 670 : 600, parent.width - 48)
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
@@ -2500,6 +2694,7 @@ Scope {
             sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
             accentColor: win.accentColor
             listeningAlongFriend: win.listeningAlongFriend
+            activeCoListenersDetails: win.activeCoListenersDetails
 
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
@@ -2524,6 +2719,8 @@ Scope {
             onSeekRequested: sec => win.seekAudio(sec)
             onReqVolumeChange: vol => win.setVolume(vol)
             onExitListeningAlongRequested: win.exitListeningAlong()
+            onOpenCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
+            onSendChatMessageRequested: text => win.sendChatMessage(text)
             onSleepTimerClicked: {
                 if (sleepTimerPopover.isOpen) {
                     sleepTimerPopover.close();
@@ -2760,6 +2957,37 @@ Scope {
             onPlayTrackRequested: trk => {
                 win.playOnlineTrack(trk, true);
             }
+        }
+
+        CoListenersPopover {
+            id: coListenersPopover
+            accentColor: win.accentColor
+            onStopAllRequested: win.stopAllCoListening()
+            onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
+        }
+
+        SuggestTrackToast {
+            id: suggestTrackToast
+            anchors.top: parent.top
+            anchors.topMargin: 20
+            anchors.horizontalCenter: parent.horizontalCenter
+            accentColor: win.accentColor
+            onPlayNowRequested: trk => {
+                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                    win.playOnlineTrack(trk, false);
+                } else {
+                    win.playTrack(trk);
+                }
+            }
+            onEnqueueRequested: trk => {
+                win.appendTrackToQueue(trk);
+                win.showToast(I18n.tr("Đã thêm vào hàng đợi", "Added to queue"));
+            }
+        }
+
+        FloatingChatBubble {
+            id: floatingChatContainer
+            accentColor: win.accentColor
         }
 
         // Floating Toast Notification
@@ -3098,6 +3326,16 @@ Scope {
 
     function playTrack(trk) {
         if (!trk) return;
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
+            var hostObj2 = win.listeningAlongFriend;
+            var hName2 = hostObj2.user_name || I18n.tr("Host", "Host");
+            win.showToast(I18n.tr("Đang nghe cùng " + hName2 + " (Host điều khiển bài hát)", "Listening along with " + hName2 + " (Host controls tracks)"));
+            return;
+        }
+        if (!win.isSyncingFromFriend) {
+            win.pendingListenAlongSeekPosition = 0.0;
+            win.lastTrackSwitchTimestamp = Date.now();
+        }
         if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
             return;
         }
@@ -3180,6 +3418,12 @@ Scope {
     }
 
     function playNext() {
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
+            var hObj = win.listeningAlongFriend;
+            var hN = hObj.user_name || I18n.tr("Host", "Host");
+            win.showToast(I18n.tr("Chỉ Host mới có quyền chuyển bài hát", "Only the Host can skip tracks"));
+            return;
+        }
         if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
             // Guard: sleep timer instructed to stop at end of current track
             win.isSleepTimerActive = false;
@@ -3216,6 +3460,12 @@ Scope {
     }
 
     function playPrev() {
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
+            var hObj3 = win.listeningAlongFriend;
+            var hN3 = hObj3.user_name || I18n.tr("Host", "Host");
+            win.showToast(I18n.tr("Chỉ Host mới có quyền chuyển bài hát", "Only the Host can skip tracks"));
+            return;
+        }
         if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
         if (win.currentTime > 3.0) {
             win.seekAudio(0.0);
@@ -3234,14 +3484,17 @@ Scope {
         }
     }
 
+    function seekLocalOnly(sec) {
+        win.currentTime = sec;
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
+    }
+
     function seekAudio(sec) {
         win.currentTime = sec;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
         win.syncNowPlaying(true);
         if (!win.isSyncingFromFriend) {
-            if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
-                win.sendSocialEventFast("seek", win.listeningAlongFriend.user_email, { position: sec });
-            }
+            // Chỉ Host mới gửi lệnh seek tới activeCoListeners. Listener tuyệt đối không tua Host!
             if (win.activeCoListeners && win.activeCoListeners.length > 0) {
                 for (var si = 0; si < win.activeCoListeners.length; si++) {
                     win.sendSocialEventFast("seek", win.activeCoListeners[si], { position: sec });
@@ -3642,7 +3895,7 @@ Scope {
                         if (win.pendingListenAlongSeekPosition > 0) {
                             var p = win.pendingListenAlongSeekPosition;
                             win.pendingListenAlongSeekPosition = 0;
-                            win.seekAudio(p);
+                            win.seekLocalOnly(p);
                         }
                     } else {
                         if (s.is_loading) {
@@ -3762,11 +4015,27 @@ Scope {
         function testPlayUserNote() { frostifyIpc.testPlayUserNote(); }
         function testPlayFriendNote() { frostifyIpc.testPlayFriendNote(); }
         function testSeekAudio(sec: real) { frostifyIpc.testSeekAudio(sec); }
+        function testSendChatMessage(text: string) { frostifyIpc.testSendChatMessage(text); }
+        function testSuggestTrack(title: string, artist: string, videoId: string) { frostifyIpc.testSuggestTrack(title, artist, videoId); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function testSendChatMessage(text: string) {
+            win.sendChatMessage(text);
+        }
+        function testSuggestTrack(title: string, artist: string, videoId: string) {
+            var trk = {
+                title: title,
+                artist: artist,
+                videoId: videoId,
+                id: videoId,
+                path: "ytdl://" + videoId,
+                image: "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg"
+            };
+            win.suggestTrackToHost(trk);
+        }
         function testPlayUserNote() {
             if (userNoteDetailModal.attachedTrack) {
                 userNoteDetailModal.playTrackRequested(userNoteDetailModal.attachedTrack);

@@ -60,10 +60,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 ---
 
 ## 7. Friends 24h Notes & Real-time Listen Along Engine
-- **Tệp**: `backend/social_notes.py`, `backend/auth_server.py`, `shell.qml`, `components/FriendStoryModal.qml`.
+- **Tệp**: `backend/social_notes.py`, `backend/auth_server.py`, `shell.qml`, `components/FriendStoryModal.qml`, `components/CoListenersPopover.qml`, `components/FloatingChatBubble.qml`, `components/SuggestTrackToast.qml`.
 - **Cơ chế hoạt động**:
   - Ghi chú 24h & bài hát đính kèm đồng bộ qua Cloudflare Worker / auth server daemon (`port 17890`).
-  - **Đồng bộ 2 chiều thời gian thực (Bidirectional RPC)**: Hàng đợi FIFO `/api/notes/events` truyền sự kiện tức thì (`join`, `leave`, `play`, `pause`, `seek`, `track_change`) độ trễ < 50ms.
+  - **Đồng bộ 2 chiều thời gian thực (Bidirectional RPC)**: Hàng đợi FIFO `/api/notes/events` truyền sự kiện tức thì (`join`, `leave`, `play`, `pause`, `seek`, `track_change`, `track_suggest`, `chat_message`) độ trễ < 50ms.
   - **Seek Drift Reconciliation**: Tính toán `expectedPos = np.position + elapsed`. Tự động nắn chỉnh nếu độ lệch $\Delta t > 2.0\text{s}$, giữ trôi lệch thực tế $< 0.4\text{s}$.
   - **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì gửi `null` để Co-Listener dừng đúng lúc. Cờ `isSyncingFromFriend` ngăn chặn loop phản hồi ngược vô tận.
 

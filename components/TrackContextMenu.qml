@@ -207,6 +207,22 @@ Item {
                 }
             }
 
+            // Action: Suggest Track to Host (Chỉ hiển thị khi đang nghe cùng Host)
+            MenuItemButton {
+                visible: typeof win !== "undefined" && win && win.listeningAlongFriend !== null && win.listeningAlongFriend !== undefined
+                text: I18n.tr("Đề xuất cho Host", "Suggest to Host")
+                iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                textColor: root.accentColor
+                iconColor: root.accentColor
+                onClicked: {
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t && typeof win !== "undefined" && win && win.suggestTrackToHost) {
+                        win.suggestTrackToHost(t);
+                    }
+                }
+            }
+
             // Action: Add to playlist
             MenuItemButton {
                 text: I18n.tr("Thêm vào danh sách phát", "Add to playlist")

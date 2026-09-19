@@ -73,10 +73,12 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── AmberolDetailView.qml       # Màn hình chi tiết bài hát, đĩa xoay và lyric cuộn Amberol
 │   ├── AppleMusicDesktopLyrics.qml # Mẫu 2: Parametric Multi-Line Engine (5 dòng, DoF quang học, phosphor bloom)
 │   ├── CircularSpinner.qml         # Con quay loading xoay tròn phong cách Nutsty (270° arc Canvas)
+│   ├── CoListenersPopover.qml      # Popover kính mờ danh sách người nghe cùng Host & nút Dừng tất cả
 │   ├── DesktopLyricsWidget.qml     # Universal Lyrics Harness (Host Layer-Shell, kéo thả toàn màn hình, palette sync)
 │   ├── DownloadManager.qml         # State manager đồng bộ tác vụ tải xuống từ download_manager.py
 │   ├── DownloadQueuePopover.qml    # Popover quản lý hàng đợi tải xuống Minimalist Clean (#121212)
 │   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, Gacha pop, đổ bóng
+│   ├── FloatingChatBubble.qml      # Hiển thị bong bóng chat bay lướt Danmaku 4s khi nghe cùng
 │   ├── FriendsPulseBar.qml         # Thanh avatar bạn bè 24h pulse lướt ngang ở HomeFeed
 │   ├── FriendStoryModal.qml        # Modal xem ghi chú bạn bè, đĩa nhạc xoay & nút Nghe Cùng
 │   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Presentation view Gacha / Anime Pop (1-line Instrument Serif)
@@ -90,6 +92,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── PostNoteModal.qml           # Modal đăng ghi chú 24h kèm đính kèm bài hát
 │   ├── RoundedImage.qml            # Chuẩn bo góc Design System (HiDPI 2x, lazy VRAM, fallback)
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass
+│   ├── SuggestTrackToast.qml       # Toast tương tác nhận đề xuất bài hát ([Phát ngay] / [Thêm hàng đợi])
 │   ├── Theme.qml                   # Hệ thống token màu, kích thước bo góc, padding
 │   ├── TrackCard.qml               # Card hiển thị từng bài hát trong grid
 │   ├── TrackContextMenu.qml        # Menu chuột phải Dark Glass kế thừa từ Nutsty

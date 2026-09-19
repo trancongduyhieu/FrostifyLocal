@@ -325,16 +325,19 @@ def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]
     """Lấy danh sách ghi chú 24h của tất cả bạn bè (backward compatibility)."""
     return fetch_notes(worker_url).get("notes", [])
 
-def send_social_event(event_type: str, to_email: str, worker_url: Optional[str] = None) -> Dict[str, Any]:
+def send_social_event(event_type: str, to_email: str, extra_data: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events"
     user = get_current_user()
     my_email = user.get("email", "")
     my_name = user.get("name", "")
+    my_avatar = user.get("avatar_url", "") or user.get("avatar", "")
     payload = {
         "event": event_type,
         "from_email": my_email,
         "from_name": my_name,
-        "to_email": to_email
+        "from_avatar": my_avatar,
+        "to_email": to_email,
+        "data": extra_data
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"}, method="POST")

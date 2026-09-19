@@ -49,47 +49,51 @@ Item {
         visible: img.status !== Image.Ready && root.fallbackIcon !== ""
     }
 
-    // 3. Main Image with MultiEffect Mask (0 byte VRAM when not ready or radius is 0)
-    Image {
-        id: img
-        anchors.fill: parent
-        source: root.source
-        fillMode: root.fillMode
-        sourceSize: {
-            var w = root.width > 0 ? root.width : root.implicitWidth;
-            var h = root.height > 0 ? root.height : root.implicitHeight;
-            return Qt.size(Math.max(16, Math.round(w * 2)), Math.max(16, Math.round(h * 2)));
-        }
-        asynchronous: root.asynchronous
-        cache: root.cache
-        smooth: true
-        visible: status === Image.Ready
-
-        onStatusChanged: {
-            if (status === Image.Error) {
-                var srcStr = String(source);
-                if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
-                    source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
-                }
-            }
-        }
-
-        layer.enabled: img.status === Image.Ready && root.radius > 0 && root.width > 0 && root.height > 0
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: maskRect
-            autoPaddingEnabled: false
-        }
-    }
-
-    // 4. Shared Mask Source for GPU MultiEffect Shader
+    // 3. Shared Mask Source for GPU MultiEffect Shader (Must be declared before container with static layer)
     Rectangle {
         id: maskRect
         anchors.fill: parent
         radius: root.radius
         color: "#ffffff"
         visible: false
-        layer.enabled: img.status === Image.Ready && root.radius > 0 && root.width > 0 && root.height > 0
+        layer.enabled: true
+    }
+
+    // 4. Main Image Container with GPU MultiEffect Mask (0 pixel leakage outside radius)
+    Item {
+        id: imgContainer
+        anchors.fill: parent
+        visible: img.status === Image.Ready
+        layer.enabled: root.radius > 0
+        layer.effect: MultiEffect {
+            maskEnabled: root.radius > 0
+            maskSource: maskRect
+            autoPaddingEnabled: false
+        }
+
+        Image {
+            id: img
+            anchors.fill: parent
+            source: root.source
+            fillMode: root.fillMode
+            sourceSize: {
+                var w = root.width > 0 ? root.width : root.implicitWidth;
+                var h = root.height > 0 ? root.height : root.implicitHeight;
+                return Qt.size(Math.max(16, Math.round(w * 2)), Math.max(16, Math.round(h * 2)));
+            }
+            asynchronous: root.asynchronous
+            cache: root.cache
+            smooth: true
+
+            onStatusChanged: {
+                if (status === Image.Error) {
+                    var srcStr = String(source);
+                    if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
+                        source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
+                    }
+                }
+            }
+        }
     }
 
     // 5. Hairline Border Overlay
