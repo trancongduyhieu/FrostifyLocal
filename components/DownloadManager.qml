@@ -307,7 +307,7 @@ Item {
 
     FileView {
         id: statusFileView
-        path: "/tmp/nutsty_download_status.json"
+        path: "/tmp/nutsty_download_status" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
         watchChanges: true
         onFileChanged: {
             reload();

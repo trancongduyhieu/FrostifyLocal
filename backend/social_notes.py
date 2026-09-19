@@ -43,6 +43,40 @@ def get_cache_file() -> Path:
 def get_current_user() -> Dict[str, str]:
     """Lấy thông tin tài khoản hiện tại từ settings hoặc profile môi trường."""
     profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+    suffix = get_profile_suffix()
+
+    # 1. Đọc từ ytmusic_auth{suffix}.json nếu có để lấy info chính chủ
+    auth_file = get_config_dir() / f"ytmusic_auth{suffix}.json"
+    if auth_file.exists():
+        try:
+            from ytmusicapi import YTMusic
+            yt = YTMusic(str(auth_file))
+            user = yt.get_account_info()
+            name = user.get("accountName") or user.get("name") or ""
+            thumbs = user.get("thumbnails", [])
+            thumb = user.get("accountPhotoUrl") or (thumbs[-1].get("url") if thumbs else "")
+            email = user.get("email") or user.get("channelHandle") or ""
+            if email:
+                return {"email": email.strip().lower(), "name": name or "Me", "avatar": thumb}
+        except Exception:
+            pass
+
+    # 2. Đọc từ nutsty_settings{suffix}.json
+    settings_file = get_config_dir() / f"nutsty_settings{suffix}.json"
+    if not settings_file.exists() and not suffix:
+        settings_file = get_config_dir() / "nutsty_settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                email = data.get("google_email") or data.get("auth_account_email", "")
+                name = data.get("google_name") or data.get("auth_account_name", "")
+                avatar = data.get("google_avatar") or data.get("auth_account_thumb", "")
+                if email:
+                    return {"email": email.strip().lower(), "name": name or "Me", "avatar": avatar}
+        except Exception:
+            pass
+
     if profile == "friend":
         return {
             "email": "friend@gmail.com",
@@ -55,20 +89,12 @@ def get_current_user() -> Dict[str, str]:
             "name": "Minh Anh",
             "avatar": ""
         }
-
-    # Đọc từ nutsty_settings.json
-    settings_file = get_config_dir() / "nutsty_settings.json"
-    if settings_file.exists():
-        try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                email = data.get("google_email") or data.get("auth_account_email", "")
-                name = data.get("google_name") or data.get("auth_account_name", "")
-                avatar = data.get("google_avatar") or data.get("auth_account_thumb", "")
-                if email:
-                    return {"email": email, "name": name or "Me", "avatar": avatar}
-        except Exception:
-            pass
+    elif profile:
+        return {
+            "email": f"{profile}@gmail.com",
+            "name": profile.capitalize(),
+            "avatar": ""
+        }
 
     return {
         "email": "me@gmail.com",
@@ -125,12 +151,31 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
     user = get_current_user()
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes"
 
+    # Đính kèm now_playing nếu bài hát đang phát trong MPV
+    now_playing = None
+    suffix = get_profile_suffix()
+    cur_track_file = Path(f"/tmp/nutsty_current_track{suffix}.json")
+    if cur_track_file.exists():
+        try:
+            with open(cur_track_file, "r", encoding="utf-8") as f:
+                cur_meta = json.load(f)
+                if cur_meta.get("title"):
+                    now_playing = {
+                        "title": cur_meta.get("title", ""),
+                        "artist": cur_meta.get("artist", ""),
+                        "cover": cur_meta.get("artUrl", ""),
+                        "path": cur_meta.get("path", "")
+                    }
+        except Exception:
+            pass
+
     payload = {
         "user_email": user["email"],
         "user_name": user["name"],
         "avatar_url": user["avatar"],
         "note_text": note_text[:80],
-        "track": track
+        "track": track,
+        "now_playing": now_playing
     }
 
     try:

@@ -189,10 +189,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 if item.get("_expires_ts", 0) > now:
                     cleaned_vault[k] = item
                     iem = item.get("user_email", "").strip().lower()
-                    if iem in friends:
-                        valid_notes.append(item)
                     if user_email and iem == user_email:
                         my_note = item
+                    elif iem in friends or not friends or (user_email and iem != user_email):
+                        valid_notes.append(item)
             if len(cleaned_vault) != len(vault):
                 save_notes_vault(cleaned_vault)
             data = {"count": len(valid_notes), "notes": valid_notes, "my_note": my_note}
@@ -205,18 +205,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
         elif path == "/api/notes/events":
             user_email = query.get("user_email", [""])[0].strip().lower()
-            all_events = load_events_vault()
-            my_events = []
-            remaining_events = []
-            now = time.time()
-            for ev in all_events:
-                # Keep events under 10 minutes old
-                if ev.get("timestamp", 0) > now - 600:
-                    if user_email and ev.get("to_email", "").strip().lower() == user_email:
-                        my_events.append(ev)
-                    else:
-                        remaining_events.append(ev)
-            if len(all_events) != len(remaining_events):
+            events = load_events_vault()
+            my_events = [e for e in events if e.get("to_email", "").strip().lower() == user_email]
+            remaining_events = [e for e in events if e.get("to_email", "").strip().lower() != user_email]
+            if len(my_events) > 0:
                 save_events_vault(remaining_events)
             data = {"count": len(my_events), "events": my_events}
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -279,6 +271,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "avatar_url": req_data.get("avatar_url", ""),
                     "note_text": note_text[:80],
                     "track": req_data.get("track"),
+                    "now_playing": req_data.get("now_playing"),
                     "created_at": datetime.fromtimestamp(now).isoformat(),
                     "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
                     "_expires_ts": now + ttl

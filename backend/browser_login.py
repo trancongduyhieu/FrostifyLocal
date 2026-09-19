@@ -21,8 +21,11 @@ if BACKEND_DIR not in sys.path:
 
 import ytmusic_helper
 
-CDP_PORT = 19222
-PROFILE_DIR = os.path.expanduser("~/.config/nutsty/browser_auth")
+PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+
+CDP_PORT = 19222 if not PROFILE_NAME else (19222 + (abs(hash(PROFILE_NAME)) % 100) + 1)
+PROFILE_DIR = os.path.expanduser(f"~/.config/nutsty/browser_auth{PROFILE_SUFFIX}")
 
 LOGIN_URL = (
     "https://accounts.google.com/ServiceLogin?"

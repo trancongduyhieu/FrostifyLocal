@@ -11,9 +11,19 @@ import math
 import socket
 import subprocess
 
-MPV_SOCKET = "/tmp/nutsty_mpv.sock"
-STATUS_FILE = "/tmp/nutsty_status.json"
-COMMAND_FILE = "/tmp/nutsty_cmd.pipe"
+PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+
+MPV_SOCKET = f"/tmp/nutsty_mpv{PROFILE_SUFFIX}.sock"
+STATUS_FILE = f"/tmp/nutsty_status{PROFILE_SUFFIX}.json"
+COMMAND_FILE = f"/tmp/nutsty_cmd{PROFILE_SUFFIX}.pipe"
+LOG_FILE = f"/tmp/nutsty_mpv{PROFILE_SUFFIX}.log"
+LAST_PATH_FILE = f"/tmp/nutsty_last_path{PROFILE_SUFFIX}"
+ABORT_FILE = f"/tmp/nutsty_abort_fade{PROFILE_SUFFIX}"
+PLAYBACK_STATE_FILE = f"/tmp/nutsty_playback_state{PROFILE_SUFFIX}.json"
+PLAYLIST_FILE = f"/tmp/nutsty_playlist{PROFILE_SUFFIX}.m3u"
+CURRENT_TRACK_FILE = f"/tmp/nutsty_current_track{PROFILE_SUFFIX}.json"
+MPV_TITLE = f"nutsty-audio{PROFILE_SUFFIX}"
 
 YTDL_FORMAT_MAP = {
     "high_opus": "774/141/251/140/bestaudio/best",
@@ -23,7 +33,9 @@ YTDL_FORMAT_MAP = {
 }
 
 def get_current_streaming_quality():
-    settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+    settings_path = os.path.expanduser(f"~/.config/noctalia/nutsty_settings{PROFILE_SUFFIX}.json")
+    if not os.path.exists(settings_path) and not PROFILE_SUFFIX:
+        settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
     if os.path.exists(settings_path):
         try:
             with open(settings_path, "r", encoding="utf-8") as f:
@@ -36,7 +48,7 @@ DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 def is_mpv_running():
     try:
-        res = subprocess.run(["pgrep", "-f", "title=nutsty-audio"], capture_output=True, text=True)
+        res = subprocess.run(["pgrep", "-f", f"title={MPV_TITLE}"], capture_output=True, text=True)
         return res.returncode == 0 and bool(res.stdout.strip())
     except Exception:
         return False
@@ -57,7 +69,7 @@ def ensure_mpv():
     # 2. If MPV process is alive but socket is dead/unresponsive, kill it and restart fresh
     if is_mpv_running():
         try:
-            subprocess.run(["pkill", "-9", "-f", "title=nutsty-audio"], capture_output=True)
+            subprocess.run(["pkill", "-9", "-f", f"title={MPV_TITLE}"], capture_output=True)
             time.sleep(0.1)
         except Exception:
             pass
@@ -81,11 +93,11 @@ def ensure_mpv():
         "--audio-buffer=0.4",
         "--demuxer-max-bytes=16M",
         "--demuxer-max-back-bytes=4M",
-        "--title=nutsty-audio",
+        f"--title={MPV_TITLE}",
         "--loop-playlist=inf",
         "--gapless-audio=yes",
         f"--ytdl-format={ytdl_fmt}",
-        "--log-file=/tmp/nutsty_mpv.log"
+        f"--log-file={LOG_FILE}"
     ]
 
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -211,14 +223,14 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
             "artUrl": art_url,
             "path": file_path
         }
-        for track_file in ["/tmp/nutsty_current_track.json", "/tmp/frostify_current_track.json"]:
+        for track_file in [CURRENT_TRACK_FILE]:
             try:
                 with open(track_file, "w", encoding="utf-8") as f:
                     json.dump(meta, f, ensure_ascii=False)
             except Exception:
                 pass
 
-        session_file = os.path.expanduser("~/.config/noctalia/nutsty_session.json")
+        session_file = os.path.expanduser(f"~/.config/noctalia/nutsty_session{PROFILE_SUFFIX}.json")
         os.makedirs(os.path.dirname(session_file), exist_ok=True)
         with open(session_file, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
@@ -227,7 +239,7 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
         pass
 def fade_out_and_pause(duration=5.0):
     """Gradually lowers volume using a smooth Cosine fade curve, then pauses and restores volume."""
-    abort_file = "/tmp/nutsty_abort_fade"
+    abort_file = ABORT_FILE
     if os.path.exists(abort_file):
         try:
             os.remove(abort_file)
@@ -287,12 +299,10 @@ def main():
         is_online = file_path.startswith("ytdl://") or "youtube.com" in file_path or "youtu.be" in file_path
         initial_state = "loading" if is_online else "playing"
         target_vid = file_path.replace("ytdl://", "") if is_online else ""
-        state_file = "/tmp/nutsty_playback_state.json"
+        state_file = PLAYBACK_STATE_FILE
         state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": time.time()}
         try:
             with open(state_file, "w", encoding="utf-8") as f:
-                json.dump(state_payload, f)
-            with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                 json.dump(state_payload, f)
         except Exception:
             pass
@@ -313,8 +323,6 @@ def main():
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
-                with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
-                    json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
             except Exception:
                 pass
         print("Playing:", file_path)
@@ -330,7 +338,7 @@ def main():
 
     elif action == "set_playlist" and len(sys.argv) > 2:
         idx = int(sys.argv[2])
-        m3u_file = "/tmp/nutsty_playlist.m3u"
+        m3u_file = PLAYLIST_FILE
         tracks = []
         meta = None
         if len(sys.argv) > 3:
@@ -342,11 +350,9 @@ def main():
                 pass
 
         if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
-            state_file = "/tmp/nutsty_playback_state.json"
+            state_file = PLAYBACK_STATE_FILE
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
-                with open("/tmp/frostify_playback_state.json", "w", encoding="utf-8") as f:
                     json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
             except Exception:
                 pass
@@ -378,16 +384,14 @@ def main():
 
         # Check if daemon is already loading a track to prevent duplicate loading loops
         is_already_loading = False
-        for sfile in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-            if os.path.exists(sfile):
-                try:
-                    with open(sfile, "r", encoding="utf-8") as f:
-                        st = json.load(f)
-                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
-                            is_already_loading = True
-                            break
-                except Exception:
-                    pass
+        if os.path.exists(PLAYBACK_STATE_FILE):
+            try:
+                with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
+                        is_already_loading = True
+            except Exception:
+                pass
 
         if is_already_loading:
             print("Track is currently loading, skipping duplicate toggle")
@@ -399,12 +403,11 @@ def main():
                 initial_state = "loading" if is_online else "playing"
                 target_vid = target_file.replace("ytdl://", "") if is_online else ""
                 state_payload = {"state": initial_state, "path": target_file, "target_vid": target_vid, "timestamp": time.time()}
-                for sfile in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-                    try:
-                        with open(sfile, "w", encoding="utf-8") as f:
-                            json.dump(state_payload, f)
-                    except Exception:
-                        pass
+                try:
+                    with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(state_payload, f)
+                except Exception:
+                    pass
                 stream_target = resolve_media_path(target_file)
                 send_mpv_cmd(["loadfile", stream_target, "replace"])
                 send_mpv_cmd(["set_property", "pause", False])
@@ -420,12 +423,11 @@ def main():
 
     elif action == "pause":
         ensure_mpv()
-        for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-            try:
-                with open(s_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "paused", "timestamp": time.time()}, f)
-            except Exception:
-                pass
+        try:
+            with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"state": "paused", "timestamp": time.time()}, f)
+        except Exception:
+            pass
         send_mpv_cmd(["set_property", "pause", True])
         print("Paused playback")
 
@@ -436,25 +438,23 @@ def main():
         path = get_mpv_property("path")
 
         # Mark state file as playing
-        for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-            try:
-                if os.path.exists(s_file):
-                    with open(s_file, "w", encoding="utf-8") as f:
-                        json.dump({"state": "playing", "path": target_file or path or "", "timestamp": time.time()}, f)
-            except Exception:
-                pass
+        try:
+            if os.path.exists(PLAYBACK_STATE_FILE):
+                with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump({"state": "playing", "path": target_file or path or "", "timestamp": time.time()}, f)
+        except Exception:
+            pass
 
         if (not path or idle) and target_file:
             is_online = target_file.startswith("ytdl://") or "youtube.com" in target_file or "youtu.be" in target_file
             initial_state = "loading" if is_online else "playing"
             target_vid = target_file.replace("ytdl://", "") if is_online else ""
             state_payload = {"state": initial_state, "path": target_file, "target_vid": target_vid, "timestamp": time.time()}
-            for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-                try:
-                    with open(s_file, "w", encoding="utf-8") as f:
-                        json.dump(state_payload, f)
-                except Exception:
-                    pass
+            try:
+                with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(state_payload, f)
+            except Exception:
+                pass
             stream_target = resolve_media_path(target_file)
             send_mpv_cmd(["loadfile", stream_target, "replace"])
             update_current_track_metadata(target_file)
@@ -479,7 +479,7 @@ def main():
 
     elif action == "cancel_fade":
         try:
-            with open("/tmp/nutsty_abort_fade", "w") as f:
+            with open(ABORT_FILE, "w") as f:
                 f.write("1")
         except Exception:
             pass
@@ -493,18 +493,16 @@ def main():
         is_loading = False
         target_vid = ""
         target_path = ""
-        for state_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-            if os.path.exists(state_file):
-                try:
-                    with open(state_file, "r", encoding="utf-8") as f:
-                        st = json.load(f)
-                        if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
-                            is_loading = True
-                            target_vid = st.get("target_vid", "")
-                            target_path = st.get("path", "")
-                            break
-                except Exception:
-                    pass
+        if os.path.exists(PLAYBACK_STATE_FILE):
+            try:
+                with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
+                        is_loading = True
+                        target_vid = st.get("target_vid", "")
+                        target_path = st.get("path", "")
+            except Exception:
+                pass
 
         props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
         batch = get_mpv_properties_batch(props)
@@ -527,12 +525,11 @@ def main():
         # Auto-clear is_loading state once the TARGET audio has actually started playing in MPV
         if is_loading and is_target_active and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
             is_loading = False
-            for s_file in ["/tmp/nutsty_playback_state.json", "/tmp/frostify_playback_state.json"]:
-                try:
-                    with open(s_file, "w", encoding="utf-8") as f:
-                        json.dump({"state": "playing", "path": path, "target_vid": target_vid, "timestamp": time.time()}, f)
-                except Exception:
-                    pass
+            try:
+                with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump({"state": "playing", "path": path, "target_vid": target_vid, "timestamp": time.time()}, f)
+            except Exception:
+                pass
 
         has_file = bool((path or filename) and not idle and is_target_active) and (not is_loading or (time_pos is not None and time_pos > 0))
 

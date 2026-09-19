@@ -12,7 +12,7 @@ Scope {
 
     FloatingWindow {
         id: win
-        title: "Nutsty"
+        title: Quickshell.env("NUTSTY_PROFILE") ? ("Nutsty (" + Quickshell.env("NUTSTY_PROFILE") + ")") : "Nutsty"
         implicitWidth: 1280
         implicitHeight: 820
         color: "transparent"
@@ -2552,7 +2552,7 @@ Scope {
 
     FileView {
         id: settingsFileView
-        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_settings.json"
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_settings" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
         watchChanges: true
         onFileChanged: {
             reload();
@@ -2681,8 +2681,9 @@ Scope {
             streamingQuality: win.streamingQuality,
             downloadQuality: win.downloadQuality
         });
+        var profSuffix = Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "";
         Quickshell.execDetached(["python3", "-c",
-            "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings.json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
+            "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings" + profSuffix + ".json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
             data
         ]);
     }
@@ -2729,7 +2730,7 @@ Scope {
 
     FileView {
         id: authChangeFileView
-        path: "/tmp/nutsty_auth_changed"
+        path: "/tmp/nutsty_auth_changed" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "")
         watchChanges: true
         onFileChanged: {
             reload();
@@ -2740,7 +2741,7 @@ Scope {
 
     FileView {
         id: sessionFileView
-        path: "/tmp/nutsty_current_track.json"
+        path: "/tmp/nutsty_current_track" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
         watchChanges: false
     }
 

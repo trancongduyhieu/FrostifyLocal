@@ -8,14 +8,20 @@ import sys
 import json
 import time
 
+PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+
 CONFIG_DIR = os.path.expanduser("~/.config/noctalia")
-PLAYLISTS_FILE = os.path.join(CONFIG_DIR, "custom_playlists.json")
+PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"custom_playlists{PROFILE_SUFFIX}.json")
 
 def load_playlists():
-    if not os.path.exists(PLAYLISTS_FILE):
+    p = PLAYLISTS_FILE
+    if not os.path.exists(p) and not PROFILE_SUFFIX:
+        p = os.path.join(CONFIG_DIR, "custom_playlists.json")
+    if not os.path.exists(p):
         return []
     try:
-        with open(PLAYLISTS_FILE, "r", encoding="utf-8") as f:
+        with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
     except Exception:

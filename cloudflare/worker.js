@@ -51,6 +51,7 @@ export default {
             artist: (track.artist || "").substring(0, 80),
             cover: track.cover || ""
           } : null,
+          now_playing: body.now_playing || null,
           created_at: new Date(nowMs).toISOString(),
           expires_at: new Date(nowMs + ttlSeconds * 1000).toISOString()
         };

@@ -18,8 +18,11 @@ import select
 import threading
 import subprocess
 
-SOCKET_PATH = "/tmp/nutsty_download.sock"
-STATUS_FILE = "/tmp/nutsty_download_status.json"
+PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+
+SOCKET_PATH = f"/tmp/nutsty_download{PROFILE_SUFFIX}.sock"
+STATUS_FILE = f"/tmp/nutsty_download_status{PROFILE_SUFFIX}.json"
 
 STATE_NOT_DOWNLOADED = 0
 STATE_PREPARING = 1
@@ -297,7 +300,9 @@ class DownloadManager:
                     self.batch_failed = 0
 
     def _get_exported_cookie_file(self):
-        auth_file = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
+        auth_file = os.path.expanduser(f"~/.config/noctalia/ytmusic_auth{PROFILE_SUFFIX}.json")
+        if not os.path.exists(auth_file) and not PROFILE_SUFFIX:
+            auth_file = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
         if not os.path.exists(auth_file):
             return None
         try:
@@ -306,7 +311,7 @@ class DownloadManager:
             raw_cookie = data.get("cookie", "")
             if not raw_cookie:
                 return None
-            out_path = "/tmp/nutsty_yt_cookies.txt"
+            out_path = f"/tmp/nutsty_yt_cookies{PROFILE_SUFFIX}.txt"
             now = int(time.time()) + 365 * 86400
             lines = ["# Netscape HTTP Cookie File\n"]
             for item in raw_cookie.split(";"):

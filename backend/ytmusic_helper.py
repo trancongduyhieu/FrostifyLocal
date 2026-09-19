@@ -12,10 +12,14 @@ import re
 import hashlib
 import urllib.request
 
-AUTH_FILE = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
+PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+
+AUTH_FILE = os.path.expanduser(f"~/.config/noctalia/ytmusic_auth{PROFILE_SUFFIX}.json")
+AUTH_CHANGED_FILE = f"/tmp/nutsty_auth_changed{PROFILE_SUFFIX}"
 STREAM_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/stream_cache.json")
-HOME_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/home_feed.json")
-ONLINE_TRACKS_FILE = os.path.expanduser("~/.cache/nutsty/online_tracks.json")
+HOME_CACHE_FILE = os.path.expanduser(f"~/.cache/nutsty/home_feed{PROFILE_SUFFIX}.json")
+ONLINE_TRACKS_FILE = os.path.expanduser(f"~/.cache/nutsty/online_tracks{PROFILE_SUFFIX}.json")
 MOOD_CACHE_DIR = os.path.expanduser("~/.cache/nutsty/moods")
 MOOD_CATS_FILE = os.path.expanduser("~/.cache/nutsty/mood_categories.json")
 SQUARE_COVERS_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/square_covers.json")
@@ -37,7 +41,7 @@ def save_json(filepath, data):
     except Exception:
         pass
 
-DISLIKED_SONGS_FILE = os.path.expanduser("~/.config/noctalia/nutsty_disliked_songs.json")
+DISLIKED_SONGS_FILE = os.path.expanduser(f"~/.config/noctalia/nutsty_disliked_songs{PROFILE_SUFFIX}.json")
 
 def load_disliked_songs():
     return load_json(DISLIKED_SONGS_FILE, {})
@@ -195,7 +199,7 @@ def save_auth(raw_text):
 
         os.replace(temp_file, AUTH_FILE)
         try:
-            with open("/tmp/nutsty_auth_changed", "w") as f:
+            with open(AUTH_CHANGED_FILE, "w") as f:
                 f.write(str(time.time()))
         except Exception:
             pass
@@ -213,7 +217,7 @@ def logout():
         except Exception:
             pass
     try:
-        with open("/tmp/nutsty_auth_changed", "w") as f:
+        with open(AUTH_CHANGED_FILE, "w") as f:
             f.write(str(time.time()))
     except Exception:
         pass
