@@ -114,23 +114,23 @@ Item {
         Row {
             id: itemsRow
             height: parent.height
-            spacing: 16
+            spacing: 12
 
             // ==========================================
             // ITEM 0: CURRENT USER NOTE / POST NOTE (Messenger Pattern - Ảnh 2)
             // ==========================================
             Item {
                 id: userNoteItem
-                width: Math.max(88, Math.min(136, userBubbleBox.width + 12))
+                width: 72
                 height: friendsFlickable.height
 
-                // Mini Thought Bubble above user avatar
+                // Mini Thought Bubble above user avatar (Compact 64-76px)
                 Rectangle {
                     id: userBubbleBox
                     anchors.top: parent.top
                     anchors.topMargin: 4
                     anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
-                    width: Math.max(82, Math.min(130, userBubbleText.implicitWidth + 24))
+                    width: Math.max(64, Math.min(76, userBubbleText.implicitWidth + 18))
                     height: 24
                     radius: 12
                     color: userMouseArea.containsMouse
@@ -154,14 +154,14 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 4
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 3
 
                         AppIcon {
                             Layout.alignment: Qt.AlignVCenter
                             source: "../assets/icons/folder-music-symbolic.svg"
-                            iconSize: 10
+                            iconSize: 9
                             color: root.accentColor
                             visible: root.myLatestNote && root.myLatestNote.track !== null && root.myLatestNote.track !== undefined
                         }
@@ -169,10 +169,10 @@ Item {
                         Text {
                             id: userBubbleText
                             Layout.fillWidth: true
-                            text: root.myLatestNote ? (root.myLatestNote.note_text || "") : I18n.tr("Chia sẻ suy nghĩ...", "Share a thought...")
+                            text: root.myLatestNote ? (root.myLatestNote.note_text || "") : I18n.tr("Chia sẻ...", "Share...")
                             color: root.myLatestNote ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                             font.family: Theme.fontFamily
-                            font.pixelSize: 10
+                            font.pixelSize: 9
                             font.bold: root.myLatestNote !== null
                             elide: Text.ElideRight
                         }
@@ -200,14 +200,31 @@ Item {
                         border.width: 1.5
                     }
 
-                    // Avatar Image or Fallback Letter
+                    // Circle Mask for User Avatar (Hardware GPU layer effect mask)
+                    Rectangle {
+                        id: userAvatarMask
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 22
+                        color: "#ffffff"
+                        visible: false
+                        layer.enabled: true
+                    }
+
+                    // Masked Container: Zero Pixel Leakage Outside Circle
                     Item {
                         anchors.fill: parent
                         anchors.margins: 2
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: userAvatarMask
+                            autoPaddingEnabled: false
+                        }
 
+                        // Background fallback
                         Rectangle {
                             anchors.fill: parent
-                            radius: 22
                             color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
 
                             Text {
@@ -220,26 +237,15 @@ Item {
                             }
                         }
 
+                        // Profile Image
                         Image {
                             id: userAvatarImg
                             anchors.fill: parent
                             source: root.userAvatar || ""
                             fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready && source != ""
-                        }
-
-                        MultiEffect {
-                            anchors.fill: userAvatarImg
-                            source: userAvatarImg
-                            maskEnabled: true
-                            maskThresholdMin: 0.5
-                            maskSpreadAtMin: 1.0
-                            visible: userAvatarImg.visible
-                            maskSource: Rectangle {
-                                width: 44; height: 44
-                                radius: 22
-                                color: "#000000"
-                            }
+                            visible: root.userAvatar !== ""
+                            asynchronous: true
+                            cache: true
                         }
                     }
 
@@ -272,7 +278,7 @@ Item {
                     font.pixelSize: 9
                     font.bold: true
                     elide: Text.ElideRight
-                    width: 76
+                    width: 70
                     horizontalAlignment: Text.AlignHCenter
                 }
 
@@ -286,22 +292,22 @@ Item {
             }
 
             // ==========================================
-            // ITEMS 1..N: FRIENDS NOTES
+            // ITEMS 1..N: FRIENDS NOTES (Compact 72px width)
             // ==========================================
             Repeater {
                 model: root.friendsNotes
 
                 delegate: Item {
-                    width: Math.max(88, Math.min(136, friendBubbleBox.width + 12))
+                    width: 72
                     height: friendsFlickable.height
 
-                    // Mini Thought Bubble above friend avatar
+                    // Mini Thought Bubble above friend avatar (Compact 64-76px)
                     Rectangle {
                         id: friendBubbleBox
                         anchors.top: parent.top
                         anchors.topMargin: 4
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
-                        width: Math.max(78, Math.min(130, friendNoteText.implicitWidth + 24))
+                        width: Math.max(64, Math.min(76, friendNoteText.implicitWidth + 18))
                         height: 24
                         radius: 12
                         color: friendArea.containsMouse
@@ -327,12 +333,12 @@ Item {
                             anchors.fill: parent
                             anchors.leftMargin: 6
                             anchors.rightMargin: 6
-                            spacing: 4
+                            spacing: 3
 
                             AppIcon {
                                 Layout.alignment: Qt.AlignVCenter
                                 source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 10
+                                iconSize: 9
                                 color: root.accentColor
                                 visible: modelData.track !== null && modelData.track !== undefined
                             }
@@ -343,7 +349,7 @@ Item {
                                 text: modelData.note_text || ""
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 10
+                                font.pixelSize: 9
                                 font.bold: true
                                 elide: Text.ElideRight
                             }
@@ -371,14 +377,30 @@ Item {
                             border.width: 1.5
                         }
 
-                        // Avatar Image or Fallback Letter
+                        // Friend Circle Mask (Hardware GPU layer effect mask)
+                        Rectangle {
+                            id: friendAvatarMask
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            radius: 22
+                            color: "#ffffff"
+                            visible: false
+                            layer.enabled: true
+                        }
+
+                        // Masked Container
                         Item {
                             anchors.fill: parent
                             anchors.margins: 2
+                            layer.enabled: true
+                            layer.effect: MultiEffect {
+                                maskEnabled: true
+                                maskSource: friendAvatarMask
+                                autoPaddingEnabled: false
+                            }
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: 22
                                 color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
 
                                 Text {
@@ -396,21 +418,9 @@ Item {
                                 anchors.fill: parent
                                 source: modelData.avatar_url || ""
                                 fillMode: Image.PreserveAspectCrop
-                                visible: status === Image.Ready && source != ""
-                            }
-
-                            MultiEffect {
-                                anchors.fill: friendAvatarImg
-                                source: friendAvatarImg
-                                maskEnabled: true
-                                maskThresholdMin: 0.5
-                                maskSpreadAtMin: 1.0
-                                visible: friendAvatarImg.visible
-                                maskSource: Rectangle {
-                                    width: 44; height: 44
-                                    radius: 22
-                                    color: "#000000"
-                                }
+                                visible: (modelData.avatar_url || "") !== ""
+                                asynchronous: true
+                                cache: true
                             }
                         }
 
@@ -435,7 +445,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: 9
                         elide: Text.ElideRight
-                        width: 74
+                        width: 70
                         horizontalAlignment: Text.AlignHCenter
                     }
 
@@ -450,11 +460,11 @@ Item {
             }
 
             // ==========================================
-            // TAIL ITEM: ADD FRIEND ACTION (Tích Hợp Vào Cuối Hàng)
+            // TAIL ITEM: ADD FRIEND ACTION (Compact 72px width)
             // ==========================================
             Item {
                 id: addFriendItem
-                width: 76
+                width: 72
                 height: friendsFlickable.height
 
                 // Placeholder space matching thought bubble height to preserve exact avatar baseline

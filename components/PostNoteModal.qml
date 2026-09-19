@@ -37,15 +37,15 @@ Rectangle {
         }
     }
 
-    // Centered Modal Dialog Card (Organic Chromatic Liquid Glass)
+    // Centered Modal Dialog Card (Planar Modern Canvas R=12)
     Rectangle {
         id: dialogCard
-        width: 480
-        height: 350
+        width: 460
+        height: 230
         anchors.centerIn: parent
-        radius: 18
-        color: Qt.rgba(0.05 + root.accentColor.r * 0.08, 0.05 + root.accentColor.g * 0.08, 0.07 + root.accentColor.b * 0.12, 0.96)
-        border.color: Qt.rgba(255, 255, 255, 0.16)
+        radius: 12
+        color: Qt.rgba(0.06 + root.accentColor.r * 0.06, 0.06 + root.accentColor.g * 0.06, 0.08 + root.accentColor.b * 0.08, 0.97)
+        border.color: Qt.rgba(255, 255, 255, 0.12)
         border.width: 1
 
         // Prevent clicking background through modal
@@ -56,8 +56,8 @@ Rectangle {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 24
-            spacing: 16
+            anchors.margins: 20
+            spacing: 14
 
             // Header Row
             RowLayout {
@@ -65,12 +65,12 @@ Rectangle {
                 spacing: 12
 
                 Column {
-                    spacing: 4
+                    spacing: 3
                     Text {
-                        text: I18n.tr("Chia Sẻ Khoảnh Khắc 24 Giờ", "Share 24h Music Capsule")
+                        text: I18n.tr("Chia Sẻ Khoảnh Khắc 24 Giờ", "Share 24h Note")
                         color: "#ffffff"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 17
+                        font.pixelSize: 16
                         font.bold: true
                     }
                     Text {
@@ -83,9 +83,9 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                // Close Button (Planar square icon button R=6)
+                // Close Button (Planar square icon button R=4)
                 Rectangle {
-                    width: 28; height: 28; radius: 6
+                    width: 26; height: 26; radius: 4
                     color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.18) : Qt.rgba(1, 1, 1, 0.05)
                     border.color: closeArea.containsMouse ? Qt.rgba(244, 63, 94, 0.40) : Qt.rgba(1, 1, 1, 0.10)
                     border.width: 1
@@ -93,7 +93,7 @@ Rectangle {
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 12
+                        iconSize: 11
                         color: closeArea.containsMouse ? "#fda4af" : Qt.rgba(1, 1, 1, 0.70)
                     }
 
@@ -107,13 +107,13 @@ Rectangle {
                 }
             }
 
-            // Text Input Box (Max 60 chars - Planar R=8)
+            // Text Input Box (Max 60 chars - Planar Rectangular R=4)
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 88
-                radius: 8
+                Layout.fillHeight: true
+                radius: 4
                 color: Qt.rgba(0.02, 0.02, 0.04, 0.75)
-                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(1, 1, 1, 0.08)
+                border.color: noteInput.activeFocus ? root.accentColor : Qt.rgba(1, 1, 1, 0.09)
                 border.width: 1
 
                 ColumnLayout {
@@ -169,97 +169,18 @@ Rectangle {
                 }
             }
 
-            // Attached Track Preview Card (Planar R=8, concentric R_con=4 on cover, NO CAPSULE)
-            Rectangle {
-                Layout.fillWidth: true
-                height: 52
-                radius: 8
-                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                border.width: 1
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 12
-
-                    // Album Cover Image with fallback icon
-                    Rectangle {
-                        width: 36; height: 36; radius: 4
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-                        border.width: 1
-                        clip: true
-
-                        Image {
-                            id: attachedTrackImg
-                            anchors.fill: parent
-                            source: root.getTrackCover()
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready && source != ""
-                        }
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/folder-music-symbolic.svg"
-                            iconSize: 16
-                            color: root.accentColor
-                            visible: !attachedTrackImg.visible
-                        }
-                    }
-
-                    Column {
-                        Layout.fillWidth: true
-                        spacing: 2
-                        Text {
-                            text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Không rõ bài hát", "Unknown Song")) : I18n.tr("Không có bài hát nào đang phát", "No track currently playing")
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                            elide: Text.ElideRight
-                            width: 290
-                        }
-                        Text {
-                            text: root.currentTrack ? (root.currentTrack.artist || I18n.tr("Đang phát trong Nutsty", "Playing in Nutsty")) : I18n.tr("Bật nhạc để đính kèm vào note", "Play a song to attach to note")
-                            color: Qt.rgba(1, 1, 1, 0.6)
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                            width: 290
-                        }
-                    }
-
-                    // Attached Badge (Planar badge R=4, strictly NO pill/capsule)
-                    Rectangle {
-                        width: 68; height: 22; radius: 4
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
-                        border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.tr("Đính Kèm", "Attached")
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            font.bold: true
-                        }
-                    }
-                }
-            }
-
-            // Action Buttons Row (Standard rectangular buttons R=8 per ui-layout-design-rules)
+            // Action Buttons Row (Crisp Rectangular buttons R=4, 0% pill/capsule)
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
 
                 Item { Layout.fillWidth: true }
 
-                // Cancel Button (Planar modern button R=8)
+                // Cancel Button (Crisp rectangular button R=4)
                 Rectangle {
-                    width: 88; height: 36; radius: 8
-                    color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.04)
-                    border.color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
+                    width: 80; height: 34; radius: 4
+                    color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.05)
+                    border.color: cancelArea.containsMouse ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(1, 1, 1, 0.12)
                     border.width: 1
 
                     Text {
@@ -279,10 +200,10 @@ Rectangle {
                     }
                 }
 
-                // Submit Button (Planar modern button R=8, NO pill)
+                // Submit Button (Crisp rectangular button R=4, NO pill)
                 Rectangle {
-                    width: 154; height: 36; radius: 8
-                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                    width: 144; height: 34; radius: 4
+                    color: submitArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.50) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.32)
                     border.color: root.accentColor
                     border.width: 1
                     scale: submitArea.containsMouse ? 1.02 : 1.0
@@ -308,7 +229,7 @@ Rectangle {
                         onClicked: {
                             var t = noteInput.text.trim();
                             if (!t) return;
-                            root.noteSubmitted(t, root.currentTrack);
+                            root.noteSubmitted(t, null);
                         }
                     }
                 }
