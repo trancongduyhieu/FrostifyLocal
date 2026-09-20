@@ -242,21 +242,21 @@ export default {
           const d = parts[1].trim();
           if (d.length > 0) {
             // Exact tag or partial tag
-            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE tag LIKE ? LIMIT 20";
-            binds = [`${u}#${d}%`];
+            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(tag) LIKE ? LIMIT 20";
+            binds = [`${u.toLowerCase()}#${d}%`];
           } else {
-            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE username LIKE ? LIMIT 20";
-            binds = [`%${u}%`];
+            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(username) LIKE ? LIMIT 20";
+            binds = [`%${u.toLowerCase()}%`];
           }
         } else if (/^\d{1,4}$/.test(q)) {
           // Searching by discriminator
           const padDisc = q.padStart(4, "0");
-          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE discriminator = ? OR username LIKE ? LIMIT 20";
-          binds = [padDisc, `%${q}%`];
+          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE discriminator = ? OR LOWER(username) LIKE ? LIMIT 20";
+          binds = [padDisc, `%${q.toLowerCase()}%`];
         } else {
           // General search by username
-          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE username LIKE ? LIMIT 20";
-          binds = [`%${q}%`];
+          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(username) LIKE ? LIMIT 20";
+          binds = [`%${q.toLowerCase()}%`];
         }
 
         const stmt = db.prepare(querySql);
@@ -597,6 +597,199 @@ export default {
           .run();
 
         return jsonResponse({ success: true });
+      }
+
+      // 10. POST 24H NOTE
+      if (path === "/api/notes" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key, note_text, track, now_playing } = body;
+
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        const cleanText = (note_text || "").trim().slice(0, 80);
+        let trackObj = track;
+        if (typeof track === "object" && track !== null) {
+          if (!track.title && !track.name && !track.id) {
+            trackObj = null;
+          }
+        } else {
+          trackObj = null;
+        }
+
+        if (!cleanText && !trackObj) {
+          return errorResponse("Either text or track is required", 400);
+        }
+
+        const now = Date.now();
+        const ttl = 86400 * 1000;
+        const expiresAt = now + ttl;
+        const noteId = "nte_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const trackJson = trackObj ? JSON.stringify(trackObj) : "";
+        const nowPlayingStr = now_playing ? (typeof now_playing === "object" ? JSON.stringify(now_playing) : String(now_playing)) : "";
+
+        await db
+          .prepare(
+            `INSERT INTO nutsty_notes (id, user_id, tag, username, avatar_url, note_text, track, now_playing, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+               tag = excluded.tag,
+               username = excluded.username,
+               avatar_url = excluded.avatar_url,
+               note_text = excluded.note_text,
+               track = excluded.track,
+               now_playing = excluded.now_playing,
+               created_at = excluded.created_at,
+               expires_at = excluded.expires_at`
+          )
+          .bind(noteId, user_id, caller.tag, caller.username, caller.avatar_url || "", cleanText, trackJson, nowPlayingStr, now, expiresAt)
+          .run();
+
+        const savedNote = {
+          id: noteId,
+          user_id: user_id,
+          user_email: caller.tag.toLowerCase(),
+          tag: caller.tag,
+          user_name: caller.username,
+          avatar_url: caller.avatar_url || "",
+          note_text: cleanText,
+          track: trackObj,
+          now_playing: now_playing || caller.now_playing || "",
+          created_at: new Date(now).toISOString(),
+          expires_at: new Date(expiresAt).toISOString(),
+          _expires_ts: expiresAt / 1000,
+        };
+
+        return jsonResponse({ success: true, note: savedNote });
+      }
+
+      // 11. GET 24H NOTES (Friends & My Note)
+      if (path === "/api/notes" && request.method === "GET") {
+        const userId = url.searchParams.get("user_id");
+        const secretKey = url.searchParams.get("secret_key");
+
+        const caller = await authenticateUser(db, userId, secretKey);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        const now = Date.now();
+
+        // 1. Fetch caller's active note
+        const myNoteRow = await db
+          .prepare("SELECT * FROM nutsty_notes WHERE user_id = ? AND expires_at > ?")
+          .bind(userId, now)
+          .first();
+
+        let myNote = null;
+        if (myNoteRow) {
+          let parsedTrack = null;
+          try {
+            parsedTrack = myNoteRow.track ? JSON.parse(myNoteRow.track) : null;
+          } catch (_) {}
+          myNote = {
+            id: myNoteRow.id,
+            user_id: myNoteRow.user_id,
+            user_email: myNoteRow.tag.toLowerCase(),
+            tag: myNoteRow.tag,
+            user_name: myNoteRow.username,
+            avatar_url: myNoteRow.avatar_url,
+            note_text: myNoteRow.note_text,
+            track: parsedTrack,
+            now_playing: myNoteRow.now_playing || caller.now_playing || "",
+            created_at: new Date(myNoteRow.created_at).toISOString(),
+            expires_at: new Date(myNoteRow.expires_at).toISOString(),
+            _expires_ts: myNoteRow.expires_at / 1000,
+          };
+        }
+
+        // 2. Fetch accepted friends and their notes
+        const friendsWithNotes = await db
+          .prepare(
+            `SELECT u.id as user_id, u.username, u.discriminator, u.tag, u.avatar_url, u.now_playing,
+                    n.id as note_id, n.note_text, n.track as note_track, n.created_at as note_created_at, n.expires_at as note_expires_at
+             FROM nutsty_friendships f
+             JOIN nutsty_users u ON u.id = CASE WHEN f.user_id_1 = ? THEN f.user_id_2 ELSE f.user_id_1 END
+             LEFT JOIN nutsty_notes n ON n.user_id = u.id AND n.expires_at > ?
+             WHERE (f.user_id_1 = ? OR f.user_id_2 = ?) AND f.status = 'accepted'
+             ORDER BY u.last_active_at DESC`
+          )
+          .bind(userId, now, userId, userId)
+          .all();
+
+        const notesList = (friendsWithNotes.results || []).map((row) => {
+          let trk = null;
+          if (row.note_track) {
+            try {
+              trk = JSON.parse(row.note_track);
+            } catch (_) {}
+          }
+          return {
+            user_email: row.tag ? row.tag.toLowerCase() : "",
+            user_name: row.username,
+            avatar_url: row.avatar_url || "",
+            tag: row.tag,
+            note_text: row.note_text || "",
+            track: trk,
+            created_at: row.note_created_at ? new Date(row.note_created_at).toISOString() : 0,
+            is_friend: true,
+            now_playing: row.now_playing || "",
+          };
+        });
+
+        return jsonResponse({
+          success: true,
+          count: notesList.length,
+          notes: notesList,
+          my_note: myNote,
+        });
+      }
+
+      // 12. DELETE 24H NOTE
+      if (path === "/api/notes/delete" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key } = body;
+
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        await db.prepare("DELETE FROM nutsty_notes WHERE user_id = ?").bind(user_id).run();
+        return jsonResponse({ success: true });
+      }
+
+      // 13. POST SOCIAL EVENT (Danmaku, reactions, suggestions)
+      if (path === "/api/notes/events" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key, event, to_user_id, to_tag, data } = body;
+
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        let targetId = to_user_id;
+        if (!targetId && to_tag) {
+          const t = await db.prepare("SELECT id FROM nutsty_users WHERE tag = ?").bind(to_tag).first();
+          if (t) targetId = t.id;
+        }
+
+        if (!targetId) return errorResponse("Recipient user_id or tag required", 400);
+
+        const eventId = "evt_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const now = Date.now();
+        const payloadStr = JSON.stringify({
+          from_id: caller.id,
+          from_name: caller.username,
+          from_tag: caller.tag,
+          from_avatar: caller.avatar_url || "",
+          data: data,
+        });
+
+        await db
+          .prepare(
+            `INSERT INTO nutsty_events (id, to_user_id, from_user_id, event_type, payload, consumed, created_at)
+             VALUES (?, ?, ?, ?, ?, 0, ?)`
+          )
+          .bind(eventId, targetId, user_id, event || "chat_bubble", payloadStr, now)
+          .run();
+
+        return jsonResponse({ success: true, event_id: eventId });
       }
 
       return errorResponse("Endpoint not found", 404);

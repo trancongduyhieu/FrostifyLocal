@@ -7,7 +7,7 @@ import os
 import sys
 import json
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 if BACKEND_DIR not in sys.path:
@@ -370,7 +370,19 @@ class CloudRelayEngine:
 class CloudRelayClient:
     """Client bridge: forwards to Cloudflare Worker if configured, else uses CloudRelayEngine."""
     def __init__(self, relay_url=None):
-        self.relay_url = relay_url or os.getenv("NUTSTY_CLOUD_RELAY_URL", "local").strip()
+        self.relay_url = relay_url or os.getenv("NUTSTY_CLOUD_RELAY_URL", "").strip()
+        if not self.relay_url:
+            try:
+                xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+                settings_p = os.path.join(xdg, "noctalia", "nutsty_settings.json")
+                if os.path.exists(settings_p):
+                    with open(settings_p, "r", encoding="utf-8") as sf:
+                        sdata = json.load(sf)
+                        self.relay_url = (sdata.get("cloud_relay_url") or sdata.get("relay_url") or "").strip()
+            except Exception:
+                pass
+        if not self.relay_url:
+            self.relay_url = "local"
         self.local_engine = CloudRelayEngine()
 
     def is_external(self):
@@ -385,10 +397,10 @@ class CloudRelayClient:
             url += "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, method=method)
         req.add_header("Content-Type", "application/json")
-        req.add_header("User-Agent", "NutstyClient/1.0")
+        req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0")
         body = json.dumps(data).encode("utf-8") if data is not None else None
         try:
-            with urllib.request.urlopen(req, data=body, timeout=3.0) as resp:
+            with urllib.request.urlopen(req, data=body, timeout=5.0) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as e:
             sys.stderr.write(f"[CloudRelayClient request failed]: {e}\n")
@@ -486,6 +498,53 @@ class CloudRelayClient:
                 return res
         return self.local_engine.update_presence(user_id, secret_key, now_playing)
 
+    def publish_note(self, user_id, secret_key, note_text, track=None, now_playing=None):
+        if self.is_external():
+            res = self._http_request("POST", "/api/notes", data={
+                "user_id": user_id,
+                "secret_key": secret_key,
+                "note_text": note_text,
+                "track": track,
+                "now_playing": now_playing
+            })
+            if res and res.get("success"):
+                return res
+        return None
+
+    def get_notes(self, user_id, secret_key):
+        if self.is_external():
+            res = self._http_request("GET", "/api/notes", params={
+                "user_id": user_id,
+                "secret_key": secret_key
+            })
+            if res and res.get("success"):
+                return res
+        return None
+
+    def delete_note(self, user_id, secret_key):
+        if self.is_external():
+            res = self._http_request("POST", "/api/notes/delete", data={
+                "user_id": user_id,
+                "secret_key": secret_key
+            })
+            if res and res.get("success"):
+                return res
+        return None
+
+    def send_note_event(self, user_id, secret_key, to_user_id=None, to_tag=None, event="chat_bubble", data=None):
+        if self.is_external():
+            res = self._http_request("POST", "/api/notes/events", data={
+                "user_id": user_id,
+                "secret_key": secret_key,
+                "to_user_id": to_user_id,
+                "to_tag": to_tag,
+                "event": event,
+                "data": data
+            })
+            if res and res.get("success"):
+                return res
+        return None
+
 GLOBAL_RELAY_CLIENT = CloudRelayClient()
 
 def resolve_profile_suffix(profile=None, user_email=None):
@@ -563,10 +622,14 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
             username=ident.get("username"),
             avatar_url=ident.get("avatar_url") or fallback_avatar or "",
             client_secret=ident.get("secret_key"),
-            user_id=ident.get("user_id")
+            user_id=ident.get("user_id"),
+            preferred_discriminator=ident.get("discriminator")
         )
         if sync_res and sync_res.get("success") and sync_res.get("user"):
             u = sync_res["user"]
+            ident["user_id"] = u["id"]
+            if sync_res.get("secret_key"):
+                ident["secret_key"] = sync_res["secret_key"]
             ident["username"] = u["username"]
             ident["discriminator"] = u["discriminator"]
             ident["tag"] = u["tag"]
@@ -1067,6 +1130,12 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             suffix = resolve_profile_suffix(profile, user_email)
             caller_ident = ensure_cloud_identity(suffix)
 
+            if GLOBAL_RELAY_CLIENT.is_external():
+                res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
+                if res and res.get("success"):
+                    self._send_json(res, 200)
+                    return
+
             relay_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
             cloud_friends = relay_res.get("friends", [])
 
@@ -1409,6 +1478,20 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             if not email or (not note_text and not track):
                 res = {"success": False, "error": "Missing required fields (either text or track required)"}
                 status_code = 400
+            elif GLOBAL_RELAY_CLIENT.is_external():
+                cloud_res = GLOBAL_RELAY_CLIENT.publish_note(
+                    caller_ident["user_id"],
+                    caller_ident["secret_key"],
+                    note_text,
+                    track,
+                    req_data.get("now_playing")
+                )
+                if cloud_res and cloud_res.get("success"):
+                    self._send_json(cloud_res, 200)
+                    return
+                else:
+                    self._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
+                    return
             else:
                 ttl = 86400
                 now = time.time()
@@ -1463,6 +1546,15 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             suffix = resolve_profile_suffix(profile, email)
             caller_ident = ensure_cloud_identity(suffix)
 
+            if GLOBAL_RELAY_CLIENT.is_external():
+                cloud_res = GLOBAL_RELAY_CLIENT.delete_note(caller_ident["user_id"], caller_ident["secret_key"])
+                if cloud_res and cloud_res.get("success"):
+                    self._send_json(cloud_res, 200)
+                    return
+                else:
+                    self._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
+                    return
+
             vault = load_notes_vault()
             if email:
                 vault.pop(f"note:{email}", None)
@@ -1486,24 +1578,45 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             from_name = req_data.get("from_name", "").strip()
             from_avatar = req_data.get("from_avatar", "").strip()
             to_email = req_data.get("to_email", "").strip()
+            profile = req_data.get("profile", "").strip().lower()
+            suffix = resolve_profile_suffix(profile, from_email)
+            caller_ident = ensure_cloud_identity(suffix)
+
             if not to_email:
                 self._send_json({"success": False, "error": "Missing to_email"}, 400)
-            else:
-                events = load_events_vault()
-                ev = {
-                    "id": f"ev_{int(time.time()*1000)}",
-                    "event": ev_type,
-                    "from_email": from_email,
-                    "from_name": from_name,
-                    "from_avatar": from_avatar,
-                    "to_email": to_email,
-                    "data": req_data.get("data"),
-                    "timestamp": time.time(),
-                    "created_at": datetime.now().isoformat()
-                }
-                events.append(ev)
-                save_events_vault(events)
-                self._send_json({"success": True, "event": ev}, 200)
+                return
+
+            if GLOBAL_RELAY_CLIENT.is_external():
+                cloud_res = GLOBAL_RELAY_CLIENT.send_note_event(
+                    caller_ident["user_id"],
+                    caller_ident["secret_key"],
+                    to_tag=to_email if "#" in to_email else None,
+                    to_user_id=to_email if "#" not in to_email else None,
+                    event=ev_type,
+                    data=req_data.get("data")
+                )
+                if cloud_res and cloud_res.get("success"):
+                    self._send_json(cloud_res, 200)
+                    return
+                else:
+                    self._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
+                    return
+
+            events = load_events_vault()
+            ev = {
+                "id": f"ev_{int(time.time()*1000)}",
+                "event": ev_type,
+                "from_email": from_email,
+                "from_name": from_name,
+                "from_avatar": from_avatar,
+                "to_email": to_email,
+                "data": req_data.get("data"),
+                "timestamp": time.time(),
+                "created_at": datetime.now().isoformat()
+            }
+            events.append(ev)
+            save_events_vault(events)
+            self._send_json({"success": True, "event": ev}, 200)
         elif self.path == "/api/now_playing":
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
@@ -1661,7 +1774,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
 def run_server():
     server_address = (HOST, PORT)
     try:
-        httpd = HTTPServer(server_address, AuthWebhookHandler)
+        httpd = ThreadingHTTPServer(server_address, AuthWebhookHandler)
         print(f"Nutsty Auth Server listening on http://{HOST}:{PORT}")
         httpd.serve_forever()
     except OSError as e:

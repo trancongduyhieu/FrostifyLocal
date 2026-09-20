@@ -45,3 +45,22 @@ CREATE TABLE IF NOT EXISTS nutsty_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_to_user ON nutsty_events(to_user_id, consumed);
+
+-- 24h Music Capsule Notes
+CREATE TABLE IF NOT EXISTS nutsty_notes (
+    id TEXT PRIMARY KEY,               -- Note UUID
+    user_id TEXT NOT NULL UNIQUE,      -- One active note per user
+    tag TEXT NOT NULL,                 -- User tag at time of posting
+    username TEXT NOT NULL,            -- Username
+    avatar_url TEXT DEFAULT '',        -- Avatar URL
+    note_text TEXT DEFAULT '',         -- Note content (up to 80 chars)
+    track TEXT DEFAULT '',             -- JSON string of attached track object
+    now_playing TEXT DEFAULT '',       -- JSON string or song title
+    created_at INTEGER NOT NULL,       -- Epoch ms
+    expires_at INTEGER NOT NULL,       -- Epoch ms (created_at + 86400000)
+    FOREIGN KEY(user_id) REFERENCES nutsty_users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_user_id ON nutsty_notes(user_id);
+CREATE INDEX IF NOT EXISTS idx_notes_tag ON nutsty_notes(tag);
+CREATE INDEX IF NOT EXISTS idx_notes_expires ON nutsty_notes(expires_at);

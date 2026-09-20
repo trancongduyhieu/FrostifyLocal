@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional
 
 # Default Cloudflare Worker URL (Defaults to local daemon 127.0.0.1:17890, or Cloudflare Worker via NUTSTY_WORKER_URL)
 DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
+COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"
 
 def get_profile_suffix() -> str:
     """Hỗ trợ đa profile (NUTSTY_PROFILE) để kiểm thử song song nhiều cửa sổ trên 1 máy."""
@@ -237,7 +238,7 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"}
+            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT}
         )
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -302,7 +303,7 @@ def delete_note(worker_url: Optional[str] = None) -> Dict[str, Any]:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=3.0) as resp:
@@ -319,9 +320,12 @@ def fetch_notes(worker_url: Optional[str] = None) -> Dict[str, Any]:
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes?friends=" + urllib.parse.quote(",".join(friends))
     if user_email:
         url += "&user_email=" + urllib.parse.quote(user_email)
+    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+    if profile:
+        url += "&profile=" + urllib.parse.quote(profile)
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Nutsty-Desktop/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": COMMON_USER_AGENT})
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             notes = data.get("notes", [])
@@ -375,7 +379,7 @@ def send_social_event(event_type: str, to_email: str, extra_data: Optional[Dict[
         "data": extra_data
     }
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"}, method="POST")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -385,9 +389,12 @@ def send_social_event(event_type: str, to_email: str, extra_data: Optional[Dict[
 def fetch_social_events(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
     user = get_current_user()
     my_email = user.get("email", "")
+    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events?user_email=" + urllib.parse.quote(my_email)
+    if profile:
+        url += "&profile=" + urllib.parse.quote(profile)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Nutsty-Desktop/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": COMMON_USER_AGENT})
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data.get("events", [])
@@ -434,7 +441,7 @@ def update_now_playing(now_playing_data: Optional[Dict[str, Any]] = None, worker
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "Nutsty-Desktop/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=2.0) as resp:
