@@ -5,8 +5,8 @@ import "."
 
 Item {
     id: root
-    width: 360
-    height: 110
+    width: 390
+    height: 112
     visible: opacity > 0
     opacity: isShown ? 1 : 0
     z: 9999
@@ -26,6 +26,7 @@ Item {
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     signal playNowRequested(var track)
+    signal playNextRequested(var track)
     signal enqueueRequested(var track)
     signal dismissed()
 
@@ -55,8 +56,8 @@ Item {
         id: toastCard
         anchors.fill: parent
         radius: 14
-        color: Qt.rgba(0.08, 0.08, 0.10, 0.95)
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+        color: Qt.tint(Qt.rgba(0.07, 0.07, 0.09, 0.94), Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16))
+        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
         border.width: 1
 
         HoverHandler { id: cardHover }
@@ -76,17 +77,19 @@ Item {
                     Layout.preferredHeight: 18
                     radius: 9
                     source: root.senderAvatar
+                    borderColor: root.accentColor
+                    borderWidth: 1.0
                     fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                    placeholderColor: "#27272a"
+                    placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                     visible: root.senderAvatar !== ""
                 }
 
-                // Emerald live dot if no avatar
+                // Dynamic live dot if no avatar
                 Rectangle {
                     Layout.preferredWidth: 6
                     Layout.preferredHeight: 6
                     radius: 3
-                    color: "#10b981"
+                    color: root.accentColor
                     visible: root.senderAvatar === ""
                 }
 
@@ -164,19 +167,20 @@ Item {
                 }
             }
 
-            // Action buttons row: [ ▶ Phát ngay ] & [ + Thêm vào hàng đợi ]
+            // Action buttons row: [ ▶ Phát ngay ] | [ ⏭ Phát kế tiếp ] | [ 🗏 Hàng đợi ]
+            // Nằm phẳng trên mặt phẳng, không nằm trong box, 3 nút đều nhau 100%
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: 6
 
-                // Play Now Button
+                // 1. Play Now Button
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 26
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 28
                     radius: 6
-                    color: playHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-                    border.color: root.accentColor
-                    border.width: 1
+                    color: playHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.width: 0
 
                     HoverHandler { id: playHover }
 
@@ -186,8 +190,8 @@ Item {
 
                         AppIcon {
                             source: "../assets/icons/media-playback-start-symbolic.svg"
-                            iconSize: 10
-                            color: "#ffffff"
+                            iconSize: 11
+                            color: root.accentColor
                         }
 
                         Text {
@@ -210,14 +214,55 @@ Item {
                     }
                 }
 
-                // Enqueue Button
+                // 2. Play Next Button (Chèn ngay sau bài đang phát)
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 26
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 28
                     radius: 6
-                    color: queueHover.hovered ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.08)
-                    border.color: Qt.rgba(1, 1, 1, 0.15)
-                    border.width: 1
+                    color: playNextHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) : "transparent"
+                    border.width: 0
+
+                    HoverHandler { id: playNextHover }
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        AppIcon {
+                            source: "../assets/icons/media-skip-forward-symbolic.svg"
+                            iconSize: 11
+                            color: root.accentColor
+                        }
+
+                        Text {
+                            text: I18n.tr("Phát kế tiếp", "Play next")
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            var t = root.trackData;
+                            root.dismiss();
+                            if (t) root.playNextRequested(t);
+                        }
+                    }
+                }
+
+                // 3. Enqueue Button (Thêm vào cuối hàng đợi)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 28
+                    radius: 6
+                    color: queueHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) : "transparent"
+                    border.width: 0
 
                     HoverHandler { id: queueHover }
 
@@ -227,13 +272,13 @@ Item {
 
                         AppIcon {
                             source: "../assets/icons/view-queue-symbolic.svg"
-                            iconSize: 10
-                            color: "#e4e4e7"
+                            iconSize: 11
+                            color: Qt.rgba(1, 1, 1, 0.75)
                         }
 
                         Text {
-                            text: I18n.tr("Thêm hàng đợi", "Add to queue")
-                            color: "#e4e4e7"
+                            text: I18n.tr("Hàng đợi", "Queue")
+                            color: Qt.rgba(1, 1, 1, 0.85)
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.weight: Font.Medium

@@ -571,7 +571,7 @@ Item {
                 }
 
                 // ==========================================
-                // FOOTER: [🎧 Nghe cùng bạn] LIVE LISTENING CAPSULE (Soft, Elegant Glass)
+                // FOOTER: [🎧 Nghe cùng bạn] LIVE LISTENING SECTION (Mặt phẳng, không bo con nhộng)
                 // ==========================================
                 Rectangle {
                     id: liveListenBtn
@@ -582,62 +582,101 @@ Item {
                         return null;
                     }
                     Layout.fillWidth: true
-                    Layout.preferredHeight: liveTrack ? 46 : 40
-                    radius: 20
+                    Layout.preferredHeight: 52
+                    radius: 12
                     color: liveListenMouse.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                        : Qt.rgba(255, 255, 255, 0.04)
+                    border.color: liveListenMouse.containsMouse
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        : "transparent"
                     border.width: 1
 
-                    scale: liveListenMouse.containsMouse ? 1.02 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
                     Behavior on color { ColorAnimation { duration: 150 } }
-                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
 
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 12
+                        spacing: 10
 
-                        RowLayout {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: 8
-
-                            AppIcon {
-                                source: "../assets/icons/media-optical-audio-symbolic.svg"
-                                iconSize: 14
-                                color: root.accentColor
+                        // 1. Track Avatar / Album Cover (Tái sử dụng RoundedImage chống vỡ góc)
+                        RoundedImage {
+                            Layout.preferredWidth: 38
+                            Layout.preferredHeight: 38
+                            radius: 8
+                            source: {
+                                var np = liveListenBtn.liveTrack;
+                                if (np && (np.cover || np.image || np.thumbnail)) return np.cover || np.image || np.thumbnail;
+                                var att = root.attachedTrack;
+                                if (att && (att.cover || att.image || att.thumbnail)) return att.cover || att.image || att.thumbnail;
+                                return "";
                             }
+                            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                            fallbackIconColor: root.accentColor
+                            borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            borderWidth: 1.0
+                            placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                        }
+
+                        // 2. Information: {{user}} đang nghe bài ... bấm vào để nghe cùng (Marquee cuộn vòng khi dài)
+                        Item {
+                            id: marqueeContainer
+                            Layout.fillWidth: true
+                            implicitHeight: marqueeText.implicitHeight
+                            clip: true
 
                             Text {
-                                text: I18n.tr("Nghe cùng " + (root.currentFriend ? root.currentFriend.user_name : I18n.tr("bạn bè", "friend")), "Listen along with " + (root.currentFriend ? root.currentFriend.user_name : "friend"))
+                                id: marqueeText
+                                text: {
+                                    var uName = root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : I18n.tr("Bạn bè", "Friend");
+                                    var sTitle = liveListenBtn.liveTrack ? (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "") : (root.trackTitle || "");
+                                    if (!sTitle) sTitle = I18n.tr("bài hát", "a track");
+                                    return I18n.tr(uName + " đang nghe bài " + sTitle + " • Bấm vào để nghe cùng", uName + " is listening to " + sTitle + " • Click to listen along");
+                                }
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                x: 0
+
+                                readonly property real overflowDist: Math.max(0, implicitWidth - marqueeContainer.width)
+                                readonly property bool needsScroll: overflowDist > 6
+
+                                SequentialAnimation {
+                                    id: marqueeAnim
+                                    running: marqueeText.needsScroll
+                                    loops: Animation.Infinite
+
+                                    PauseAnimation { duration: 1800 }
+                                    NumberAnimation {
+                                        target: marqueeText
+                                        property: "x"
+                                        to: -marqueeText.overflowDist
+                                        duration: Math.max(1200, marqueeText.overflowDist * 28)
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                    PauseAnimation { duration: 1800 }
+                                    NumberAnimation {
+                                        target: marqueeText
+                                        property: "x"
+                                        to: 0
+                                        duration: Math.max(1200, marqueeText.overflowDist * 28)
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                }
+
+                                onNeedsScrollChanged: if (!needsScroll) x = 0
+                                onTextChanged: x = 0
                             }
                         }
 
-                        // Subtitle indicating friend's real-time now_playing track
-                        RowLayout {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: 4
-                            visible: liveListenBtn.liveTrack !== null
-
-                            Rectangle {
-                                width: 5; height: 5; radius: 2.5
-                                color: root.accentColor
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            Text {
-                                text: liveListenBtn.liveTrack ? I18n.tr("Đang nghe: " + (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "Track"), "Now playing: " + (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "Track")) : ""
-                                color: Qt.rgba(1, 1, 1, 0.70)
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 10
-                                elide: Text.ElideRight
-                                Layout.maximumWidth: liveListenBtn.width - 36
-                            }
+                        // 3. Play Icon Indicator
+                        AppIcon {
+                            source: "../assets/icons/media-playback-start-symbolic.svg"
+                            iconSize: 14
+                            color: liveListenMouse.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.70)
                         }
                     }
 

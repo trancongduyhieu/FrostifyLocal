@@ -13,8 +13,8 @@ Scope {
     FloatingWindow {
         id: win
         title: Quickshell.env("NUTSTY_PROFILE") ? ("Nutsty (" + Quickshell.env("NUTSTY_PROFILE") + ")") : "Nutsty"
-        implicitWidth: 1280
-        implicitHeight: 820
+        implicitWidth: Quickshell.env("NUTSTY_PROFILE") ? 810 : 1280
+        implicitHeight: Quickshell.env("NUTSTY_PROFILE") ? 800 : 820
         color: "transparent"
         visible: true
 
@@ -75,6 +75,10 @@ Scope {
     property string downloadQuality: "high_opus"
     property bool showSidebar: true
     property var friendsNotes: []
+    property var friendsList: []
+    property var friendsDetails: []
+    property var pendingFriendRequests: []
+    property int unreadFriendRequestsCount: 0
     property var myLatestNote: null
     property var listeningAlongFriend: null
     property real pendingListenAlongSeekPosition: 0.0
@@ -838,20 +842,169 @@ Scope {
         }));
     }
 
+    function getCurrentUserEmail() {
+        if (win.authAccountEmail && win.authAccountEmail.includes("@")) {
+            return win.authAccountEmail;
+        }
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        if (profile) return profile;
+        return win.currentUserTag || "nutsty_user";
+    }
+
+    function getCurrentUserName() {
+        if (win.currentUserName) return win.currentUserName;
+        if (win.authAccountName) return win.authAccountName;
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        if (profile === "user2") return "Hiếu Trần";
+        if (profile === "user1") return "Shiraori";
+        return "Shiraori";
+    }
+
+    function getCurrentUserAvatar() {
+        if (win.authAccountThumb) return win.authAccountThumb;
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        if (profile === "user1" || profile === "") {
+            return "https://yt3.ggpht.com/yti/ANjgQV87mKpSJkLdeIPde7wHxvnE5VCdypuOrjkni974j7oLkaJ2=s108-c-k-c0x00ffffff-no-rj";
+        }
+        if (profile === "user2") {
+            return "https://yt3.ggpht.com/yti/ANjgQV-gmgVqqr67jTVBtevq6YMeZh0jpxYB0_EOiLb7uSg=s108-c-k-c0x00ffffff-no-rj";
+        }
+        return "";
+    }
+
+    property string currentUserName: ""
+    property string currentUserPin: ""
+    property string currentUserTag: ""
+    property string currentUserCloudId: ""
+
+    function fetchCurrentUserProfile() {
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/me?user_email=" + encodeURIComponent(email) + "&profile=" + encodeURIComponent(profile);
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    if (res && res.success && res.profile) {
+                        win.currentUserPin = res.profile.discriminator || res.profile.pin_code || "";
+                        win.currentUserTag = res.profile.tag || res.profile.nutsty_tag || "";
+                        win.currentUserCloudId = res.profile.user_id || res.profile.id || "";
+                        if (res.profile.username) {
+                            win.currentUserName = res.profile.username;
+                        }
+                    }
+                } catch(e) {}
+            }
+        };
+        xhr.send();
+    }
+
+    function updateUserProfile(newUsername, newDiscriminator, callback) {
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/update_profile";
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var res = null;
+                try {
+                    res = JSON.parse(xhr.responseText);
+                } catch(e) {}
+                if (xhr.status === 200 && res && res.success && res.user) {
+                    try {
+                        win.currentUserPin = res.user.discriminator || "";
+                        win.currentUserTag = res.user.tag || "";
+                        win.currentUserName = res.user.username || "";
+                        win.showToast(I18n.tr("Đã cập nhật: " + res.user.tag, "Updated: " + res.user.tag));
+                    } catch(err) {
+                        console.error("[updateUserProfile error]", err);
+                    }
+                    if (typeof callback === "function") callback(true, res);
+                } else {
+                    var err = (res && res.error) ? res.error : "Failed";
+                    if (res && res.suggested_tag) {
+                        err += " (" + I18n.tr("Gợi ý: ", "Suggested: ") + res.suggested_tag + ")";
+                    }
+                    win.showToast(err);
+                    if (typeof callback === "function") callback(false, res);
+                }
+            }
+        };
+        xhr.send(JSON.stringify({
+            user_email: email,
+            profile: profile,
+            new_username: newUsername,
+            new_discriminator: newDiscriminator
+        }));
+    }
+
+    function regenerateUserPin() {
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/regenerate_pin";
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    if (res && res.success && res.pin_code) {
+                        win.currentUserPin = res.pin_code;
+                        if (res.nutsty_tag) win.currentUserTag = res.nutsty_tag;
+                        win.showToast(I18n.tr("Đã tạo Tag mới: #" + res.pin_code, "New Tag generated: #" + res.pin_code));
+                    }
+                } catch(e) {}
+            }
+        };
+        xhr.send(JSON.stringify({ user_email: email, profile: profile }));
+    }
+
+    function fetchFriendsDataFast(callback) {
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/friends?user_email=" + encodeURIComponent(email) + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var parsed = JSON.parse(xhr.responseText);
+                        if (parsed && typeof parsed === "object") {
+                            if (Array.isArray(parsed.friends)) {
+                                win.friendsDetails = parsed.friends;
+                                win.friendsList = parsed.friends.map(function(f) { return f.email || f.tag; });
+                            }
+                            if (Array.isArray(parsed.incoming_requests)) {
+                                win.pendingFriendRequests = parsed.incoming_requests;
+                                win.unreadFriendRequestsCount = parsed.incoming_requests.length;
+                            }
+                        }
+                    } catch(e) {}
+                }
+                if (typeof callback === "function") callback();
+            }
+        };
+        xhr.send();
+    }
+
     function fetchFriendsNotesFast() {
         if (win.isFetchingNotesFast) return;
         win.isFetchingNotesFast = true;
 
-        var email = win.authAccountEmail;
-        if (!email) {
-            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            email = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
-        }
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         var friendsParam = (win.friendsList && win.friendsList.length > 0)
             ? win.friendsList.join(",")
-            : "@shiraori618,hiutrn@gmail.com,friend@gmail.com,me@gmail.com";
+            : "";
 
-        var url = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes?friends=" + encodeURIComponent(friendsParam) + (email ? ("&user_email=" + encodeURIComponent(email)) : "");
+        var url = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes?friends=" + encodeURIComponent(friendsParam) + (email ? ("&user_email=" + encodeURIComponent(email)) : "") + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
 
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
@@ -1096,6 +1249,18 @@ Scope {
                                 if (cText) {
                                     floatingChatContainer.spawnBubble(cFrom, cAvatar, cText);
                                 }
+                            } else if (ev.event === "friend_request") {
+                                win.fetchFriendsDataFast();
+                                var frName = ev.from_name || ev.from_email || I18n.tr("Ai đó", "Someone");
+                                win.showToast(I18n.tr(frName + " đã gửi lời mời kết bạn", frName + " sent a friend request"));
+                            } else if (ev.event === "friend_accepted") {
+                                win.fetchFriendsDataFast();
+                                win.fetchFriendsNotesFast();
+                                var faName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
+                                win.showToast(I18n.tr(faName + " đã chấp nhận lời mời kết bạn", faName + " accepted friend request"));
+                            } else if (ev.event === "friend_removed") {
+                                win.fetchFriendsDataFast();
+                                win.fetchFriendsNotesFast();
                             }
                         }
                     } catch(e) {}
@@ -1117,6 +1282,17 @@ Scope {
         }
     }
 
+    Timer {
+        id: friendsSyncTimer
+        interval: 3000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: {
+            win.fetchFriendsDataFast();
+        }
+    }
+
     function trackPlayback(trk) {
         if (!win.syncHistoryToGoogle || !trk) return;
         var vid = trk.videoId || trk.path || "";
@@ -1131,25 +1307,46 @@ Scope {
     }
 
     function onPlaybackTracked(res) {
-        if (!win.homeSections || win.homeSections.length === 0) return;
-        var firstSec = win.homeSections[0];
-        if (firstSec && firstSec.title && firstSec.title.toLowerCase().includes("listen again") && Array.isArray(firstSec.items)) {
-            var items = firstSec.items.slice();
-            items = items.filter(it => (it.videoId && it.videoId !== res.videoId) || (it.title !== res.title));
-            var newTrackItem = {
-                title: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
-                name: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
-                artist: res.artist || (win.currentTrack ? win.currentTrack.artist : "Artist"),
-                videoId: res.videoId,
-                path: "ytdl://" + res.videoId,
-                image: win.currentTrack ? (win.currentTrack.image || "") : "",
-                type: "track"
-            };
-            items.unshift(newTrackItem);
-            firstSec.items = items;
-            var updated = win.homeSections.slice();
-            updated[0] = firstSec;
-            win.homeSections = updated;
+        if (!res || !res.videoId) return;
+        var newTrackItem = {
+            title: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
+            name: res.title || (win.currentTrack ? (win.currentTrack.title || win.currentTrack.name) : "Track"),
+            artist: res.artist || (win.currentTrack ? win.currentTrack.artist : "Artist"),
+            videoId: res.videoId,
+            path: "ytdl://" + res.videoId,
+            image: win.currentTrack ? (win.currentTrack.image || "") : "",
+            type: "track"
+        };
+
+        function updateSectionList(secList) {
+            if (!secList || !Array.isArray(secList) || secList.length === 0) return secList;
+            var updated = secList.slice();
+            for (var i = 0; i < updated.length; i++) {
+                var s = updated[i];
+                if (!s || !s.title || !Array.isArray(s.items)) continue;
+                var t = s.title.toLowerCase();
+                if (t.includes("listen again") || t.includes("nghe lại") || t.includes("gần đây") || t.includes("recent") || t.includes("history") || i === 0) {
+                    var items = s.items.filter(it => (it.videoId && it.videoId !== res.videoId) || (it.title !== res.title));
+                    items.unshift(newTrackItem);
+                    var newSec = Object.assign({}, s, { items: items });
+                    updated[i] = newSec;
+                    break;
+                }
+            }
+            return updated;
+        }
+
+        if (win.homeSections && win.homeSections.length > 0) {
+            win.homeSections = updateSectionList(win.homeSections);
+        }
+
+        // Synchronize across active mood, "All" tab, and all cached mood shelves
+        if (win.moodCache) {
+            for (var m in win.moodCache) {
+                if (win.moodCache[m] && win.moodCache[m].sections) {
+                    win.moodCache[m].sections = updateSectionList(win.moodCache[m].sections);
+                }
+            }
         }
     }
 
@@ -1397,8 +1594,138 @@ Scope {
     }
 
     function promptAddFriend() {
-        Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "add_friend", "friend@gmail.com"]);
-        Qt.callLater(function() { win.fetchFriendsNotesFast(); });
+        manageFriendsModal.openModal();
+    }
+
+    function sendFriendRequest(targetEmail) {
+        var fromEmail = win.getCurrentUserEmail();
+        var fromName = win.getCurrentUserName();
+        var fromAvatar = win.getCurrentUserAvatar();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/friends/request";
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.accepted) {
+                            win.showToast(I18n.tr("Hai bạn đã trở thành bạn bè!", "You are now friends!"));
+                            win.fetchFriendsDataFast();
+                            win.fetchFriendsNotesFast();
+                        } else {
+                            win.showToast(I18n.tr("Đã gửi lời mời kết bạn", "Friend request sent"));
+                        }
+                    } catch(e) {
+                        win.showToast(I18n.tr("Đã gửi lời mời kết bạn", "Friend request sent"));
+                    }
+                } else {
+                    try {
+                        var errRes = JSON.parse(xhr.responseText);
+                        win.showToast(errRes.error || I18n.tr("Không thể gửi lời mời", "Failed to send request"));
+                    } catch(e) {
+                        win.showToast(I18n.tr("Lỗi khi gửi lời mời", "Error sending request"));
+                    }
+                }
+            }
+        };
+        xhr.send(JSON.stringify({
+            from_email: fromEmail,
+            from_name: fromName,
+            from_avatar: fromAvatar,
+            to_email: targetEmail
+        }));
+    }
+
+    function respondFriendRequest(requestId, fromEmail, action) {
+        var userEmail = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/friends/respond";
+
+        // Optimistic UI update: Remove pending request immediately so notification popover cleans up instantly (0ms)
+        if (win.pendingFriendRequests && Array.isArray(win.pendingFriendRequests)) {
+            win.pendingFriendRequests = win.pendingFriendRequests.filter(function(r) {
+                var rid = String(r.id || "");
+                var targetId = String(requestId || "");
+                var rem = (r.from_email || r.from_tag || "").toLowerCase();
+                var targetEm = (fromEmail || "").toLowerCase();
+                return rid !== targetId && (!targetEm || rem !== targetEm);
+            });
+            win.unreadFriendRequestsCount = win.pendingFriendRequests.length;
+            if (friendRequestsPopover && friendRequestsPopover.isOpen) {
+                friendRequestsPopover.requests = win.pendingFriendRequests;
+            }
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    if (action === "accept") {
+                        win.showToast(I18n.tr("Đã kết bạn thành công!", "Friend request accepted!"));
+                    } else {
+                        win.showToast(I18n.tr("Đã từ chối lời mời", "Friend request declined"));
+                    }
+                    win.fetchFriendsDataFast(function() {
+                        win.fetchFriendsNotesFast();
+                    });
+                } else {
+                    win.fetchFriendsDataFast();
+                }
+            }
+        };
+        xhr.send(JSON.stringify({
+            user_email: userEmail,
+            profile: profile,
+            request_id: requestId,
+            action: action
+        }));
+    }
+
+    function unfriendUser(targetEmail) {
+        if (!targetEmail) return;
+        var userEmail = win.getCurrentUserEmail();
+        var targetLower = targetEmail.trim().toLowerCase();
+
+        // Optimistic UI Update: Cập nhật biến state ngay lập tức không cần chờ network roundtrip (0ms)
+        if (win.friendsList && Array.isArray(win.friendsList)) {
+            win.friendsList = win.friendsList.filter(function(e) {
+                return (e || "").trim().toLowerCase() !== targetLower;
+            });
+        }
+        if (win.friendsDetails && Array.isArray(win.friendsDetails)) {
+            win.friendsDetails = win.friendsDetails.filter(function(f) {
+                return (f.email || "").trim().toLowerCase() !== targetLower;
+            });
+        }
+        if (win.friendsNotes && Array.isArray(win.friendsNotes)) {
+            win.friendsNotes = win.friendsNotes.filter(function(n) {
+                return (n.user_email || "").trim().toLowerCase() !== targetLower;
+            });
+        }
+
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/friends/remove";
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    win.showToast(I18n.tr("Đã hủy kết bạn", "Unfriended"));
+                    win.fetchFriendsDataFast();
+                    win.fetchFriendsNotesFast();
+                }
+            }
+        };
+        xhr.send(JSON.stringify({
+            user_email: userEmail,
+            target_email: targetEmail
+        }));
     }
 
     function showToast(msg) {
@@ -1857,6 +2184,8 @@ Scope {
         win.checkAuthStatus();
         win.loadCustomPlaylists();
         win.refreshLocalAlbums();
+        win.fetchFriendsDataFast();
+        win.fetchCurrentUserProfile();
     }
 
     Component.onDestruction: {
@@ -2281,6 +2610,10 @@ Scope {
                 }
                 onSettingsClicked: {
                     settingsModal.visible = true;
+                }
+                unreadNotificationsCount: win.unreadFriendRequestsCount
+                onNotificationsClicked: (xPos, yPos) => {
+                    friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
                 }
 
                 onTabSelected: tab => win.filterByTab(tab)
@@ -2962,8 +3295,46 @@ Scope {
         CoListenersPopover {
             id: coListenersPopover
             accentColor: win.accentColor
+            backgroundSourceItem: glassCompositeBackdrop
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
+        }
+
+        FriendRequestsPopover {
+            id: friendRequestsPopover
+            accentColor: win.accentColor
+            backgroundSourceItem: glassCompositeBackdrop
+            onAcceptRequested: (reqId, fromEmail, fromName) => {
+                win.respondFriendRequest(reqId, fromEmail, "accept");
+            }
+            onRejectRequested: (reqId, fromEmail) => {
+                win.respondFriendRequest(reqId, fromEmail, "reject");
+            }
+        }
+
+        ManageFriendsModal {
+            id: manageFriendsModal
+            accentColor: win.accentColor
+            backgroundSourceItem: glassCompositeBackdrop
+            currentUserEmail: win.getCurrentUserEmail()
+            currentUserName: win.currentUserName ? win.currentUserName : win.getCurrentUserName()
+            currentUserAvatar: win.getCurrentUserAvatar()
+            currentUserPin: win.currentUserPin
+            currentUserTag: win.currentUserTag
+            friends: win.friendsDetails
+            onSendFriendRequestRequested: targetEmail => {
+                win.sendFriendRequest(targetEmail);
+            }
+            onUnfriendRequested: targetEmail => {
+                win.unfriendUser(targetEmail);
+            }
+            onRefreshFriendsRequested: {
+                win.fetchFriendsDataFast();
+                win.fetchCurrentUserProfile();
+            }
+            onRegeneratePinRequested: {
+                win.regenerateUserPin();
+            }
         }
 
         SuggestTrackToast {
@@ -2978,6 +3349,10 @@ Scope {
                 } else {
                     win.playTrack(trk);
                 }
+            }
+            onPlayNextRequested: trk => {
+                win.insertTrackPlayNext(trk);
+                win.showToast(I18n.tr("Sẽ phát kế tiếp: " + (trk.title || trk.name || I18n.tr("Bài hát", "Track")), "Will play next: " + (trk.title || trk.name || "Track")));
             }
             onEnqueueRequested: trk => {
                 win.appendTrackToQueue(trk);
@@ -4050,6 +4425,32 @@ Scope {
         function closeUserNoteDetail() { userNoteDetailModal.closeModal(); }
         function openFriendNote(idx: int) { friendStoryModal.openWithIndex(idx); }
         function closeFriendNote() { friendStoryModal.close(); }
+        function openManageFriends() { manageFriendsModal.openModal(); }
+        function closeManageFriends() { manageFriendsModal.closeModal(); }
+        function testToggleEditProfile() {
+            manageFriendsModal.isEditingProfile = !manageFriendsModal.isEditingProfile;
+        }
+        function testSaveProfile(newName: string, newDisc: string) {
+            win.updateUserProfile(newName, newDisc, function(ok, res) {
+                if (ok && res && res.user) {
+                    manageFriendsModal.isEditingProfile = false;
+                    manageFriendsModal.currentUserName = res.user.username;
+                    manageFriendsModal.currentUserPin = res.user.discriminator;
+                    manageFriendsModal.currentUserTag = res.user.tag;
+                }
+            });
+        }
+        function testOpenNotifications() {
+            win.fetchFriendsDataFast(function() {
+                friendRequestsPopover.toggleAt(win.pendingFriendRequests, 600, 60);
+            });
+        }
+        function testAcceptRequest(reqId: string, fromEmail: string) {
+            win.respondFriendRequest(reqId, fromEmail, "accept");
+        }
+        function testCloseNotifications() {
+            friendRequestsPopover.closePopover();
+        }
         function testListenAlong() {
             if (win.friendsNotes && win.friendsNotes.length > 0) {
                 var shira = win.friendsNotes.find(f => (f.user_email && f.user_email.indexOf("shiraori") !== -1) || (f.user_name && f.user_name.indexOf("Shiraori") !== -1));

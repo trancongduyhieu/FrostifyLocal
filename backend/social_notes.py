@@ -136,11 +136,21 @@ def load_friends() -> List[str]:
         except Exception:
             pass
 
-    # Danh sách mặc định để test nếu chưa có
-    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    if profile == "friend":
-        return ["me@gmail.com", "apple@gmail.com"]
-    return ["friend@gmail.com", "beta@gmail.com"]
+    # Thử nạp từ friends vault chung
+    try:
+        user = get_current_user()
+        u_email = (user.get("email") or "").strip().lower()
+        if u_email:
+            vpath = get_config_dir() / "nutsty_friends_vault.json"
+            if vpath.exists():
+                with open(vpath, "r", encoding="utf-8") as vf:
+                    vdata = json.load(vf)
+                    if isinstance(vdata, dict) and u_email in vdata:
+                        return [str(e).strip().lower() for e in vdata[u_email] if str(e).strip()]
+    except Exception:
+        pass
+
+    return []
 
 def save_friends(friends_list: List[str]) -> bool:
     clean = sorted(list(set(e.strip().lower() for e in friends_list if e.strip())))

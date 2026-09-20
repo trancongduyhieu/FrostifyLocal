@@ -97,7 +97,7 @@ Item {
                 id: bubbleBg
                 anchors.fill: parent
                 radius: 16
-                color: Qt.rgba(0.08, 0.08, 0.10, 0.92)
+                color: Qt.tint(Qt.rgba(0.07, 0.07, 0.09, 0.94), Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16))
                 border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
                 border.width: 1
 
@@ -112,17 +112,19 @@ Item {
                         Layout.preferredHeight: 22
                         radius: 11
                         source: model.avatar || ""
+                        borderColor: root.accentColor
+                        borderWidth: 1.0
                         fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                        placeholderColor: "#27272a"
+                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                         visible: model.avatar !== ""
                     }
 
-                    // Green Live Dot when no avatar
+                    // Dynamic live accent dot when no avatar
                     Rectangle {
                         Layout.preferredWidth: 6
                         Layout.preferredHeight: 6
                         radius: 3
-                        color: "#10b981"
+                        color: root.accentColor
                         visible: !model.avatar || model.avatar === ""
                     }
 

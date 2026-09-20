@@ -386,16 +386,52 @@ Item {
                                             }
                                         }
 
-                                        // Song Title
-                                        Text {
+                                        // Song Title (Marquee when long)
+                                        Item {
+                                            id: userNoteTrackTitleBox
                                             Layout.maximumWidth: bubbleContentCol.width - 24
-                                            text: root.trackTitle
-                                            color: "#ffffff"
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
+                                            Layout.preferredWidth: Math.min(bubbleContentCol.width - 24, userNoteTrackTitleText.implicitWidth)
+                                            implicitHeight: userNoteTrackTitleText.implicitHeight
+                                            clip: true
+
+                                            Text {
+                                                id: userNoteTrackTitleText
+                                                text: root.trackTitle
+                                                color: "#ffffff"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                x: 0
+
+                                                readonly property real overflowDist: Math.max(0, implicitWidth - userNoteTrackTitleBox.width)
+                                                readonly property bool needsScroll: overflowDist > 6
+
+                                                onTextChanged: {
+                                                    userNoteTrackTitleText.x = 0;
+                                                }
+
+                                                SequentialAnimation {
+                                                    running: userNoteTrackTitleText.needsScroll
+                                                    loops: Animation.Infinite
+
+                                                    PauseAnimation { duration: 1800 }
+                                                    NumberAnimation {
+                                                        target: userNoteTrackTitleText
+                                                        property: "x"
+                                                        to: -userNoteTrackTitleText.overflowDist
+                                                        duration: Math.max(1200, userNoteTrackTitleText.overflowDist * 28)
+                                                        easing.type: Easing.InOutQuad
+                                                    }
+                                                    PauseAnimation { duration: 1800 }
+                                                    NumberAnimation {
+                                                        target: userNoteTrackTitleText
+                                                        property: "x"
+                                                        to: 0
+                                                        duration: Math.max(1200, userNoteTrackTitleText.overflowDist * 28)
+                                                        easing.type: Easing.InOutQuad
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
 
@@ -550,31 +586,32 @@ Item {
             }
 
             // ==========================================
-            // FOOTER: Exactly 1 Button (Thay ghi chú - Change Note)
+            // FOOTER: Exactly 1 Button (Thay ghi chú - Flat Surface Action)
             // ==========================================
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                Layout.bottomMargin: 2
+                Layout.preferredHeight: 40
+                Layout.bottomMargin: 4
 
                 Item { Layout.fillWidth: true }
 
                 Rectangle {
                     id: changeBtn
-                    Layout.preferredHeight: 38
-                    Layout.preferredWidth: changeRow.implicitWidth + 32
-                    radius: 19
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: changeRow.implicitWidth + 24
+                    radius: 8
                     color: changeMouse.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                        : "transparent"
                     border.color: changeMouse.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                        : "transparent"
                     border.width: 1
 
-                    scale: changeMouse.containsMouse ? 1.04 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 150 } }
+                    scale: changeMouse.containsMouse ? 1.03 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
 
                     RowLayout {
                         id: changeRow

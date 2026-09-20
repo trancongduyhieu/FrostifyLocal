@@ -1,0 +1,14 @@
+{
+  "name": "nutsty-global-relay",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker & D1 backend for Nutsty Global Friends Relay",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --check src/index.js",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": ["nutsty", "cloudflare", "workers", "d1"],
+  "author": "",
+  "license": "MIT"
+}

@@ -13,6 +13,8 @@ Item {
     property bool cache: true
 
     // Fallback & Placeholder Properties
+    property string initialsText: ""
+    property bool useInitialsFallback: true
     property string fallbackIcon: ""
     property color fallbackIconColor: Theme.accent
     property int fallbackIconSize: 18
@@ -30,41 +32,91 @@ Item {
     implicitWidth: 44
     implicitHeight: 44
 
+    function getGoogleColor(str) {
+        if (!str) return "#1a73e8";
+        var s = str.trim().toLowerCase();
+        if (s.indexOf("hieu") !== -1 || s.indexOf("thieu") !== -1 || s.indexOf("hiutrn") !== -1) {
+            return "#0288d1";
+        }
+        var hash = 0;
+        for (var i = 0; i < s.length; i++) {
+            hash = s.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        var palette = [
+            "#1a73e8", "#0097a7", "#1e8e3e", "#e37400",
+            "#8430ce", "#d93025", "#3949ab", "#f29900",
+            "#0f9d58", "#e91e63"
+        ];
+        return palette[Math.abs(hash) % palette.length];
+    }
+
+    function getInitialLetter(str) {
+        if (!str) return "";
+        var clean = str.trim();
+        if (clean.startsWith("@") || clean.startsWith("#")) {
+            clean = clean.substring(1).trim();
+        }
+        if (clean.toLowerCase().startsWith("thieu") || clean.toLowerCase().startsWith("hiu")) {
+            return "H";
+        }
+        return clean.length > 0 ? clean.charAt(0).toUpperCase() : "";
+    }
+
+    readonly property bool hasInitials: root.useInitialsFallback && root.initialsText !== "" && getInitialLetter(root.initialsText) !== ""
+
     // 1. Placeholder Background (Active when image is not ready or failed)
     Rectangle {
         id: placeholder
         anchors.fill: parent
         radius: root.radius
-        color: root.placeholderColor
+        color: root.hasInitials ? root.getGoogleColor(root.initialsText) : root.placeholderColor
         visible: img.status !== Image.Ready
     }
 
-    // 2. Fallback AppIcon (Centered in placeholder when no image or loading)
+    // 2. Google Material Initials Text (Centered in placeholder when no image)
+    Text {
+        id: initialsLabel
+        anchors.centerIn: parent
+        text: root.getInitialLetter(root.initialsText)
+        color: "#ffffff"
+        font.family: Theme.fontFamily
+        font.pixelSize: Math.max(10, Math.round(Math.min(root.width > 0 ? root.width : root.implicitWidth, root.height > 0 ? root.height : root.implicitHeight) * 0.48))
+        font.bold: true
+        visible: img.status !== Image.Ready && root.hasInitials
+        z: 1
+    }
+
+    // 3. Fallback AppIcon (Centered in placeholder when no image and no initials)
     AppIcon {
         id: fallback
         anchors.centerIn: parent
         source: root.fallbackIcon
         iconSize: root.fallbackIconSize
         color: root.fallbackIconColor
-        visible: img.status !== Image.Ready && root.fallbackIcon !== ""
+        visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
     // 3. Shared Mask Source for GPU MultiEffect Shader (Must be declared before container with static layer)
     Rectangle {
         id: maskRect
-        anchors.fill: parent
-        radius: root.radius
+        anchors.fill: imgContainer
+        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? 0.5 : 0))
         color: "#ffffff"
         visible: false
         layer.enabled: true
+        layer.smooth: true
+        smooth: true
+        antialiasing: true
     }
 
     // 4. Main Image Container with GPU MultiEffect Mask (0 pixel leakage outside radius)
     Item {
         id: imgContainer
         anchors.fill: parent
+        anchors.margins: root.borderWidth > 0 ? 0.5 : 0
         visible: img.status === Image.Ready
         layer.enabled: root.radius > 0
+        layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: root.radius > 0
             maskSource: maskRect

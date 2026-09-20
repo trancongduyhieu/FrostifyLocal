@@ -287,7 +287,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
 
-                // User Circular Avatar (68x68) - Anchored at bottom of center area
+                // User Circular Avatar (68x68) - Anchored at bottom of center area (Clean RoundedImage)
                 Item {
                     id: modalAvatarWrapper
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -295,62 +295,16 @@ Rectangle {
                     anchors.bottomMargin: 10
                     width: 68; height: 68
 
-                    // Outer Border Ring
-                    Rectangle {
+                    RoundedImage {
                         anchors.fill: parent
                         radius: 34
-                        color: "transparent"
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.5)
-                        border.width: 1.5
-                    }
-
-                    // Circle Mask for Modal Avatar
-                    Rectangle {
-                        id: modalAvatarMask
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        radius: 32
-                        color: "#ffffff"
-                        visible: false
-                        layer.enabled: true
-                    }
-
-                    // Masked Container
-                    Item {
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: modalAvatarMask
-                            autoPaddingEnabled: false
-                        }
-
-                        // Background fallback letter
-                        Rectangle {
-                            anchors.fill: parent
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: (root.userName && root.userName.length > 0) ? root.userName.substring(0, 1).toUpperCase() : "U"
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 24
-                                font.bold: true
-                            }
-                        }
-
-                        // Profile Image
-                        Image {
-                            id: modalAvatarImg
-                            anchors.fill: parent
-                            source: root.userAvatar || ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: root.userAvatar !== ""
-                            asynchronous: true
-                            cache: true
-                        }
+                        source: root.userAvatar || ""
+                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                        borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.55)
+                        borderWidth: 1.5
+                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                        fallbackIconSize: 28
+                        fallbackIconColor: root.accentColor
                     }
                 }
 
@@ -462,7 +416,7 @@ Rectangle {
                                 anchors.fill: parent
                                 spacing: 8
 
-                                // Album Art Thumbnail (28x28, R=6 using unified RoundedImage)
+                                // Album Art Thumbnail (28x28, R=6 using unified RoundedImage with border)
                                 RoundedImage {
                                     Layout.preferredWidth: 28
                                     Layout.preferredHeight: 28
@@ -473,26 +427,65 @@ Rectangle {
                                         if (root.attachedTrack === root.currentTrack && root.resolvedCover) return root.resolvedCover;
                                         return root.attachedTrack.image || root.attachedTrack.cover || "";
                                     }
-                                    placeholderColor: Qt.rgba(1, 1, 1, 0.08)
+                                    placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                                    borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                    borderWidth: 1.0
                                     fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
                                     fallbackIconSize: 12
                                     fallbackIconColor: root.accentColor
                                 }
 
-                                // Title & Artist
+                                // Title & Artist (Marquee animation when title is long)
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignVCenter
                                     spacing: 2
 
-                                    Text {
+                                    Item {
+                                        id: noteTrackTitleContainer
                                         Layout.fillWidth: true
-                                        text: root.attachedTrack ? (root.attachedTrack.title || root.attachedTrack.name || "Track") : ""
-                                        color: "#ffffff"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        elide: Text.ElideRight
+                                        implicitHeight: noteTrackTitleText.implicitHeight
+                                        clip: true
+
+                                        Text {
+                                            id: noteTrackTitleText
+                                            text: root.attachedTrack ? (root.attachedTrack.title || root.attachedTrack.name || "Track") : ""
+                                            color: "#ffffff"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            x: 0
+
+                                            readonly property real overflowDist: Math.max(0, implicitWidth - noteTrackTitleContainer.width)
+                                            readonly property bool needsScroll: overflowDist > 6
+
+                                            onTextChanged: {
+                                                noteTrackTitleText.x = 0;
+                                            }
+
+                                            SequentialAnimation {
+                                                id: noteTrackMarqueeAnim
+                                                running: noteTrackTitleText.needsScroll
+                                                loops: Animation.Infinite
+
+                                                PauseAnimation { duration: 1800 }
+                                                NumberAnimation {
+                                                    target: noteTrackTitleText
+                                                    property: "x"
+                                                    to: -noteTrackTitleText.overflowDist
+                                                    duration: Math.max(1200, noteTrackTitleText.overflowDist * 28)
+                                                    easing.type: Easing.InOutQuad
+                                                }
+                                                PauseAnimation { duration: 1800 }
+                                                NumberAnimation {
+                                                    target: noteTrackTitleText
+                                                    property: "x"
+                                                    to: 0
+                                                    duration: Math.max(1200, noteTrackTitleText.overflowDist * 28)
+                                                    easing.type: Easing.InOutQuad
+                                                }
+                                            }
+                                        }
                                     }
 
                                     Text {

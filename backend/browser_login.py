@@ -53,48 +53,111 @@ def find_system_browser():
             return bin_path
     return None
 
-async def capture_cookies_via_cdp(ws_url, max_timeout=300):
+async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     import websockets
 
     start_time = time.time()
+    google_signed_in_time = None
     msg_id = 1
 
-    async with websockets.connect(ws_url, ping_interval=None) as ws:
-        while time.time() - start_time < max_timeout:
-            msg_id += 1
-            cmd = {
-                "id": msg_id,
-                "method": "Storage.getCookies"
-            }
-            await ws.send(json.dumps(cmd))
-            
-            try:
-                resp_text = await asyncio.wait_for(ws.recv(), timeout=2.0)
-                data = json.loads(resp_text)
-                if data.get("id") == msg_id:
-                    cookies = data.get("result", {}).get("cookies", [])
-                    sapisid = None
-                    cookie_parts = []
-                    
-                    for c in cookies:
-                        name = c.get("name", "")
-                        val = c.get("value", "")
-                        domain = c.get("domain", "")
-                        if "youtube" in domain or "google" in domain:
-                            cookie_parts.append(f"{name}={val}")
-                            if name == "SAPISID" and val:
-                                sapisid = val
-                    
-                    if sapisid and len(cookie_parts) >= 3:
-                        full_cookie_str = "; ".join(cookie_parts)
-                        res = ytmusic_helper.save_auth(full_cookie_str)
-                        return res
-            except asyncio.TimeoutError:
-                pass
-            except Exception as e:
-                sys.stderr.write(f"[CDP recv error]: {e}\n")
+    try:
+        async with websockets.connect(ws_url, ping_interval=None) as ws:
+            while time.time() - start_time < max_timeout:
+                if proc.poll() is not None:
+                    return {"success": False, "error": "Login window was closed by user."}
 
-            await asyncio.sleep(1.0)
+                msg_id += 1
+                cmd = {
+                    "id": msg_id,
+                    "method": "Storage.getCookies"
+                }
+                await ws.send(json.dumps(cmd))
+                
+                try:
+                    resp_text = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                    data = json.loads(resp_text)
+                    if data.get("id") == msg_id:
+                        cookies = data.get("result", {}).get("cookies", [])
+                        
+                        yt_cookies = {}
+                        google_cookies = {}
+                        has_login_info = False
+                        has_sapisid = False
+                        
+                        for c in cookies:
+                            name = c.get("name", "")
+                            val = c.get("value", "")
+                            domain = c.get("domain", "")
+                            if not name or not val:
+                                continue
+
+                            if name == "LOGIN_INFO":
+                                has_login_info = True
+
+                            if name in ("SAPISID", "__Secure-3PAPISID"):
+                                has_sapisid = True
+
+                            if "youtube" in domain:
+                                yt_cookies[name] = val
+                            elif "google" in domain:
+                                google_cookies[name] = val
+                        
+                        # Note when Google Accounts credentials have been accepted
+                        if has_sapisid and not google_signed_in_time:
+                            google_signed_in_time = time.time()
+
+                        # If user authenticated with Google but hasn't reached music.youtube.com after 5s
+                        if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 5.0):
+                            try:
+                                with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
+                                    pages = json.loads(r.read().decode("utf-8"))
+                                for p in pages:
+                                    p_url = p.get("url", "")
+                                    if p.get("type") == "page" and "music.youtube.com" not in p_url:
+                                        p_ws = p.get("webSocketDebuggerUrl")
+                                        if p_ws:
+                                            async with websockets.connect(p_ws, ping_interval=None) as page_ws:
+                                                await page_ws.send(json.dumps({
+                                                    "id": 999,
+                                                    "method": "Page.navigate",
+                                                    "params": {"url": "https://music.youtube.com/"}
+                                                }))
+                                                break
+                            except Exception as ne:
+                                sys.stderr.write(f"[Page nav helper]: {ne}\n")
+
+                        # Crucial condition: must have both YouTube session (LOGIN_INFO) and auth (SAPISID)
+                        if has_login_info and has_sapisid:
+                            # Merge cookies: YouTube cookies take priority
+                            merged = dict(google_cookies)
+                            merged.update(yt_cookies)
+
+                            # Defensive: ensure __Secure-3PAPISID exists if SAPISID does
+                            if "SAPISID" in merged and "__Secure-3PAPISID" not in merged:
+                                merged["__Secure-3PAPISID"] = merged["SAPISID"]
+                            elif "__Secure-3PAPISID" in merged and "SAPISID" not in merged:
+                                merged["SAPISID"] = merged["__Secure-3PAPISID"]
+
+                            full_cookie_str = "; ".join(f"{k}={v}" for k, v in merged.items())
+
+                            # Verify auth using ytmusic_helper
+                            res = ytmusic_helper.save_auth(full_cookie_str)
+                            if res.get("success"):
+                                await asyncio.sleep(0.8)
+                                return res
+                            else:
+                                sys.stderr.write(f"[Auth verification pending]: {res.get('error')}\n")
+
+                except asyncio.TimeoutError:
+                    pass
+                except Exception as e:
+                    sys.stderr.write(f"[CDP loop error]: {e}\n")
+
+                await asyncio.sleep(1.0)
+    except websockets.exceptions.ConnectionClosed:
+        return {"success": False, "error": "Login window was closed."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
     return {"success": False, "error": "Login timed out after 5 minutes."}
 
@@ -106,6 +169,15 @@ def start_login():
         return err
 
     os.makedirs(PROFILE_DIR, exist_ok=True)
+
+    # Clean stale Chromium singleton locks if no browser is running
+    for lock_name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+        lock_path = os.path.join(PROFILE_DIR, lock_name)
+        if os.path.islink(lock_path) or os.path.exists(lock_path):
+            try:
+                os.remove(lock_path)
+            except Exception:
+                pass
 
     cmd = [
         browser_bin,
@@ -125,7 +197,7 @@ def start_login():
     )
 
     ws_url = None
-    for _ in range(30):
+    for _ in range(40):
         time.sleep(0.5)
         if proc.poll() is not None:
             # User closed window before CDP connection
@@ -153,7 +225,7 @@ def start_login():
 
     result = {"success": False, "error": "Unknown error"}
     try:
-        result = asyncio.run(capture_cookies_via_cdp(ws_url))
+        result = asyncio.run(capture_cookies_via_cdp(ws_url, CDP_PORT, proc))
     except Exception as e:
         result = {"success": False, "error": str(e)}
     finally:

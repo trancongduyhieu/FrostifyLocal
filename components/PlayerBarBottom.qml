@@ -780,11 +780,11 @@ Item {
                     RoundedImage {
                         x: 0
                         width: 24; height: 24; radius: 12
-                        borderColor: "#141416"
+                        borderColor: root.accentColor
                         borderWidth: 1.5
                         source: (hostAvatarsCluster.count > 0 && root.activeCoListenersDetails[0]) ? (root.activeCoListenersDetails[0].avatar || "") : ""
                         fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                        placeholderColor: "#27272a"
+                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                         visible: hostAvatarsCluster.count > 0
                     }
 
@@ -792,11 +792,11 @@ Item {
                     RoundedImage {
                         x: 16
                         width: 24; height: 24; radius: 12
-                        borderColor: "#141416"
+                        borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
                         borderWidth: 1.5
                         source: (hostAvatarsCluster.count > 1 && root.activeCoListenersDetails[1]) ? (root.activeCoListenersDetails[1].avatar || "") : ""
                         fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                        placeholderColor: "#27272a"
+                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                         visible: hostAvatarsCluster.count > 1
                     }
 
@@ -805,8 +805,8 @@ Item {
                         x: 34
                         width: 22; height: 22; radius: 11
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#27272a"
-                        border.color: "#141416"
+                        color: Qt.rgba(root.accentColor.r * 0.3, root.accentColor.g * 0.3, root.accentColor.b * 0.3, 0.90)
+                        border.color: root.accentColor
                         border.width: 1.5
                         visible: hostAvatarsCluster.count > 2
 

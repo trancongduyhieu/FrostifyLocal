@@ -128,6 +128,7 @@ def get_ytmusic_client():
 def get_auth_status():
     if not os.path.exists(AUTH_FILE):
         return {"logged_in": False, "name": "", "thumb": "", "email": ""}
+    user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic(AUTH_FILE)
@@ -137,18 +138,52 @@ def get_auth_status():
         if not thumb:
             thumbs = user.get("thumbnails", [])
             thumb = thumbs[-1].get("url") if thumbs else ""
-        email = user.get("email") or user.get("channelHandle") or ""
-        if not email:
+        handle = user.get("channelHandle") or ""
+        email = user.get("email") or handle or ""
+        if not email and name:
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
-        return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
-    except Exception:
+
+        # Update local user cache with verified account details
         try:
-            yt = YTMusic(AUTH_FILE)
-            yt.get_home(limit=1)
-            return {"logged_in": True, "name": "YouTube Music Account", "thumb": "", "email": ""}
-        except Exception as e:
-            return {"logged_in": False, "error": str(e)}
+            with open(user_cache_file, "w", encoding="utf-8") as ucf:
+                json.dump({
+                    "email": email.strip().lower(),
+                    "name": name,
+                    "avatar": thumb,
+                    "handle": handle
+                }, ucf, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+        return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
+    except Exception as e:
+        # Fallback 1: Check cached profile if available
+        if os.path.exists(user_cache_file):
+            try:
+                with open(user_cache_file, "r", encoding="utf-8") as ucf:
+                    cached = json.load(ucf)
+                    if cached.get("name"):
+                        return {
+                            "logged_in": True,
+                            "name": cached.get("name"),
+                            "thumb": cached.get("avatar") or "",
+                            "email": cached.get("email") or ""
+                        }
+            except Exception:
+                pass
+
+        # Fallback 2: Check if AUTH_FILE has LOGIN_INFO (temporary offline/network hiccup)
+        try:
+            with open(AUTH_FILE, "r", encoding="utf-8") as f:
+                auth_data = json.load(f)
+            cookie_data = auth_data.get("cookie", "")
+            if "login_info" in cookie_data.lower():
+                return {"logged_in": True, "name": "Google User", "thumb": "", "email": ""}
+        except Exception:
+            pass
+
+        return {"logged_in": False, "name": "", "thumb": "", "email": "", "error": str(e)}
 
 def save_auth(raw_text):
     if isinstance(raw_text, dict):
@@ -163,17 +198,15 @@ def save_auth(raw_text):
         headers = dict(initialize_headers())
         headers["user-agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
 
-        # Dynamic authuser selection: user2 -> authuser 1, user3 -> authuser 2, or explicit parameter
+        # Authuser detection
         target_authuser = "0"
-        if PROFILE_NAME == "user2" or "2" in PROFILE_NAME or PROFILE_NAME == "friend":
-            target_authuser = "1"
-        elif PROFILE_NAME == "user3" or "3" in PROFILE_NAME:
-            target_authuser = "2"
-
-        # Check if authuser is explicitly passed in raw_text
         authuser_match = re.search(r'(?:x-goog-)?authuser[=:\s]+(["\']?)(\d+)\1', raw_text, re.IGNORECASE)
         if authuser_match:
             target_authuser = authuser_match.group(2)
+        elif PROFILE_NAME == "user2" or PROFILE_NAME == "friend":
+            target_authuser = "1"
+        elif PROFILE_NAME == "user3":
+            target_authuser = "2"
 
         headers["x-goog-authuser"] = str(target_authuser)
 
@@ -190,7 +223,8 @@ def save_auth(raw_text):
                 cookie_str = cookie_str[7:].strip()
             headers["cookie"] = cookie_str
 
-        if "authorization" not in headers and "cookie" in headers:
+        # Ensure SAPISID and __Secure-3PAPISID are populated for authorization
+        if "cookie" in headers:
             cookie_str = headers["cookie"]
             sapisid = None
             for part in cookie_str.split(";"):
@@ -201,24 +235,80 @@ def save_auth(raw_text):
                         sapisid = v.strip().strip('"')
                         break
             if sapisid:
+                if "__Secure-3PAPISID=" not in headers["cookie"]:
+                    headers["cookie"] += f"; __Secure-3PAPISID={sapisid}"
+                if "SAPISID=" not in headers["cookie"]:
+                    headers["cookie"] += f"; SAPISID={sapisid}"
                 now_ts = int(time.time())
                 hash_input = f"{now_ts} {sapisid} https://music.youtube.com"
                 sha1_hash = hashlib.sha1(hash_input.encode("utf-8")).hexdigest()
                 headers["authorization"] = f"SAPISIDHASH {now_ts}_{sha1_hash}"
 
+        # Gate check: Must have LOGIN_INFO to authenticate as YouTube Music account
+        if "login_info" not in headers.get("cookie", "").lower():
+            return {
+                "success": False,
+                "error": "Missing LOGIN_INFO session cookie. Please ensure YouTube Music sign-in redirect has completed."
+            }
+
         temp_file = AUTH_FILE + ".tmp"
         save_json(temp_file, headers)
 
-        test_client = ytmusicapi.YTMusic(temp_file)
-        test_client.get_home(limit=1)
+        # Rigorous verification: get_account_info MUST succeed
+        test_client = None
+        account_info = None
+        try:
+            test_client = ytmusicapi.YTMusic(temp_file)
+            account_info = test_client.get_account_info()
+        except Exception as err1:
+            if target_authuser != "0":
+                headers["x-goog-authuser"] = "0"
+                save_json(temp_file, headers)
+                test_client = ytmusicapi.YTMusic(temp_file)
+                account_info = test_client.get_account_info()
+            else:
+                raise err1
+
+        name = account_info.get("accountName") or account_info.get("name") or "Google User"
+        thumbs = account_info.get("thumbnails", [])
+        thumb = account_info.get("accountPhotoUrl") or (thumbs[-1].get("url") if thumbs else "")
+        handle = account_info.get("channelHandle") or ""
+        email = account_info.get("email") or handle or ""
+        if not email and name:
+            safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
+            email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
 
         os.replace(temp_file, AUTH_FILE)
+
+        # Cache profile info for instant sub-millisecond access
+        user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
+        try:
+            user_data = {
+                "email": email.strip().lower(),
+                "name": name,
+                "avatar": thumb,
+                "handle": handle
+            }
+            with open(user_cache_file, "w", encoding="utf-8") as ucf:
+                json.dump(user_data, ucf, indent=2, ensure_ascii=False)
+        except Exception as ce:
+            sys.stderr.write(f"[cache user info error]: {ce}\n")
+
         try:
             with open(AUTH_CHANGED_FILE, "w") as f:
                 f.write(str(time.time()))
         except Exception:
             pass
-        return {"success": True, "message": "Connected successfully to YouTube Music"}
+
+        return {
+            "success": True,
+            "name": name,
+            "thumb": thumb,
+            "avatar": thumb,
+            "email": email,
+            "handle": handle,
+            "message": f"Connected successfully as {name}"
+        }
     except Exception as e:
         if os.path.exists(AUTH_FILE + ".tmp"):
             try: os.remove(AUTH_FILE + ".tmp")
@@ -229,6 +319,12 @@ def logout():
     if os.path.exists(AUTH_FILE):
         try:
             os.remove(AUTH_FILE)
+        except Exception:
+            pass
+    user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
+    if os.path.exists(user_cache_file):
+        try:
+            os.remove(user_cache_file)
         except Exception:
             pass
     try:
@@ -2128,72 +2224,50 @@ def send_playback_tracking(video_id, title="", artist="", playlist_id=None):
             if not pt:
                 return False
 
-            playback_url = pt.get("videostatsPlaybackUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
-            watchtime_url = pt.get("videostatsWatchtimeUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
-            atr_url = pt.get("atrUrl", {}).get("baseUrl", "").replace("https://s.youtube.com", "https://music.youtube.com")
-            if not playback_url or not watchtime_url:
-                return False
+            # 1. Official playback ping to s.youtube.com via ytmusicapi
+            yt.add_history_item(song)
 
             cpn = "".join(random.choices(string.ascii_letters + string.digits + "-_", k=16))
-            now_ms = str(int(time.time() * 1000))
-            
-            # Use authenticated headers from yt.headers (includes fresh SAPISIDHASH, cookies, origin)
-            auth_headers = dict(yt.headers)
-            auth_headers["X-Goog-Event-Time"] = now_ms
-            auth_headers["X-Goog-Request-Time"] = now_ms
 
-            # 1. Playback ping
-            p1 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn}
-            if p_id:
-                p1["list"] = p_id
-                p1["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-            yt._session.get(playback_url, params=p1, headers=auth_headers, timeout=10)
+            # 2. Watchtime ping 1 (Initial start registration)
+            watchtime_url = pt.get("videostatsWatchtimeUrl", {}).get("baseUrl")
+            if watchtime_url:
+                p_wt1 = {
+                    "ver": 2,
+                    "c": "WEB_REMIX",
+                    "cpn": cpn,
+                    "st": "0",
+                    "et": "5.5",
+                    "state": "playing"
+                }
+                if p_id:
+                    p_wt1["list"] = p_id
+                    p_wt1["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+                yt._send_get_request(watchtime_url, params=p_wt1)
 
-            # 2. Watchtime initial ping (st=0, et=5.54)
-            p2 = {"ver": "2", "c": "WEB_REMIX", "cpn": cpn, "st": "0", "et": "5.54"}
-            if p_id:
-                p2["list"] = p_id
-                p2["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-            auth_headers["X-Goog-Event-Time"] = str(int(time.time() * 1000))
-            auth_headers["X-Goog-Request-Time"] = auth_headers["X-Goog-Event-Time"]
-            yt._session.get(watchtime_url, params=p2, headers=auth_headers, timeout=10)
+                # 3. Watchtime ping 2 (Sustained listen >= 35s - triggers "Listen again" shelf promotion)
+                p_wt2 = {
+                    "ver": 2,
+                    "c": "WEB_REMIX",
+                    "cpn": cpn,
+                    "st": "5.5",
+                    "et": "35.0",
+                    "state": "playing"
+                }
+                if p_id:
+                    p_wt2["list"] = p_id
+                    p_wt2["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+                yt._send_get_request(watchtime_url, params=p_wt2)
 
-            # 3. Background delay 5s -> atr -> delay 0.5s -> second watchtime (12.xx seconds)
-            def _async_follow_up():
-                try:
-                    time.sleep(5.0)
-                    follow_headers = dict(yt.headers)
-                    if atr_url:
-                        p_atr = {"cpn": cpn}
-                        if p_id:
-                            p_atr["list"] = p_id
-                            p_atr["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-                        now_atr = str(int(time.time() * 1000))
-                        follow_headers["X-Goog-Event-Time"] = now_atr
-                        follow_headers["X-Goog-Request-Time"] = now_atr
-                        yt._session.post(atr_url, params=p_atr, headers=follow_headers, timeout=10)
+            # 4. Synchronous ATR (Attribution) ping
+            atr_url = pt.get("atrUrl", {}).get("baseUrl")
+            if atr_url:
+                p_atr = {"cpn": cpn}
+                if p_id:
+                    p_atr["list"] = p_id
+                    p_atr["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
+                yt._send_get_request(atr_url, params=p_atr)
 
-                    time.sleep(0.5)
-                    sec_watch = round(random.uniform(12.0, 13.5), 2)
-                    p3 = {
-                        "ver": "2",
-                        "c": "WEB_REMIX",
-                        "cpn": cpn,
-                        "st": "0,5.54",
-                        "et": f"5.54,{sec_watch}"
-                    }
-                    if p_id:
-                        p3["list"] = p_id
-                        p3["referrer"] = f"https://music.youtube.com/playlist?list={p_id}"
-                    now_final = str(int(time.time() * 1000))
-                    follow_headers["X-Goog-Event-Time"] = now_final
-                    follow_headers["X-Goog-Request-Time"] = now_final
-                    yt._session.get(watchtime_url, params=p3, headers=follow_headers, timeout=10)
-                except Exception as ex:
-                    sys.stderr.write(f"[async tracking follow-up error]: {ex}\n")
-
-            import threading
-            threading.Thread(target=_async_follow_up, daemon=True).start()
             return True
         except Exception as e:
             sys.stderr.write(f"[execute_tracking error]: {e}\n")

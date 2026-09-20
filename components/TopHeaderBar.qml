@@ -42,6 +42,8 @@ Rectangle {
     signal homeClicked()
     signal libraryClicked()
     signal settingsClicked()
+    signal notificationsClicked(real xPos, real yPos)
+    property int unreadNotificationsCount: 0
 
     onCurrentViewChanged: {
         searchMode = (currentView === "library" ? "offline" : "online");
@@ -202,6 +204,60 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: headerRoot.settingsClicked()
+                }
+            }
+
+            // 6. Notification Bell Button (Flat layout, accent indicator badge)
+            Item {
+                id: notificationBtn
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+
+                AppIcon {
+                    id: bellIcon
+                    anchors.centerIn: parent
+                    source: "../assets/icons/notifications-symbolic.svg"
+                    iconSize: 17
+                    color: headerRoot.accentColor
+                    opacity: headerRoot.unreadNotificationsCount > 0 ? 1.0 : (notifMouse.containsMouse ? 1.0 : 0.70)
+                    scale: notifMouse.containsMouse ? 1.12 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+
+                // Flat Accent Badge (No heavy nested box)
+                Rectangle {
+                    id: notifBadge
+                    visible: headerRoot.unreadNotificationsCount > 0
+                    anchors.top: bellIcon.top
+                    anchors.topMargin: -2
+                    anchors.right: bellIcon.right
+                    anchors.rightMargin: -4
+                    width: Math.max(14, badgeText.implicitWidth + 6)
+                    height: 14
+                    radius: 7
+                    color: headerRoot.accentColor
+
+                    Text {
+                        id: badgeText
+                        anchors.centerIn: parent
+                        text: headerRoot.unreadNotificationsCount > 9 ? "9+" : headerRoot.unreadNotificationsCount
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 8
+                        font.bold: true
+                        color: (headerRoot.accentColor.r * 0.299 + headerRoot.accentColor.g * 0.587 + headerRoot.accentColor.b * 0.114) > 0.6 ? "#000000" : "#ffffff"
+                    }
+                }
+
+                MouseArea {
+                    id: notifMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        var pt = notificationBtn.mapToItem(headerRoot, notificationBtn.width / 2, notificationBtn.height);
+                        headerRoot.notificationsClicked(pt.x, pt.y);
+                    }
                 }
             }
         }
