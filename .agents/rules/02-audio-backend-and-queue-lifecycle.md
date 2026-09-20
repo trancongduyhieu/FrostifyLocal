@@ -73,3 +73,12 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Tệp lưu**: `~/.config/noctalia/nutsty_settings.json`.
 - **Cơ chế đọc an toàn**: `shell.qml` nạp tự động qua `FileView` kết hợp timer trễ `delayedSettingsRead` (100ms) để bảo đảm tiến trình bất đồng bộ của Quickshell hoàn tất trước khi phân giải JSON.
 - **Ràng buộc QML Binding**: Khi click Shuffle hoặc Repeat trong `components/PlayerBarBottom.qml`, chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`. Tuyệt đối không gán đè thuộc tính cục bộ làm phá vỡ reactive property binding.
+
+---
+
+## 9. Cloudflare Global Relay & Serverless Distributed D1
+- **Kiến trúc**: Cloudflare Workers + D1 SQLite (`cloud_relay/`) tại `https://nutsty-global-relay.nutsty-global-relay.workers.dev`.
+- **Định tuyến toàn cầu**: Xác thực danh tính, tra cứu bạn bè không dấu/case-insensitive (`LOWER()`), kết bạn, ghi chú 24h và hàng đợi event thời gian thực.
+- **Client Daemon**: `backend/auth_server.py` chạy `ThreadingHTTPServer` (tránh block event polling), gửi User-Agent trình duyệt để vượt qua bộ lọc bot Cloudflare.
+- **Cơ chế danh tính bền vững**: Lưu giữ `user_id` và `secret_key` từ cloud registration, chống tạo tài khoản ma (ghost accounts).
+

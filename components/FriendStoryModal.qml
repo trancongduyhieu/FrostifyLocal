@@ -87,9 +87,10 @@ Item {
     }
 
     function formatTimeAgo(isoStr) {
-        if (!isoStr) return I18n.tr("Vừa xong", "Just now");
+        if (!isoStr || isoStr === 0 || isoStr === "0") return "";
         try {
             var d = new Date(isoStr);
+            if (isNaN(d.getTime())) return "";
             var diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
             if (diffSec < 60) return I18n.tr("Vừa xong", "Just now");
             var diffMin = Math.floor(diffSec / 60);
@@ -234,7 +235,11 @@ Item {
                             }
 
                             Text {
-                                text: root.currentFriend ? root.formatTimeAgo(root.currentFriend.created_at) : ""
+                                text: {
+                                    if (!root.currentFriend) return "";
+                                    if (!friendBubbleContainer.hasNoteContent) return I18n.tr("Đang trực tuyến", "Online");
+                                    return root.formatTimeAgo(root.currentFriend.created_at);
+                                }
                                 color: Theme.textSecondary
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
@@ -284,9 +289,16 @@ Item {
 
                         // 1. THOUGHT BUBBLE CONTAINER
                         Item {
+                            id: friendBubbleContainer
+                            readonly property bool hasNoteContent: {
+                                if (!root.currentFriend) return false;
+                                var txt = String(root.currentFriend.note_text || "").trim();
+                                return txt.length > 0 || root.attachedTrack !== null;
+                            }
+                            visible: hasNoteContent
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: Math.max(160, Math.min(320, friendBubbleCol.implicitWidth + 36))
-                            Layout.preferredHeight: friendBubbleBg.height + 10
+                            Layout.preferredHeight: hasNoteContent ? (friendBubbleBg.height + 10) : 0
 
                             // Seamless Droplet Tail (Rotated rounded square)
                             Rectangle {
@@ -354,6 +366,7 @@ Item {
                                     Text {
                                         Layout.fillWidth: true
                                         visible: text.length > 0
+                                        Layout.preferredHeight: text.length > 0 ? -1 : 0
                                         text: root.currentFriend ? String(root.currentFriend.note_text || "").trim() : ""
                                         color: "#ffffff"
                                         font.family: Theme.fontFamily
@@ -463,7 +476,7 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: 80
                             Layout.preferredHeight: 80
-                            Layout.topMargin: 6
+                            Layout.topMargin: friendBubbleContainer.hasNoteContent ? 6 : 0
                             radius: 40
                             source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
                             borderColor: Qt.rgba(255, 255, 255, 0.15)
@@ -563,7 +576,9 @@ Item {
                         Text {
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: 4
-                            text: I18n.tr("Đã chia sẻ với bạn bè", "Shared with friends")
+                            text: friendBubbleContainer.hasNoteContent
+                                ? I18n.tr("Đã chia sẻ với bạn bè", "Shared with friends")
+                                : I18n.tr("Chưa đăng ghi chú nào", "No note posted yet")
                             color: Qt.rgba(1, 1, 1, 0.60)
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
@@ -579,11 +594,19 @@ Item {
                     readonly property var liveTrack: {
                         if (!root.currentFriend) return null;
                         var np = root.currentFriend.now_playing;
-                        if (np && (np.title || np.name) && np.is_playing !== false) return np;
+                        if (!np) return null;
+                        if (typeof np === "string") {
+                            var trimmed = np.trim();
+                            return trimmed.length > 0 ? { title: trimmed, name: trimmed, is_playing: true } : null;
+                        }
+                        if (typeof np === "object") {
+                            if ((np.title || np.name) && np.is_playing !== false) return np;
+                        }
                         return null;
                     }
+                    visible: liveTrack !== null
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 52
+                    Layout.preferredHeight: liveTrack !== null ? 52 : 0
                     radius: 12
                     color: liveListenMouse.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
@@ -634,7 +657,7 @@ Item {
                                     var uName = root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : I18n.tr("Bạn bè", "Friend");
                                     var sTitle = liveListenBtn.liveTrack ? (liveListenBtn.liveTrack.title || liveListenBtn.liveTrack.name || "") : (root.trackTitle || "");
                                     if (!sTitle) sTitle = I18n.tr("bài hát", "a track");
-                                    return I18n.tr(uName + " đang nghe bài " + sTitle + " • Bấm vào để nghe cùng", uName + " is listening to " + sTitle + " • Click to listen along");
+                                    return I18n.tr(uName + " đang nghe " + sTitle + " • Bấm vào để nghe cùng", uName + " is listening to " + sTitle + " • Click to listen along");
                                 }
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily

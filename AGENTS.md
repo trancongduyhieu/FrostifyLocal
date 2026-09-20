@@ -11,6 +11,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 - **Backend phát nhạc độ trễ thấp**: Trình điều khiển **Python IPC daemon** (`backend/player_daemon.py`) giao tiếp trực tiếp qua Unix Domain Socket (`/tmp/nutsty_mpv.sock`) với một tiến trình `mpv` chuyên biệt (hỗ trợ gapless playback, hardware decoding, flac/m4a/opus/mp3/ytdl streams).
 - **Desktop Lyrics ma thuật phong cách Gacha/Anime**: Hiển thị lyric nổi trực tiếp lên hình nền desktop với font chữ cổ điển *Instrument Serif*, hiệu ứng pop chữ gacha và đổ bóng điện ảnh thích ứng màu sắc hình nền.
 - **Bộ máy màu sắc thích ứng Chromatic Salience (OKLAB / OKLCH)**: Trích xuất màu điểm nhấn nghệ thuật từ hình nền hiện tại và cập nhật theo thời gian thực vào `~/.config/noctalia/nutsty_palette.json`.
+- **Mạng xã hội & Đồng bộ Edge toàn cầu**: Kiến trúc **Cloudflare Workers + Cloudflare D1 (Serverless Distributed SQLite)** định tuyến toàn bộ tìm kiếm bạn bè, kết bạn, trạng thái nghe trực tiếp và ghi chú 24h Music Capsule qua HTTPS toàn cầu (`https://nutsty-global-relay.nutsty-global-relay.workers.dev`).
 
 ---
 
@@ -52,58 +53,57 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 
 ```
 /home/apple/Applications/FrostifyLocal/
-├── run.sh                          # Script khởi chạy 1-chạm (tự quét nhạc và chạy quickshell)
+├── run.sh                          # Script khởi chạy 1-chạm (scan nhạc + quickshell)
 ├── shell.qml                       # Entry point QML chính (FloatingWindow Nutsty + DesktopLyricsWidget)
-├── library.json                    # Dữ liệu cache danh sách bài hát, metadata và album
-├── assets/                         # Font chữ Instrument Serif, icon SVG, dữ liệu tĩnh
+├── library.json                    # Dữ liệu cache bài hát, metadata và album
+├── assets/                         # Font Instrument Serif, SVG icons, dữ liệu tĩnh
 ├── scripts/
 │   └── run_dual_profile_test.sh    # Launcher test 2 profile song song (user1 & user2)
+├── cloud_relay/                    # Cloudflare Worker & D1 Serverless Global Relay
+│   ├── schema.sql                  # Schema D1 (users, friendships, events, notes)
+│   ├── wrangler.toml               # Cấu hình Cloudflare Workers & D1 database binding
+│   └── src/index.js                # Serverless Edge Router & Logic mạng xã hội toàn cầu
 ├── backend/
-│   ├── auth_server.py              # Resident HTTP daemon (port 17890) phục vụ xác thực Google & fast API
-│   ├── browser_login.py            # Script hỗ trợ mở trình duyệt đăng nhập Google
-│   ├── download_manager.py         # Daemon tải nhạc đa luồng (yt-dlp, FFmpeg audio 192k, ID3, socket IPC)
-│   ├── library.py                  # Bộ quét thư viện nhạc (~/Music) sử dụng Mutagen
-│   ├── lyrics_helper.py            # Trích xuất và phân giải file LRC (tích hợp syncedlyrics fallback)
-│   ├── palette_extractor.py        # Thuật toán OKLAB Chromatic Salience Clustering
-│   ├── player_daemon.py            # CLI wrapper điều khiển mpv qua /tmp/nutsty_mpv.sock
-│   ├── playlist_manager.py         # Quản lý danh sách phát cá nhân và danh sách phát hệ thống
-│   ├── social_notes.py             # Đồng bộ ghi chú 24h & bắn event nghe cùng (/api/notes/events)
-│   └── ytmusic_helper.py           # Engine YouTube Music: personalized home, continuation scrapers, radio
+│   ├── auth_server.py              # Resident HTTP daemon (port 17890) xác thực & social relay
+│   ├── browser_login.py            # Hỗ trợ mở trình duyệt đăng nhập Google
+│   ├── download_manager.py         # Daemon tải nhạc đa luồng (yt-dlp, FFmpeg, socket IPC)
+│   ├── library.py                  # Bộ quét thư viện nhạc (~/Music) qua Mutagen
+│   ├── lyrics_helper.py            # Trích xuất và phân giải file LRC (syncedlyrics fallback)
+│   ├── palette_extractor.py        # OKLAB Chromatic Salience Clustering
+│   ├── player_daemon.py            # Điều khiển mpv qua /tmp/nutsty_mpv.sock
+│   ├── playlist_manager.py         # Quản lý danh sách phát cá nhân và hệ thống
+│   ├── social_notes.py             # Đồng bộ ghi chú 24h & event nghe cùng (/api/notes/events)
+│   └── ytmusic_helper.py           # Engine YouTube Music: personalized shelves, radio, search
 ├── components/
-│   ├── AmberolDetailView.qml       # Màn hình chi tiết bài hát, đĩa xoay và lyric cuộn Amberol
-│   ├── AppleMusicDesktopLyrics.qml # Mẫu 2: Parametric Multi-Line Engine (5 dòng, DoF quang học, phosphor bloom)
-│   ├── CircularSpinner.qml         # Con quay loading xoay tròn phong cách Nutsty (270° arc Canvas)
-│   ├── CoListenersPopover.qml      # Popover kính mờ danh sách người nghe cùng Host & nút Dừng tất cả
-│   ├── DesktopLyricsWidget.qml     # Universal Lyrics Harness (Host Layer-Shell, kéo thả toàn màn hình, palette sync)
-│   ├── DownloadManager.qml         # State manager đồng bộ tác vụ tải xuống từ download_manager.py
-│   ├── DownloadQueuePopover.qml    # Popover quản lý hàng đợi tải xuống Minimalist Clean (#121212)
-│   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, Gacha pop, đổ bóng
-│   ├── FloatingChatBubble.qml      # Hiển thị bong bóng chat bay lướt Danmaku 4s khi nghe cùng
+│   ├── AmberolDetailView.qml       # Màn hình chi tiết bài hát, đĩa xoay và lyric cuộn
+│   ├── AppleMusicDesktopLyrics.qml # Mẫu 2: Parametric Multi-Line Engine (DoF quang học)
+│   ├── CircularSpinner.qml         # Con quay loading xoay tròn phong cách Nutsty
+│   ├── CoListenersPopover.qml      # Popover danh sách người nghe cùng & nút Dừng
+│   ├── DesktopLyricsWidget.qml     # Universal Lyrics Harness (Host Layer-Shell, kéo thả)
+│   ├── DownloadManager.qml         # State manager đồng bộ tải xuống từ download_manager.py
+│   ├── DownloadQueuePopover.qml    # Popover quản lý hàng đợi tải xuống Minimalist Clean
+│   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, Gacha pop
+│   ├── FloatingChatBubble.qml      # Hiển thị bong bóng chat bay Danmaku khi nghe cùng
 │   ├── FriendsPulseBar.qml         # Thanh avatar bạn bè 24h pulse lướt ngang ở HomeFeed
 │   ├── FriendStoryModal.qml        # Modal xem ghi chú bạn bè, đĩa nhạc xoay & nút Nghe Cùng
-│   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Presentation view Gacha / Anime Pop (1-line Instrument Serif)
-│   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels và track grids
+│   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Gacha Anime Pop (Instrument Serif)
+│   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels, grids
 │   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
 │   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
-│   ├── MainTrackGrid.qml           # Grid danh sách bài hát, card hiển thị và nút [ ▶ Phát ] tuần tự
-│   ├── NavArrowButton.qml          # Component nút mũi tên điều hướng < và > đồng bộ màu động accentColor
-│   ├── NavSidebar.qml              # Sidebar điều hướng [ Playlists | Queue ] hai tab tương tác
-│   ├── PlayerBarBottom.qml         # Thanh phát nhạc chính Nutsty (thời lượng, âm lượng, Amberol button)
-│   ├── PostNoteModal.qml           # Modal đăng ghi chú 24h kèm đính kèm bài hát
-│   ├── RoundedImage.qml            # Chuẩn bo góc Design System (HiDPI 2x, lazy VRAM, fallback)
+│   ├── MainTrackGrid.qml           # Grid danh sách bài hát & nút phát tuần tự
+│   ├── NavArrowButton.qml          # Nút mũi tên < > đồng bộ màu động accentColor
+│   ├── NavSidebar.qml              # Sidebar điều hướng [ Playlists | Queue ]
+│   ├── PlayerBarBottom.qml         # Thanh phát nhạc chính Nutsty
+│   ├── PostNoteModal.qml           # Modal đăng ghi chú 24h kèm bài hát
+│   ├── RoundedImage.qml            # Bo góc Design System (HiDPI 2x, lazy VRAM, fallback)
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass
-│   ├── SuggestTrackToast.qml       # Toast tương tác nhận đề xuất bài hát ([Phát ngay] / [Thêm hàng đợi])
-│   ├── Theme.qml                   # Hệ thống token màu, kích thước bo góc, padding
-│   ├── TrackCard.qml               # Card hiển thị từng bài hát trong grid
-│   ├── TrackContextMenu.qml        # Menu chuột phải Dark Glass kế thừa từ Nutsty
-│   ├── TrackRow.qml                # Dòng hiển thị bài hát trong danh sách hàng đợi
+│   ├── SuggestTrackToast.qml       # Toast tương tác nhận đề xuất bài hát
+│   ├── Theme.qml                   # Hệ thống token màu, bo góc, padding
+│   ├── TrackCard.qml               # Card hiển thị bài hát trong grid
+│   ├── TrackContextMenu.qml        # Menu chuột phải Dark Glass
+│   ├── TrackRow.qml                # Dòng hiển thị bài hát trong hàng đợi
 │   └── UserNoteDetailModal.qml     # Modal xem/xóa ghi chú cá nhân Dark Glass
-├── .agents/
-│   └── rules/                      # Hệ thống quy tắc & kiến trúc chuyên sâu phân tầng
-│       ├── 01-design-system-and-visual-effects.md
-│       ├── 02-audio-backend-and-queue-lifecycle.md
-│       ├── 03-desktop-lyrics-engine.md
-│       └── 04-code-recipes-and-patterns.md
+├── .agents/rules/                  # Quy tắc & kiến trúc chuyên sâu phân tầng
 ├── AGENTS.md                       # File này (Hiến pháp kiến trúc tối cao)
 └── TODO.md                         # Danh sách tính năng và lộ trình phát triển đã chốt
 ```
@@ -117,7 +117,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 | Lĩnh vực phụ trách | Tệp quy tắc chuyên sâu | Nội dung cốt lõi & Bẫy lỗi (Footguns) |
 | :--- | :--- | :--- |
 | **Giao diện, Đồ họa & Kính lỏng** | [01-design-system-and-visual-effects.md](file:///.agents/rules/01-design-system-and-visual-effects.md) | - Thuật toán Kính lỏng Liquid Glass (Vibrancy 1.6x, chống đục trắng SimpMusic).<br/>- Định lý bo góc đồng tâm $R_{\text{con}} = R_{\text{mẹ}} - \text{Padding}$ & viền hairline 1px.<br/>- **Footgun #1**: Cơ chế xuyên thấu hình nền khi pause (`win.isPlaying ? 1.0 : 0.0`).<br/>- Bo góc avatar người dùng qua `MultiEffect` không vỡ góc đen. |
-| **Âm thanh, IPC & Hàng đợi** | [02-audio-backend-and-queue-lifecycle.md](file:///.agents/rules/02-audio-backend-and-queue-lifecycle.md) | - Backend Python daemon & Unix Socket `/tmp/nutsty_mpv.sock` (gapless stream).<br/>- Phân lập luồng duyệt (`browsingTracks`) vs Hàng đợi thực tế (`currentTracks`).<br/>- Tách bạch Browsing Title vs Playing Source Title (chống xung đột trạng thái).<br/>- **Cơ chế Snapshot & Reset Queue an toàn** khi chuyển đổi Mood Chips.<br/>- Trình tải nhạc đa luồng `download_manager.py` & Lưu trữ cài đặt an toàn. |
+| **Âm thanh, IPC & Hàng đợi** | [02-audio-backend-and-queue-lifecycle.md](file:///.agents/rules/02-audio-backend-and-queue-lifecycle.md) | - Backend Python daemon & Unix Socket `/tmp/nutsty_mpv.sock` (gapless stream).<br/>- Cloudflare Workers + D1 Serverless Global Relay (kết bạn, ghi chú 24h, listen along).<br/>- Phân lập luồng duyệt (`browsingTracks`) vs Hàng đợi thực tế (`currentTracks`).<br/>- **Cơ chế Snapshot & Reset Queue an toàn** khi chuyển đổi Mood Chips.<br/>- Trình tải nhạc đa luồng `download_manager.py` & Lưu trữ cài đặt an toàn. |
 | **Lời bài hát Desktop Lyrics** | [03-desktop-lyrics-engine.md](file:///.agents/rules/03-desktop-lyrics-engine.md) | - Host Native Wayland Layer-Shell qua Quickshell.<br/>- 4 Presets: Gacha Anime Pop (Instrument Serif), Apple Music Multi-line DoF, Motion Blur, Kinetic Typography.<br/>- **Tuyệt đối cấm viền trắng (White Halo)**, dùng Universal Cinematic Shadows.<br/>- Đồng bộ âm tiết Syllable-level Karaoke & Elastic scaling (SimpMusic Footgun #217). |
 | **Kỹ Năng & Mẫu Code Chuẩn** | [04-code-recipes-and-patterns.md](file:///.agents/rules/04-code-recipes-and-patterns.md) | - Thẻ Pattern chuẩn cho các kỹ năng/giải pháp xuất sắc đã được kiểm chứng.<br/>- Code mẫu chuẩn Dynamic Accent & Liquid Glass Button.<br/>- Bố cục đa ngôn ngữ song ngữ co giãn (`Row` + `I18n.tr`). |
 
