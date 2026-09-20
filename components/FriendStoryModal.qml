@@ -353,6 +353,7 @@ Item {
                                     // Note Text
                                     Text {
                                         Layout.fillWidth: true
+                                        visible: text.length > 0
                                         text: root.currentFriend ? String(root.currentFriend.note_text || "").trim() : ""
                                         color: "#ffffff"
                                         font.family: Theme.fontFamily

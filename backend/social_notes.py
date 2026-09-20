@@ -41,9 +41,28 @@ def get_cache_file() -> Path:
     return get_config_dir() / f"nutsty_notes_cache{suffix}.json"
 
 def get_current_user() -> Dict[str, str]:
-    """Lấy thông tin tài khoản hiện tại từ settings hoặc profile môi trường."""
+    """Lấy thông tin tài khoản hiện tại từ cloud identity, settings hoặc profile môi trường."""
     profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
     suffix = get_profile_suffix()
+
+    # 0. Đọc từ nutsty_cloud_identity{suffix}.json trước nếu có
+    cloud_id_file = get_config_dir() / f"nutsty_cloud_identity{suffix}.json"
+    if not cloud_id_file.exists() and not suffix:
+        cloud_id_file = get_config_dir() / "nutsty_cloud_identity.json"
+    if cloud_id_file.exists():
+        try:
+            with open(cloud_id_file, "r", encoding="utf-8") as cif:
+                cdata = json.load(cif)
+                if cdata.get("tag"):
+                    return {
+                        "email": cdata.get("tag", "").lower(),
+                        "tag": cdata.get("tag", ""),
+                        "user_id": cdata.get("user_id", ""),
+                        "name": cdata.get("username", "Shiraori"),
+                        "avatar": cdata.get("avatar_url", "")
+                    }
+        except Exception:
+            pass
 
     # 1. Đọc từ cache người dùng nếu còn hiệu lực để đạt tốc độ phản hồi micro-giây (< 1ms)
     user_cache_file = get_config_dir() / f"nutsty_user_cache{suffix}.json"
@@ -203,7 +222,10 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
             pass
 
     payload = {
+        "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
         "user_email": user["email"],
+        "tag": user.get("tag", ""),
+        "user_id": user.get("user_id", ""),
         "user_name": user["name"],
         "avatar_url": user["avatar"],
         "note_text": note_text[:80],
@@ -273,7 +295,10 @@ def delete_note(worker_url: Optional[str] = None) -> Dict[str, Any]:
 
     url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/delete"
     try:
-        payload = {"user_email": user["email"]}
+        payload = {
+            "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
+            "user_email": user["email"]
+        }
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),

@@ -129,9 +129,11 @@ Item {
             Item {
                 id: userNoteItem
                 property string noteStr: root.myLatestNote ? String(root.myLatestNote.note_text || "").replace(/[\r\n]+/g, " ").trim() : I18n.tr("Chia sẻ suy nghĩ...", "Share a thought...")
-                property var effectiveTrack: (root.myLatestNote && root.myLatestNote.track) ? root.myLatestNote.track : (root.currentTrack || null)
+                property var effectiveTrack: (root.myLatestNote && root.myLatestNote.track && (root.myLatestNote.track.title || root.myLatestNote.track.name || root.myLatestNote.track.id)) ? root.myLatestNote.track : null
                 property string trackStr: effectiveTrack ? String(effectiveTrack.title || effectiveTrack.name || "").trim() : ""
                 property bool hasTrack: trackStr.length > 0
+                property bool isNoteTextEmpty: root.myLatestNote ? (String(root.myLatestNote.note_text || "").trim().length === 0) : false
+                property bool isTrackOnly: root.myLatestNote !== null && isNoteTextEmpty && hasTrack
 
                 width: 80
                 height: friendsFlickable.height
@@ -144,8 +146,8 @@ Item {
                     anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
                     z: 10
                     width: 80
-                    height: Math.max(24, Math.min(48, userBubbleCol.implicitHeight + 8))
-                    radius: Math.min(14, height / 2)
+                    height: userNoteItem.isTrackOnly ? 24 : Math.max(24, Math.min(48, userBubbleCol.implicitHeight + 8))
+                    radius: userNoteItem.isTrackOnly ? 12 : Math.min(14, height / 2)
                     color: userMouseArea.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                         : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.06))
@@ -192,6 +194,7 @@ Item {
                         Text {
                             id: userBubbleText
                             Layout.fillWidth: true
+                            visible: userNoteItem.noteStr.length > 0 && !userNoteItem.isTrackOnly
                             text: userNoteItem.noteStr
                             color: root.myLatestNote ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                             font.family: Theme.fontFamily
@@ -397,8 +400,10 @@ Item {
                     id: friendDelegateItem
                     property string friendNoteStr: String(modelData.note_text || "").replace(/[\r\n]+/g, " ").trim()
                     property var friendTrackObj: modelData.track
-                    property string friendTrackStr: friendTrackObj ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
+                    property string friendTrackStr: (friendTrackObj && (friendTrackObj.title || friendTrackObj.name || friendTrackObj.id)) ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
                     property bool hasFriendTrack: friendTrackStr.length > 0
+                    property bool hasAnyNote: friendNoteStr.length > 0 || hasFriendTrack
+                    property bool isFriendTrackOnly: hasFriendTrack && friendNoteStr.length === 0
 
                     width: 80
                     height: friendsFlickable.height
@@ -406,13 +411,14 @@ Item {
                     // Mini Thought Bubble above friend avatar (Messenger Compact: 80px width, 2-line wrap, z: 10 layer trên)
                     Rectangle {
                         id: friendBubbleBox
+                        visible: friendDelegateItem.hasAnyNote
                         anchors.bottom: friendAvatarWrapper.top
                         anchors.bottomMargin: 6
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
                         z: 10
                         width: 80
-                        height: Math.max(24, Math.min(48, friendBubbleCol.implicitHeight + 8))
-                        radius: Math.min(14, height / 2)
+                        height: friendDelegateItem.isFriendTrackOnly ? 24 : Math.max(24, Math.min(48, friendBubbleCol.implicitHeight + 8))
+                        radius: friendDelegateItem.isFriendTrackOnly ? 12 : Math.min(14, height / 2)
                         color: friendArea.containsMouse
                             ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
@@ -459,6 +465,7 @@ Item {
                             Text {
                                 id: friendNoteText
                                 Layout.fillWidth: true
+                                visible: friendDelegateItem.friendNoteStr.length > 0
                                 text: friendDelegateItem.friendNoteStr
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily

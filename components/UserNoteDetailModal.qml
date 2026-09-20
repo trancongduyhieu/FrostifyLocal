@@ -322,6 +322,7 @@ Item {
                                 Text {
                                     id: bubbleNoteText
                                     Layout.fillWidth: true
+                                    visible: root.displayNoteText.length > 0
                                     text: root.displayNoteText
                                     color: "#ffffff"
                                     font.family: Theme.fontFamily

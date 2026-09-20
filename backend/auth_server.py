@@ -1075,12 +1075,34 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             valid_notes = []
             my_note = None
             cleaned_vault = {}
+
+            caller_tag = (caller_ident.get("tag") or "").strip().lower()
+            caller_uid = (caller_ident.get("user_id") or "").strip().lower()
+            caller_uname = (caller_ident.get("username") or "").strip().lower()
+            caller_email = user_email.strip().lower() if user_email else ""
+
             for k, item in vault.items():
                 if item.get("_expires_ts", 0) > now:
                     cleaned_vault[k] = item
                     iem = item.get("user_email", "").strip().lower()
-                    if (user_email and iem == user_email.lower()) or (caller_ident.get("tag") and iem == caller_ident["tag"].lower()):
-                        my_note = item
+                    itag = (item.get("tag") or "").strip().lower()
+                    iuid = (item.get("user_id") or "").strip().lower()
+                    iname = (item.get("user_name") or "").strip().lower()
+
+                    is_me = False
+                    if caller_tag and (itag == caller_tag or iem == caller_tag):
+                        is_me = True
+                    elif caller_uid and (iuid == caller_uid or iem == caller_uid):
+                        is_me = True
+                    elif caller_email and (iem == caller_email or itag == caller_email):
+                        is_me = True
+                    elif caller_uname and (iname == caller_uname or iem == caller_uname):
+                        is_me = True
+
+                    if is_me:
+                        if my_note is None or item.get("last_active_ts", 0) >= my_note.get("last_active_ts", 0):
+                            my_note = item.copy()
+
             if len(cleaned_vault) != len(vault):
                 save_notes_vault(cleaned_vault)
 
@@ -1090,19 +1112,30 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 f_id = (f.get("id") or "").strip().lower()
                 f_name = (f.get("username") or "").strip().lower()
 
-                matched_note = None
-                for k, item in cleaned_vault.items():
-                    iem = item.get("user_email", "").strip().lower()
-                    if iem in (f_tag, f_id, f_name) or (f_tag and iem == f_tag):
-                        matched_note = item.copy()
-                        matched_note["avatar_url"] = f.get("avatar_url") or matched_note.get("avatar_url", "")
-                        matched_note["user_name"] = f.get("username") or matched_note.get("user_name", "")
-                        matched_note["tag"] = f.get("tag")
-                        matched_note["now_playing"] = f.get("now_playing") or matched_note.get("now_playing", "")
-                        break
+                matched_note = (
+                    cleaned_vault.get(f"note:{f_tag}") or
+                    cleaned_vault.get(f"note:{f_id}") or
+                    cleaned_vault.get(f"note:{f_name}")
+                )
+                if not matched_note:
+                    for k, item in cleaned_vault.items():
+                        iem = item.get("user_email", "").strip().lower()
+                        itag = (item.get("tag") or "").strip().lower()
+                        iuid = (item.get("user_id") or "").strip().lower()
+                        iname = (item.get("user_name") or "").strip().lower()
+                        if (f_tag and (itag == f_tag or iem == f_tag)) or \
+                           (f_id and (iuid == f_id or iem == f_id)) or \
+                           (f_name and (iname == f_name or iem == f_name)):
+                            matched_note = item.copy()
+                            break
 
                 if matched_note:
-                    valid_notes.append(matched_note)
+                    fn = matched_note.copy()
+                    fn["avatar_url"] = f.get("avatar_url") or fn.get("avatar_url", "")
+                    fn["user_name"] = f.get("username") or fn.get("user_name", "")
+                    fn["tag"] = f.get("tag") or fn.get("tag", "")
+                    fn["now_playing"] = f.get("now_playing") or fn.get("now_playing", "")
+                    valid_notes.append(fn)
                 else:
                     valid_notes.append({
                         "user_email": f.get("tag", ""),
@@ -1354,28 +1387,59 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             except Exception:
                 req_data = {}
 
+            profile = req_data.get("profile", "").strip().lower()
             email = req_data.get("user_email", "").strip().lower()
             note_text = req_data.get("note_text", "").strip()
+            track = req_data.get("track")
+            if isinstance(track, dict) and not track.get("title") and not track.get("name") and not track.get("id"):
+                track = None
 
-            if not email or not note_text:
-                res = {"success": False, "error": "Missing required fields"}
+            # Resolve caller cloud identity to bind cloud tag & id properly
+            suffix = resolve_profile_suffix(profile, email)
+            caller_ident = ensure_cloud_identity(suffix)
+
+            cloud_tag = caller_ident.get("tag") or req_data.get("user_tag") or email
+            user_name = caller_ident.get("username") or req_data.get("user_name", "Anonymous")
+            avatar_url = caller_ident.get("avatar_url") or req_data.get("avatar_url", "")
+            user_id = caller_ident.get("user_id", "")
+
+            if not email and cloud_tag:
+                email = cloud_tag.lower()
+
+            if not email or (not note_text and not track):
+                res = {"success": False, "error": "Missing required fields (either text or track required)"}
                 status_code = 400
             else:
                 ttl = 86400
                 now = time.time()
                 record = {
                     "user_email": email,
-                    "user_name": req_data.get("user_name", "Anonymous"),
-                    "avatar_url": req_data.get("avatar_url", ""),
+                    "tag": cloud_tag,
+                    "user_id": user_id,
+                    "user_name": user_name,
+                    "avatar_url": avatar_url,
                     "note_text": note_text[:80],
-                    "track": req_data.get("track"),
+                    "track": track,
                     "now_playing": req_data.get("now_playing"),
                     "created_at": datetime.fromtimestamp(now).isoformat(),
                     "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
-                    "_expires_ts": now + ttl
+                    "_expires_ts": now + ttl,
+                    "last_active_ts": now
                 }
                 vault = load_notes_vault()
-                vault[f"note:{email}"] = record
+                # Save under email
+                if email:
+                    vault[f"note:{email}"] = record
+                # Save under cloud tag
+                if cloud_tag:
+                    vault[f"note:{cloud_tag.lower()}"] = record
+                # Save under cloud user_id
+                if user_id:
+                    vault[f"note:{user_id}"] = record
+                # Save under cloud username
+                if user_name:
+                    vault[f"note:{user_name.lower()}"] = record
+
                 save_notes_vault(vault)
                 res = {"success": True, "note": record}
                 status_code = 200
@@ -1394,11 +1458,21 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 req_data = json.loads(post_body)
             except Exception:
                 req_data = {}
+            profile = req_data.get("profile", "").strip().lower()
             email = req_data.get("user_email", "").strip().lower()
+            suffix = resolve_profile_suffix(profile, email)
+            caller_ident = ensure_cloud_identity(suffix)
+
+            vault = load_notes_vault()
             if email:
-                vault = load_notes_vault()
                 vault.pop(f"note:{email}", None)
-                save_notes_vault(vault)
+            if caller_ident.get("tag"):
+                vault.pop(f"note:{caller_ident['tag'].lower()}", None)
+            if caller_ident.get("user_id"):
+                vault.pop(f"note:{caller_ident['user_id']}", None)
+            if caller_ident.get("username"):
+                vault.pop(f"note:{caller_ident['username'].lower()}", None)
+            save_notes_vault(vault)
             self._send_json({"success": True}, 200)
         elif self.path == "/api/notes/events":
             content_len = int(self.headers.get("Content-Length", 0))

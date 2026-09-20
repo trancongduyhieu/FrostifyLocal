@@ -1559,7 +1559,9 @@ Scope {
     }
 
     function postDailyNote(text, track) {
-        if (!text) return;
+        var cleanText = text ? String(text).replace(/[\r\n]+/g, " ").trim() : "";
+        if (!cleanText && !track) return;
+
         var rId = track ? (track.videoId || track.id || (track.path && track.path.startsWith("ytdl://") ? track.path.replace("ytdl://", "") : "")) : "";
         if (rId && rId.startsWith("yt_")) {
             rId = rId.replace(/^yt_/, "");
@@ -1572,13 +1574,47 @@ Scope {
             artist: track.artist || "",
             cover: (track.image || track.cover || win.currentResolvedCover || "")
         } : null;
+
         win.myLatestNote = {
-            note_text: text,
+            note_text: cleanText,
             track: trackObj,
             created_at: new Date().toISOString()
         };
+
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var email = win.getCurrentUserEmail();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes";
+
+        var payload = {
+            profile: profile,
+            user_email: email,
+            user_name: win.getCurrentUserName(),
+            avatar_url: win.getCurrentUserAvatar(),
+            note_text: cleanText,
+            track: trackObj
+        };
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res && res.note) {
+                            win.myLatestNote = res.note;
+                        }
+                    } catch(e) {}
+                }
+                win.fetchFriendsNotesFast();
+                win.fetchFriendsList();
+            }
+        };
+        xhr.send(JSON.stringify(payload));
+
         postNoteProc.running = false;
-        postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", text, JSON.stringify(trackObj || {})];
+        postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", cleanText || " ", JSON.stringify(trackObj || {})];
         postNoteProc.running = true;
         win.syncNowPlaying(true);
         Qt.callLater(function() { win.fetchFriendsNotesFast(); });
@@ -1586,6 +1622,21 @@ Scope {
 
     function deleteMyNote() {
         win.myLatestNote = null;
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var email = win.getCurrentUserEmail();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/delete";
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", apiUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                win.fetchFriendsNotesFast();
+                win.fetchFriendsList();
+            }
+        };
+        xhr.send(JSON.stringify({ profile: profile, user_email: email }));
+
         deleteNoteProc.running = false;
         deleteNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "delete"];
         deleteNoteProc.running = true;

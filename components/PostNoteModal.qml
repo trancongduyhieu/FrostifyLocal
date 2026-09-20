@@ -71,9 +71,9 @@ Rectangle {
     function submitCurrentNote() {
         noteInput.focus = false;
         var t = getCurrentNoteText();
-        if (!t) return;
-        var clean = t.replace(/[\r\n]+/g, " ").trim();
-        if (!clean || clean.length > 60) return;
+        var clean = t ? t.replace(/[\r\n]+/g, " ").trim() : "";
+        if (clean.length > 60) return;
+        if (!clean && !root.attachedTrack) return;
         root.noteSubmitted(clean, root.attachedTrack);
     }
 
@@ -256,7 +256,7 @@ Rectangle {
                     font.pixelSize: 14
                     font.bold: true
 
-                    readonly property bool canSubmit: root.activeNoteText.length > 0 && root.activeNoteText.length <= 60
+                    readonly property bool canSubmit: (root.activeNoteText.length > 0 || root.attachedTrack !== null) && root.activeNoteText.length <= 60
 
                     color: !canSubmit
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
