@@ -221,6 +221,8 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
             "title": title,
             "artist": artist,
             "artUrl": art_url,
+            "image": art_url,
+            "cover": art_url,
             "path": file_path
         }
         for track_file in [CURRENT_TRACK_FILE]:

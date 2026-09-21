@@ -172,6 +172,16 @@ Scope {
         }
     }
 
+    function getTrackCoverUrl(trk) {
+        if (!trk) return "";
+        if (trk.cover && typeof trk.cover === "string" && trk.cover.trim() !== "") return trk.cover.trim();
+        if (trk.image && typeof trk.image === "string" && trk.image.trim() !== "") return trk.image.trim();
+        if (trk.artUrl && typeof trk.artUrl === "string" && trk.artUrl.trim() !== "") return trk.artUrl.trim();
+        if (trk.thumbnail && typeof trk.thumbnail === "string" && trk.thumbnail.trim() !== "") return trk.thumbnail.trim();
+        if (win.currentResolvedCover && win.isSameTrack(trk, win.currentTrack)) return win.currentResolvedCover;
+        return "";
+    }
+
     function fetchSongPalette(imgUrl) {
         if (!imgUrl || typeof imgUrl !== "string" || imgUrl.trim() === "") {
             win.songAccentColor = win.wallpaperAccentColor;
@@ -826,13 +836,16 @@ Scope {
         if (cur) {
             var vid = cur.videoId || cur.id || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
             if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
+            var cov = win.getTrackCoverUrl(cur);
             npData = {
                 id: vid,
                 videoId: vid,
                 path: cur.path || (vid ? ("ytdl://" + vid) : ""),
                 title: cur.title || cur.name || "Track",
                 artist: cur.artist || "Artist",
-                cover: cur.image || cur.cover || "",
+                cover: cov,
+                image: cov,
+                accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
                 position: win.currentTime || 0,
                 duration: win.totalDuration || cur.duration || 0,
                 is_playing: win.isPlaying,
@@ -1576,18 +1589,22 @@ Scope {
         if (rId && rId.startsWith("yt_")) {
             rId = rId.replace(/^yt_/, "");
         }
+        var tCov = track ? win.getTrackCoverUrl(track) : "";
         var trackObj = track ? {
             id: rId,
             videoId: rId,
             path: (rId ? ("ytdl://" + rId) : (track.path || "")),
             title: track.title || track.name || "",
             artist: track.artist || "",
-            cover: (track.image || track.cover || win.currentResolvedCover || "")
+            cover: tCov,
+            image: tCov,
+            accent_color: win.songAccentColor ? win.songAccentColor.toString() : ""
         } : null;
 
         win.myLatestNote = {
             note_text: cleanText,
             track: trackObj,
+            accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
             created_at: new Date().toISOString()
         };
 
@@ -1692,7 +1709,9 @@ Scope {
                 }
             }
         };
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         xhr.send(JSON.stringify({
+            profile: profile,
             from_email: fromEmail,
             from_name: fromName,
             from_avatar: fromAvatar,
@@ -2199,8 +2218,9 @@ Scope {
     property string currentResolvedCover: ""
     onCurrentTrackChanged: {
         win.currentResolvedCover = "";
-        if (win.currentTrack && win.currentTrack.image) {
-            win.fetchSongPalette(win.currentTrack.image);
+        var coverUrl = win.getTrackCoverUrl(win.currentTrack);
+        if (coverUrl) {
+            win.fetchSongPalette(coverUrl);
         } else {
             win.songAccentColor = win.wallpaperAccentColor;
         }
@@ -2208,6 +2228,12 @@ Scope {
     }
     property bool isPlaying: false
     onIsPlayingChanged: {
+        if (win.isPlaying && win.currentTrack) {
+            var coverUrl = win.getTrackCoverUrl(win.currentTrack);
+            if (coverUrl && (!win.songAccentColor || win.songAccentColor === win.wallpaperAccentColor)) {
+                win.fetchSongPalette(coverUrl);
+            }
+        }
         win.syncNowPlaying(true);
     }
     property real currentTime: 0.0
@@ -2308,7 +2334,7 @@ Scope {
                     anchors.centerIn: parent
                     width: parent.width * 1.75
                     height: parent.height * 1.75
-                    source: (win.currentResolvedCover !== "") ? win.currentResolvedCover : ((win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : "")
+                    source: win.getTrackCoverUrl(win.currentTrack)
                     sourceSize: Qt.size(512, 512)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -2431,20 +2457,33 @@ Scope {
                     id: fallbackImagesComposite
                     anchors.fill: parent
 
-                    // Bottom Layer: Desktop Wallpaper (always present)
+                    // Dark foundation underneath to block wallpaper completely when playing
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#0a0b0e"
+                    }
+
+                    // Bottom Layer: Desktop Wallpaper (fades out completely when playing song!)
                     Image {
                         id: fallbackWallpaperImg
                         anchors.fill: parent
                         source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
+                        opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 400
+                                easing.type: Easing.InOutQuad
+                            }
+                        }
                     }
 
-                    // Top Layer: Active Song Artwork (Crossfades gently over 900ms)
+                    // Top Layer: Active Song Artwork (Crossfades gently over 400ms)
                     Image {
                         id: fallbackPlayingImg
                         anchors.fill: parent
-                        source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                        source: win.getTrackCoverUrl(win.currentTrack)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
@@ -2508,7 +2547,7 @@ Scope {
                 Image {
                     id: nutstySurfaceArtwork
                     anchors.fill: parent
-                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    source: win.getTrackCoverUrl(win.currentTrack)
                     sourceSize: Qt.size(48, 48)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -2576,11 +2615,15 @@ Scope {
                     source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                    }
                 }
 
                 Image {
                     anchors.fill: parent
-                    source: (win.currentTrack && win.currentTrack.image) ? win.currentTrack.image : ""
+                    source: win.getTrackCoverUrl(win.currentTrack)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
@@ -4370,6 +4413,8 @@ Scope {
                             try {
                                 var sTrack = JSON.parse(sessionFileView.text());
                                 if (sTrack && (sTrack.title || sTrack.name)) {
+                                    if (!sTrack.image && sTrack.artUrl) sTrack.image = sTrack.artUrl;
+                                    if (!sTrack.cover && sTrack.artUrl) sTrack.cover = sTrack.artUrl;
                                     win.currentTrack = sTrack;
                                 }
                             } catch(e) {}

@@ -390,6 +390,9 @@ Item {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
+                                        var fullTag = root.currentUserTag || (root.currentUserName + (root.currentUserPin ? ("#" + root.currentUserPin) : ""));
+                                        copyProc.running = false;
+                                        copyProc.command = ["wl-copy", fullTag];
                                         copyProc.running = true;
                                         root.copiedPinTooltip = true;
                                         resetPinCopyTimer.restart();

@@ -226,12 +226,14 @@ export default {
 
       // 3. SEARCH USERS
       if (path === "/api/users/search" && request.method === "GET") {
-        const q = (url.searchParams.get("q") || "").trim();
+        const rawQ = (url.searchParams.get("q") || "").trim();
         const callerUserId = url.searchParams.get("user_id") || "";
 
-        if (!q) {
+        if (!rawQ) {
           return jsonResponse({ results: [] });
         }
+
+        const q = rawQ.replace(/\s+/g, " ");
 
         let querySql = "";
         let binds = [];
@@ -241,22 +243,64 @@ export default {
           const u = parts[0].trim();
           const d = parts[1].trim();
           if (d.length > 0) {
-            // Exact tag or partial tag
-            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(tag) LIKE ? LIMIT 20";
-            binds = [`${u.toLowerCase()}#${d}%`];
+            // Fault-tolerant tag search: matches exact tag, or discriminator if username mistyped, or username
+            const padDisc = d.padStart(4, "0");
+            querySql = `SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at 
+                        FROM nutsty_users 
+                        WHERE LOWER(tag) LIKE ? 
+                           OR discriminator = ?
+                           OR discriminator LIKE ?
+                           OR (LOWER(username) LIKE ? AND discriminator LIKE ?)
+                           OR LOWER(username) LIKE ?
+                        ORDER BY 
+                          CASE 
+                            WHEN LOWER(tag) = ? THEN 1
+                            WHEN LOWER(tag) LIKE ? THEN 2
+                            WHEN discriminator = ? AND LOWER(username) LIKE ? THEN 3
+                            WHEN discriminator = ? THEN 4
+                            WHEN LOWER(username) LIKE ? THEN 5
+                            ELSE 6
+                          END,
+                          last_active_at DESC
+                        LIMIT 20`;
+            binds = [
+              `${u.toLowerCase()}#${d}%`,
+              padDisc,
+              `${d}%`,
+              `%${u.toLowerCase()}%`, `${d}%`,
+              `%${u.toLowerCase()}%`,
+              `${u.toLowerCase()}#${d}`,
+              `${u.toLowerCase()}#${d}%`,
+              padDisc, `%${u.toLowerCase()}%`,
+              padDisc,
+              `%${u.toLowerCase()}%`
+            ];
           } else {
-            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(username) LIKE ? LIMIT 20";
+            querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(username) LIKE ? ORDER BY last_active_at DESC LIMIT 20";
             binds = [`%${u.toLowerCase()}%`];
           }
         } else if (/^\d{1,4}$/.test(q)) {
           // Searching by discriminator
           const padDisc = q.padStart(4, "0");
-          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE discriminator = ? OR LOWER(username) LIKE ? LIMIT 20";
-          binds = [padDisc, `%${q.toLowerCase()}%`];
+          querySql = `SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at 
+                      FROM nutsty_users 
+                      WHERE discriminator = ? OR discriminator LIKE ? OR LOWER(username) LIKE ? 
+                      ORDER BY CASE WHEN discriminator = ? THEN 1 ELSE 2 END, last_active_at DESC 
+                      LIMIT 20`;
+          binds = [padDisc, `${q}%`, `%${q.toLowerCase()}%`, padDisc];
         } else {
-          // General search by username
-          querySql = "SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at FROM nutsty_users WHERE LOWER(username) LIKE ? LIMIT 20";
-          binds = [`%${q.toLowerCase()}%`];
+          // General search by username or tag
+          querySql = `SELECT id, username, discriminator, tag, avatar_url, now_playing, last_active_at 
+                      FROM nutsty_users 
+                      WHERE LOWER(username) LIKE ? OR LOWER(tag) LIKE ? 
+                      ORDER BY CASE WHEN LOWER(username) = ? THEN 1 WHEN LOWER(username) LIKE ? THEN 2 ELSE 3 END, last_active_at DESC 
+                      LIMIT 20`;
+          binds = [
+            `%${q.toLowerCase()}%`,
+            `%${q.toLowerCase()}%`,
+            q.toLowerCase(),
+            `${q.toLowerCase()}%`
+          ];
         }
 
         const stmt = db.prepare(querySql);
@@ -535,10 +579,22 @@ export default {
         const ONLINE_THRESHOLD_MS = 25000;
         const processedFriends = (friendsQuery.results || []).map((u) => {
           const isOnline = (now - (u.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
+          let npVal = "";
+          if (isOnline && u.now_playing) {
+            try {
+              if (typeof u.now_playing === "string" && u.now_playing.trim().startsWith("{")) {
+                npVal = JSON.parse(u.now_playing);
+              } else {
+                npVal = u.now_playing;
+              }
+            } catch (_) {
+              npVal = u.now_playing;
+            }
+          }
           return {
             ...u,
             is_online: isOnline,
-            now_playing: isOnline ? (u.now_playing || "") : "",
+            now_playing: npVal,
           };
         });
 
@@ -712,6 +768,12 @@ export default {
           try {
             parsedTrack = myNoteRow.track ? JSON.parse(myNoteRow.track) : null;
           } catch (_) {}
+          let myNp = myNoteRow.now_playing || caller.now_playing || "";
+          try {
+            if (typeof myNp === "string" && myNp.trim().startsWith("{")) {
+              myNp = JSON.parse(myNp);
+            }
+          } catch (_) {}
           myNote = {
             id: myNoteRow.id,
             user_id: myNoteRow.user_id,
@@ -721,7 +783,7 @@ export default {
             avatar_url: myNoteRow.avatar_url,
             note_text: myNoteRow.note_text,
             track: parsedTrack,
-            now_playing: myNoteRow.now_playing || caller.now_playing || "",
+            now_playing: myNp,
             created_at: new Date(myNoteRow.created_at).toISOString(),
             expires_at: new Date(myNoteRow.expires_at).toISOString(),
             _expires_ts: myNoteRow.expires_at / 1000,
@@ -751,6 +813,18 @@ export default {
             } catch (_) {}
           }
           const isOnline = (now - (row.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
+          let npVal = "";
+          if (isOnline && row.now_playing) {
+            try {
+              if (typeof row.now_playing === "string" && row.now_playing.trim().startsWith("{")) {
+                npVal = JSON.parse(row.now_playing);
+              } else {
+                npVal = row.now_playing;
+              }
+            } catch (_) {
+              npVal = row.now_playing;
+            }
+          }
           return {
             user_id: row.user_id,
             user_email: row.tag ? row.tag.toLowerCase() : "",
@@ -763,7 +837,7 @@ export default {
             is_friend: true,
             is_online: isOnline,
             last_active_at: row.last_active_at || 0,
-            now_playing: isOnline ? (row.now_playing || "") : "",
+            now_playing: npVal,
           };
         });
 

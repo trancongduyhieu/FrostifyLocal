@@ -601,6 +601,12 @@ Item {
                         if (!np) return null;
                         if (typeof np === "string") {
                             var trimmed = np.trim();
+                            if (trimmed.startsWith("{")) {
+                                try {
+                                    var parsed = JSON.parse(trimmed);
+                                    if (parsed && (parsed.title || parsed.name) && parsed.is_playing !== false) return parsed;
+                                } catch(_) {}
+                            }
                             return trimmed.length > 0 ? { title: trimmed, name: trimmed, is_playing: true } : null;
                         }
                         if (typeof np === "object") {
@@ -609,16 +615,17 @@ Item {
                         return null;
                     }
                     readonly property bool isLiveActive: liveTrack !== null && Boolean(root.currentFriend && root.currentFriend.is_online)
+                    readonly property color btnAccent: (liveTrack && liveTrack.accent_color && String(liveTrack.accent_color).trim() !== "") ? liveTrack.accent_color : root.accentColor
                     visible: isLiveActive
                     Layout.fillWidth: true
                     Layout.preferredHeight: isLiveActive ? 52 : 0
                     radius: 12
                     color: liveListenMouse.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                        : Qt.rgba(255, 255, 255, 0.04)
+                        ? Qt.rgba(btnAccent.r, btnAccent.g, btnAccent.b, 0.22)
+                        : Qt.rgba(btnAccent.r, btnAccent.g, btnAccent.b, 0.08)
                     border.color: liveListenMouse.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                        : "transparent"
+                        ? Qt.rgba(btnAccent.r, btnAccent.g, btnAccent.b, 0.50)
+                        : Qt.rgba(btnAccent.r, btnAccent.g, btnAccent.b, 0.25)
                     border.width: 1
 
                     Behavior on color { ColorAnimation { duration: 150 } }
@@ -643,10 +650,10 @@ Item {
                                 return "";
                             }
                             fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
-                            fallbackIconColor: root.accentColor
-                            borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            fallbackIconColor: liveListenBtn.btnAccent
+                            borderColor: Qt.rgba(liveListenBtn.btnAccent.r, liveListenBtn.btnAccent.g, liveListenBtn.btnAccent.b, 0.35)
                             borderWidth: 1.0
-                            placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                            placeholderColor: Qt.rgba(liveListenBtn.btnAccent.r, liveListenBtn.btnAccent.g, liveListenBtn.btnAccent.b, 0.20)
                         }
 
                         // 2. Information: {{user}} đang nghe bài ... bấm vào để nghe cùng (Marquee cuộn vòng khi dài)

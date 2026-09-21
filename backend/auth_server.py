@@ -646,24 +646,7 @@ def save_cloud_identity(data, profile_suffix=""):
 
 def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar=None):
     ident = load_cloud_identity(profile_suffix)
-    if ident:
-        sync_res = GLOBAL_RELAY_CLIENT.register(
-            username=ident.get("username"),
-            avatar_url=ident.get("avatar_url") or fallback_avatar or "",
-            client_secret=ident.get("secret_key"),
-            user_id=ident.get("user_id"),
-            preferred_discriminator=ident.get("discriminator")
-        )
-        if sync_res and sync_res.get("success") and sync_res.get("user"):
-            u = sync_res["user"]
-            ident["user_id"] = u["id"]
-            if sync_res.get("secret_key"):
-                ident["secret_key"] = sync_res["secret_key"]
-            ident["username"] = u["username"]
-            ident["discriminator"] = u["discriminator"]
-            ident["tag"] = u["tag"]
-            ident["avatar_url"] = u.get("avatar_url", ident.get("avatar_url", ""))
-            save_cloud_identity(ident, profile_suffix)
+    if ident and ident.get("user_id") and ident.get("secret_key"):
         return ident
 
     xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
@@ -1702,30 +1685,55 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
 
             email = user_email.lower() if user_email else caller_ident.get("tag", "").lower()
             now_playing = req_data.get("now_playing")
-            if now_playing is None and req_data.get("title"):
-                now_playing = {
+            track_meta = req_data.get("track")
+            np_payload = None
+
+            if isinstance(now_playing, dict):
+                np_payload = now_playing
+            elif isinstance(track_meta, dict):
+                np_payload = {
+                    "title": track_meta.get("title", ""),
+                    "artist": track_meta.get("artist", ""),
+                    "cover": track_meta.get("cover", track_meta.get("image", "")),
+                    "videoId": track_meta.get("videoId", track_meta.get("id", "")),
+                    "accent_color": track_meta.get("accent_color", "")
+                }
+            elif isinstance(now_playing, str) and now_playing.strip().startswith("{"):
+                try:
+                    np_payload = json.loads(now_playing)
+                except Exception:
+                    pass
+
+            if np_payload is None and req_data.get("title"):
+                np_payload = {
                     "title": req_data.get("title", ""),
                     "artist": req_data.get("artist", ""),
-                    "cover": req_data.get("image", req_data.get("cover", ""))
+                    "cover": req_data.get("image", req_data.get("cover", "")),
+                    "videoId": req_data.get("videoId", req_data.get("id", "")),
+                    "accent_color": req_data.get("accent_color", "")
                 }
 
+            presence_val = np_payload if np_payload else (now_playing if now_playing is not None else "")
             np_text = ""
-            if isinstance(now_playing, dict):
-                np_text = f"{now_playing.get('title', '')} - {now_playing.get('artist', '')}".strip(" -")
+            if isinstance(np_payload, dict):
+                np_text = f"{np_payload.get('title', '')} - {np_payload.get('artist', '')}".strip(" -")
             elif isinstance(now_playing, str):
                 np_text = now_playing
 
             try:
-                GLOBAL_RELAY_CLIENT.update_presence(caller_ident["user_id"], caller_ident["secret_key"], np_text)
+                GLOBAL_RELAY_CLIENT.update_presence(caller_ident["user_id"], caller_ident["secret_key"], presence_val)
             except Exception as pe:
                 print(f"[auth_server presence error] {pe}")
 
             vault = load_notes_vault()
             key = f"note:{email}" if email else f"note:{caller_ident['user_id']}"
             now = time.time()
+            store_np = np_payload if np_payload else np_text
             if key in vault:
-                vault[key]["now_playing"] = np_text
+                vault[key]["now_playing"] = store_np
                 vault[key]["last_active_ts"] = now
+                if np_payload and not vault[key].get("track"):
+                    vault[key]["track"] = np_payload
                 record = vault[key]
             else:
                 ttl = 86400
@@ -1734,8 +1742,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "user_name": req_data.get("user_name") or caller_ident.get("username", "User"),
                     "avatar_url": req_data.get("avatar_url") or caller_ident.get("avatar_url", ""),
                     "note_text": "",
-                    "track": now_playing if isinstance(now_playing, dict) else None,
-                    "now_playing": np_text,
+                    "track": np_payload,
+                    "now_playing": store_np,
                     "created_at": datetime.fromtimestamp(now).isoformat(),
                     "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
                     "_expires_ts": now + ttl,

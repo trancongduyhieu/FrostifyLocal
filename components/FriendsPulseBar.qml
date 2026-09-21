@@ -135,6 +135,21 @@ Item {
                 property bool isNoteTextEmpty: root.myLatestNote ? (String(root.myLatestNote.note_text || "").trim().length === 0) : false
                 property bool isTrackOnly: root.myLatestNote !== null && isNoteTextEmpty && hasTrack
 
+                readonly property color userSongAccent: {
+                    if (effectiveTrack && effectiveTrack.accent_color && String(effectiveTrack.accent_color).trim() !== "") {
+                        return effectiveTrack.accent_color;
+                    }
+                    if (root.myLatestNote && root.myLatestNote.accent_color && String(root.myLatestNote.accent_color).trim() !== "") {
+                        return root.myLatestNote.accent_color;
+                    }
+                    if (typeof win !== "undefined" && win.isPlaying && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor) {
+                        return win.songAccentColor;
+                    }
+                    return root.accentColor;
+                }
+                readonly property bool hasCustomUserAccent: (effectiveTrack && effectiveTrack.accent_color) || (root.myLatestNote && root.myLatestNote.accent_color) || (typeof win !== "undefined" && win.isPlaying && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor)
+                readonly property color effectiveUserNoteAccent: hasCustomUserAccent ? userSongAccent : root.accentColor
+
                 width: 80
                 height: friendsFlickable.height
 
@@ -149,11 +164,11 @@ Item {
                     height: userNoteItem.isTrackOnly ? 24 : Math.max(24, Math.min(48, userBubbleCol.implicitHeight + 8))
                     radius: userNoteItem.isTrackOnly ? 12 : Math.min(14, height / 2)
                     color: userMouseArea.containsMouse
-                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(1, 1, 1, 0.06))
+                        ? Qt.rgba(userNoteItem.effectiveUserNoteAccent.r, userNoteItem.effectiveUserNoteAccent.g, userNoteItem.effectiveUserNoteAccent.b, 0.28)
+                        : (root.myLatestNote ? Qt.rgba(userNoteItem.effectiveUserNoteAccent.r, userNoteItem.effectiveUserNoteAccent.g, userNoteItem.effectiveUserNoteAccent.b, 0.18) : Qt.rgba(1, 1, 1, 0.06))
                     border.color: userMouseArea.containsMouse
-                        ? root.accentColor
-                        : (root.myLatestNote ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.16))
+                        ? userNoteItem.effectiveUserNoteAccent
+                        : (root.myLatestNote ? Qt.rgba(userNoteItem.effectiveUserNoteAccent.r, userNoteItem.effectiveUserNoteAccent.g, userNoteItem.effectiveUserNoteAccent.b, 0.45) : Qt.rgba(1, 1, 1, 0.16))
                     border.width: 1
                     scale: userMouseArea.containsMouse ? 1.05 : 1.0
                     Behavior on scale { NumberAnimation { duration: 150 } }
@@ -223,7 +238,7 @@ Item {
 
                                 Rectangle {
                                     width: 1.8; height: 5; radius: 0.9
-                                    color: root.accentColor
+                                    color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: userNoteItem.hasTrack
@@ -234,7 +249,7 @@ Item {
                                 }
                                 Rectangle {
                                     width: 1.8; height: 8; radius: 0.9
-                                    color: root.accentColor
+                                    color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: userNoteItem.hasTrack
@@ -245,7 +260,7 @@ Item {
                                 }
                                 Rectangle {
                                     width: 1.8; height: 6; radius: 0.9
-                                    color: root.accentColor
+                                    color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: userNoteItem.hasTrack
@@ -260,7 +275,7 @@ Item {
                                 id: userTrackText
                                 Layout.fillWidth: true
                                 text: userNoteItem.trackStr
-                                color: root.accentColor
+                                color: userNoteItem.effectiveUserNoteAccent
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 8
                                 font.bold: true
@@ -400,10 +415,26 @@ Item {
                     id: friendDelegateItem
                     property string friendNoteStr: String(modelData.note_text || "").replace(/[\r\n]+/g, " ").trim()
                     property var friendTrackObj: modelData.track
+                    property var friendNowPlayingObj: modelData.now_playing
                     property string friendTrackStr: (friendTrackObj && (friendTrackObj.title || friendTrackObj.name || friendTrackObj.id)) ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
                     property bool hasFriendTrack: friendTrackStr.length > 0
                     property bool hasAnyNote: friendNoteStr.length > 0 || hasFriendTrack
                     property bool isFriendTrackOnly: hasFriendTrack && friendNoteStr.length === 0
+
+                    readonly property color friendSongAccent: {
+                        if (friendTrackObj && friendTrackObj.accent_color && String(friendTrackObj.accent_color).trim() !== "") {
+                            return friendTrackObj.accent_color;
+                        }
+                        if (modelData.accent_color && String(modelData.accent_color).trim() !== "") {
+                            return modelData.accent_color;
+                        }
+                        if (friendNowPlayingObj && typeof friendNowPlayingObj === "object" && friendNowPlayingObj.accent_color && String(friendNowPlayingObj.accent_color).trim() !== "") {
+                            return friendNowPlayingObj.accent_color;
+                        }
+                        return root.accentColor;
+                    }
+                    readonly property bool hasCustomFriendAccent: (friendTrackObj && friendTrackObj.accent_color) || (modelData.accent_color) || (friendNowPlayingObj && typeof friendNowPlayingObj === "object" && friendNowPlayingObj.accent_color)
+                    readonly property color effectiveFriendNoteAccent: hasCustomFriendAccent ? friendSongAccent : root.accentColor
 
                     width: 80
                     height: friendsFlickable.height
@@ -420,11 +451,11 @@ Item {
                         height: friendDelegateItem.isFriendTrackOnly ? 24 : Math.max(24, Math.min(48, friendBubbleCol.implicitHeight + 8))
                         radius: friendDelegateItem.isFriendTrackOnly ? 12 : Math.min(14, height / 2)
                         color: friendArea.containsMouse
-                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                            ? Qt.rgba(friendDelegateItem.effectiveFriendNoteAccent.r, friendDelegateItem.effectiveFriendNoteAccent.g, friendDelegateItem.effectiveFriendNoteAccent.b, 0.28)
+                            : Qt.rgba(friendDelegateItem.effectiveFriendNoteAccent.r, friendDelegateItem.effectiveFriendNoteAccent.g, friendDelegateItem.effectiveFriendNoteAccent.b, 0.16)
                         border.color: friendArea.containsMouse
-                            ? root.accentColor
-                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
+                            ? friendDelegateItem.effectiveFriendNoteAccent
+                            : Qt.rgba(friendDelegateItem.effectiveFriendNoteAccent.r, friendDelegateItem.effectiveFriendNoteAccent.g, friendDelegateItem.effectiveFriendNoteAccent.b, 0.40)
                         border.width: 1
                         scale: friendArea.containsMouse ? 1.05 : 1.0
                         Behavior on scale { NumberAnimation { duration: 150 } }
@@ -494,7 +525,7 @@ Item {
 
                                 Rectangle {
                                     width: 1.8; height: 5; radius: 0.9
-                                    color: root.accentColor
+                                    color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: friendDelegateItem.hasFriendTrack
@@ -505,7 +536,7 @@ Item {
                                 }
                                 Rectangle {
                                     width: 1.8; height: 8; radius: 0.9
-                                    color: root.accentColor
+                                    color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: friendDelegateItem.hasFriendTrack
@@ -516,7 +547,7 @@ Item {
                                 }
                                 Rectangle {
                                     width: 1.8; height: 6; radius: 0.9
-                                    color: root.accentColor
+                                    color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
                                         running: friendDelegateItem.hasFriendTrack
@@ -531,7 +562,7 @@ Item {
                                 id: friendTrackText
                                 Layout.fillWidth: true
                                 text: friendDelegateItem.friendTrackStr
-                                color: root.accentColor
+                                color: friendDelegateItem.effectiveFriendNoteAccent
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 8
                                 font.bold: true
@@ -559,8 +590,8 @@ Item {
                             radius: 24
                             color: "transparent"
                             border.color: friendArea.containsMouse
-                                ? root.accentColor
-                                : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                ? friendDelegateItem.effectiveFriendNoteAccent
+                                : Qt.rgba(friendDelegateItem.effectiveFriendNoteAccent.r, friendDelegateItem.effectiveFriendNoteAccent.g, friendDelegateItem.effectiveFriendNoteAccent.b, 0.45)
                             border.width: 1.5
                         }
 
