@@ -1,0 +1,55 @@
+name: Build Nutsty Windows Portable (.exe)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Build Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_win.txt
+          pip install pyinstaller
+
+      - name: Download Standalone yt-dlp
+        shell: bash
+        run: |
+          mkdir -p bin
+          curl -L -o bin/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+
+      - name: Build Windows Executable
+        run: |
+          pyinstaller --noconfirm --clean nutsty.spec
+
+      - name: Prepare Distribution Folder
+        shell: bash
+        run: |
+          cp start.bat dist/Nutsty/ 2>/dev/null || true
+          mkdir -p dist/Nutsty/bin
+          cp -r bin/* dist/Nutsty/bin/ 2>/dev/null || true
+
+      - name: Archive Distribution Package
+        run: |
+          Compress-Archive -Path dist\Nutsty\* -DestinationPath Nutsty_Windows_Portable.zip -Force
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nutsty_Windows_Portable
+          path: Nutsty_Windows_Portable.zip
+          retention-days: 14
