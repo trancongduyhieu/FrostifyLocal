@@ -449,9 +449,30 @@ def update_now_playing(now_playing_data: Optional[Dict[str, Any]] = None, worker
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+def set_offline(worker_url: Optional[str] = None) -> Dict[str, Any]:
+    """Thông báo cho server rằng người dùng đã thoát/offline."""
+    user = get_current_user()
+    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/users/offline"
+    payload = {
+        "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
+        "user_email": user.get("email", ""),
+        "user_id": user.get("user_id", "")
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: social_notes.py [get | post <text> [track_json] | now_playing [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events]")
+        print("Usage: social_notes.py [get | post <text> [track_json] | now_playing [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events | offline]")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()
@@ -476,6 +497,9 @@ def main():
             except Exception:
                 data = {"title": sys.argv[2], "is_playing": True}
         res = update_now_playing(data)
+        print(json.dumps(res, ensure_ascii=False))
+    elif cmd in ("offline", "leave"):
+        res = set_offline()
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "add_friend":
         if len(sys.argv) > 2:

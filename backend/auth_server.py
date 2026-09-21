@@ -330,9 +330,19 @@ class CloudRelayEngine:
                 ORDER BY f.created_at DESC
             """, (user_id, user_id, user_id)).fetchall()
 
+            now_ms = int(time.time() * 1000)
+            friends_list = []
+            for r in friends_rows:
+                d = dict(r)
+                is_online = (now_ms - (d.get("last_active_at") or 0)) < 25000
+                d["is_online"] = is_online
+                if not is_online:
+                    d["now_playing"] = ""
+                friends_list.append(d)
+
             return {
                 "success": True,
-                "friends": [dict(r) for r in friends_rows],
+                "friends": friends_list,
                 "incoming_requests": [dict(r) for r in reqs_rows]
             }
 
@@ -367,6 +377,15 @@ class CloudRelayEngine:
             conn.execute("UPDATE nutsty_users SET now_playing = ?, last_active_at = ? WHERE id = ?", (np_str, now, user_id))
             return {"success": True}
 
+    def set_offline(self, user_id, secret_key=None):
+        with self._get_conn() as conn:
+            if secret_key:
+                caller = conn.execute("SELECT id FROM nutsty_users WHERE id = ? AND secret_key = ?", (user_id, secret_key)).fetchone()
+                if not caller:
+                    return {"success": False, "error": "Unauthorized"}
+            conn.execute("UPDATE nutsty_users SET now_playing = '', last_active_at = 0 WHERE id = ?", (user_id,))
+            return {"success": True}
+
 class CloudRelayClient:
     """Client bridge: forwards to Cloudflare Worker if configured, else uses CloudRelayEngine."""
     def __init__(self, relay_url=None):
@@ -382,7 +401,7 @@ class CloudRelayClient:
             except Exception:
                 pass
         if not self.relay_url:
-            self.relay_url = "local"
+            self.relay_url = "https://nutsty-global-relay.nutsty-global-relay.workers.dev"
         self.local_engine = CloudRelayEngine()
 
     def is_external(self):
@@ -497,6 +516,16 @@ class CloudRelayClient:
             if res and res.get("success"):
                 return res
         return self.local_engine.update_presence(user_id, secret_key, now_playing)
+
+    def set_offline(self, user_id, secret_key):
+        if self.is_external():
+            res = self._http_request("POST", "/api/users/offline", data={
+                "user_id": user_id,
+                "secret_key": secret_key
+            })
+            if res and res.get("success"):
+                return res
+        return self.local_engine.set_offline(user_id, secret_key)
 
     def publish_note(self, user_id, secret_key, note_text, track=None, now_playing=None):
         if self.is_external():
@@ -1198,15 +1227,28 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                             matched_note = item.copy()
                             break
 
+                ONLINE_TIMEOUT_SEC = 25.0
                 if matched_note:
                     fn = matched_note.copy()
                     fn["avatar_url"] = f.get("avatar_url") or fn.get("avatar_url", "")
                     fn["user_name"] = f.get("username") or fn.get("user_name", "")
                     fn["tag"] = f.get("tag") or fn.get("tag", "")
-                    fn["now_playing"] = f.get("now_playing") or fn.get("now_playing", "")
+                    
+                    last_active = fn.get("last_active_ts") or 0
+                    if not last_active and f.get("last_active_at"):
+                        last_active = f.get("last_active_at") / 1000.0 if f.get("last_active_at") > 1e11 else f.get("last_active_at")
+                    is_online = (now - last_active) < ONLINE_TIMEOUT_SEC if last_active else False
+                    fn["is_online"] = is_online
+                    fn["last_active_ts"] = last_active
+                    fn["now_playing"] = (f.get("now_playing") or fn.get("now_playing", "")) if is_online else ""
                     valid_notes.append(fn)
                 else:
+                    last_active = f.get("last_active_at", 0)
+                    if last_active > 1e11:
+                        last_active = last_active / 1000.0
+                    is_online = (now - last_active) < ONLINE_TIMEOUT_SEC if last_active else False
                     valid_notes.append({
+                        "user_id": f.get("id", ""),
                         "user_email": f.get("tag", ""),
                         "user_name": f.get("username", ""),
                         "avatar_url": f.get("avatar_url", ""),
@@ -1215,7 +1257,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                         "track": None,
                         "created_at": 0,
                         "is_friend": True,
-                        "now_playing": f.get("now_playing", "")
+                        "is_online": is_online,
+                        "last_active_ts": last_active,
+                        "now_playing": f.get("now_playing", "") if is_online else ""
                     })
 
             data = {"count": len(valid_notes), "notes": valid_notes, "my_note": my_note}
@@ -1424,6 +1468,32 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 self._send_json({"success": True, "pin_code": u["discriminator"], "nutsty_tag": u["tag"], "tag": u["tag"]}, 200)
             else:
                 self._send_json({"success": False, "error": "Failed to generate new tag"}, 500)
+        elif self.path == "/api/users/offline":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+            try:
+                req_data = json.loads(post_body)
+            except Exception:
+                req_data = {}
+            profile = req_data.get("profile", "")
+            user_email = req_data.get("user_email", "")
+            suffix = resolve_profile_suffix(profile, user_email)
+            ident = ensure_cloud_identity(suffix)
+
+            email = user_email.lower() if user_email else ident.get("tag", "").lower()
+            try:
+                GLOBAL_RELAY_CLIENT.set_offline(ident["user_id"], ident["secret_key"])
+            except Exception as e:
+                print(f"[auth_server offline error] {e}")
+
+            vault = load_notes_vault()
+            key = f"note:{email}" if email else f"note:{ident['user_id']}"
+            if key in vault:
+                vault[key]["last_active_ts"] = 0
+                vault[key]["now_playing"] = ""
+                save_notes_vault(vault)
+
+            self._send_json({"success": True, "message": "User is offline"}, 200)
         elif self.path in ("/api/auth/cookies", "/api/auth/sync"):
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""

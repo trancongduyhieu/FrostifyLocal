@@ -82,3 +82,11 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Client Daemon**: `backend/auth_server.py` chạy `ThreadingHTTPServer` (tránh block event polling), gửi User-Agent trình duyệt để vượt qua bộ lọc bot Cloudflare.
 - **Cơ chế danh tính bền vững**: Lưu giữ `user_id` và `secret_key` từ cloud registration, chống tạo tài khoản ma (ghost accounts).
 
+---
+
+## 10. Hiện Diện Thời Gian Thực & Ngắt Kết Nối (Presence & Offline Protocol)
+- **Cơ chế Liveness**: Cloudflare Edge Worker & local daemon áp dụng ngưỡng 25s (`ONLINE_THRESHOLD_MS = 25000`). Nếu `now - last_active_at > 25s`, tự động xem là offline (`is_online = false`) và dọn sạch `now_playing`.
+- **Tín hiệu Offline tức thì**: Khi đóng cửa sổ/thoát app, `shell.qml` gọi `sendOfflineSignal()` qua `Quickshell.execDetached(["curl", ...])` đến `/api/users/offline` để gán `now_playing = ''` và `last_active_at = 0` ngay tức thì.
+- **Vòng đời cửa sổ & UI**: Đóng profile phụ gọi `Qt.quit()` để ngắt polling. Avatar bạn bè chỉ hiện chấm xanh khi `modelData.is_online === true`.
+
+

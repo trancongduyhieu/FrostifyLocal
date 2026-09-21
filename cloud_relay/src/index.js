@@ -531,9 +531,20 @@ export default {
           .bind(userId, userId, userId)
           .all();
 
+        const now = Date.now();
+        const ONLINE_THRESHOLD_MS = 25000;
+        const processedFriends = (friendsQuery.results || []).map((u) => {
+          const isOnline = (now - (u.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
+          return {
+            ...u,
+            is_online: isOnline,
+            now_playing: isOnline ? (u.now_playing || "") : "",
+          };
+        });
+
         return jsonResponse({
           success: true,
-          friends: friendsQuery.results || [],
+          friends: processedFriends,
           incoming_requests: requestsQuery.results || [],
         });
       }
@@ -597,6 +608,22 @@ export default {
           .run();
 
         return jsonResponse({ success: true });
+      }
+
+      // 9b. SET OFFLINE (Disconnect signal)
+      if (path === "/api/users/offline" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key } = body;
+
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        await db
+          .prepare("UPDATE nutsty_users SET now_playing = '', last_active_at = 0 WHERE id = ?")
+          .bind(user_id)
+          .run();
+
+        return jsonResponse({ success: true, message: "User is now offline" });
       }
 
       // 10. POST 24H NOTE
@@ -704,7 +731,7 @@ export default {
         // 2. Fetch accepted friends and their notes
         const friendsWithNotes = await db
           .prepare(
-            `SELECT u.id as user_id, u.username, u.discriminator, u.tag, u.avatar_url, u.now_playing,
+            `SELECT u.id as user_id, u.username, u.discriminator, u.tag, u.avatar_url, u.now_playing, u.last_active_at,
                     n.id as note_id, n.note_text, n.track as note_track, n.created_at as note_created_at, n.expires_at as note_expires_at
              FROM nutsty_friendships f
              JOIN nutsty_users u ON u.id = CASE WHEN f.user_id_1 = ? THEN f.user_id_2 ELSE f.user_id_1 END
@@ -715,6 +742,7 @@ export default {
           .bind(userId, now, userId, userId)
           .all();
 
+        const ONLINE_THRESHOLD_MS = 25000;
         const notesList = (friendsWithNotes.results || []).map((row) => {
           let trk = null;
           if (row.note_track) {
@@ -722,7 +750,9 @@ export default {
               trk = JSON.parse(row.note_track);
             } catch (_) {}
           }
+          const isOnline = (now - (row.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
           return {
+            user_id: row.user_id,
             user_email: row.tag ? row.tag.toLowerCase() : "",
             user_name: row.username,
             avatar_url: row.avatar_url || "",
@@ -731,7 +761,9 @@ export default {
             track: trk,
             created_at: row.note_created_at ? new Date(row.note_created_at).toISOString() : 0,
             is_friend: true,
-            now_playing: row.now_playing || "",
+            is_online: isOnline,
+            last_active_at: row.last_active_at || 0,
+            now_playing: isOnline ? (row.now_playing || "") : "",
           };
         });
 

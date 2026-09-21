@@ -237,7 +237,11 @@ Item {
                             Text {
                                 text: {
                                     if (!root.currentFriend) return "";
-                                    if (!friendBubbleContainer.hasNoteContent) return I18n.tr("Đang trực tuyến", "Online");
+                                    if (!friendBubbleContainer.hasNoteContent) {
+                                        return (root.currentFriend.is_online)
+                                            ? I18n.tr("Đang trực tuyến", "Online")
+                                            : I18n.tr("Ngoại tuyến", "Offline");
+                                    }
                                     return root.formatTimeAgo(root.currentFriend.created_at);
                                 }
                                 color: Theme.textSecondary
@@ -604,9 +608,10 @@ Item {
                         }
                         return null;
                     }
-                    visible: liveTrack !== null
+                    readonly property bool isLiveActive: liveTrack !== null && Boolean(root.currentFriend && root.currentFriend.is_online)
+                    visible: isLiveActive
                     Layout.fillWidth: true
-                    Layout.preferredHeight: liveTrack !== null ? 52 : 0
+                    Layout.preferredHeight: isLiveActive ? 52 : 0
                     radius: 12
                     color: liveListenMouse.containsMouse
                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)

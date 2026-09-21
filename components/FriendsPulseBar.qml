@@ -611,7 +611,7 @@ Item {
                             }
                         }
 
-                        // Green Online Indicator Dot
+                        // Green Online Indicator Dot (Only visible when friend is online)
                         Rectangle {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
@@ -619,6 +619,7 @@ Item {
                             color: "#10b981"
                             border.color: "#08090d"
                             border.width: 2
+                            visible: Boolean(modelData && modelData.is_online)
                         }
                     }
 

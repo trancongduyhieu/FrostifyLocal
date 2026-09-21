@@ -800,14 +800,23 @@ Scope {
         xhr.send(JSON.stringify(payload));
     }
 
+    function sendOfflineSignal() {
+        var email = win.getCurrentUserEmail();
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/offline";
+        var payload = JSON.stringify({ profile: profile, user_email: email });
+        Quickshell.execDetached(["curl", "-s", "-X", "POST", apiUrl, "-H", "Content-Type: application/json", "-d", payload]);
+        Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "offline"]);
+    }
+
     function syncNowPlaying(force) {
         var now = Date.now();
-        if (!force && (now - win.lastNowPlayingSyncTime < 500)) return;
+        if (!force && (now - win.lastNowPlayingSyncTime < 4000)) return;
         win.lastNowPlayingSyncTime = now;
 
         var email = win.authAccountEmail;
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (!email) {
-            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
             email = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
         }
         if (!email) return;
@@ -835,6 +844,7 @@ Scope {
         xhr.open("POST", (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/now_playing", true);
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.send(JSON.stringify({
+            profile: profile,
             user_email: email,
             user_name: win.authAccountName || "",
             avatar_url: win.authAccountThumb || "",
@@ -2240,6 +2250,7 @@ Scope {
     }
 
     Component.onDestruction: {
+        win.sendOfflineSignal();
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
     }
 
@@ -2669,7 +2680,13 @@ Scope {
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
-                    win.visible = false;
+                    var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+                    if (profile && profile !== "user1") {
+                        win.sendOfflineSignal();
+                        Qt.quit();
+                    } else {
+                        win.visible = false;
+                    }
                 }
                 onMaximizeWindowRequested: {
                     win.maximized = !win.maximized;
