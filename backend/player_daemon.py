@@ -11,18 +11,27 @@ import math
 import socket
 import subprocess
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
-MPV_SOCKET = f"/tmp/nutsty_mpv{PROFILE_SUFFIX}.sock"
-STATUS_FILE = f"/tmp/nutsty_status{PROFILE_SUFFIX}.json"
-COMMAND_FILE = f"/tmp/nutsty_cmd{PROFILE_SUFFIX}.pipe"
-LOG_FILE = f"/tmp/nutsty_mpv{PROFILE_SUFFIX}.log"
-LAST_PATH_FILE = f"/tmp/nutsty_last_path{PROFILE_SUFFIX}"
-ABORT_FILE = f"/tmp/nutsty_abort_fade{PROFILE_SUFFIX}"
-PLAYBACK_STATE_FILE = f"/tmp/nutsty_playback_state{PROFILE_SUFFIX}.json"
-PLAYLIST_FILE = f"/tmp/nutsty_playlist{PROFILE_SUFFIX}.m3u"
-CURRENT_TRACK_FILE = f"/tmp/nutsty_current_track{PROFILE_SUFFIX}.json"
+TEMP_DIR = pc.get_temp_dir()
+CONFIG_DIR = pc.get_config_dir()
+IPC_TYPE, IPC_TARGET = pc.get_mpv_ipc_target(PROFILE_SUFFIX)
+
+MPV_SOCKET = IPC_TARGET if IPC_TYPE == "unix" else f"{IPC_TARGET[0]}:{IPC_TARGET[1]}"
+STATUS_FILE = os.path.join(TEMP_DIR, f"nutsty_status{PROFILE_SUFFIX}.json")
+COMMAND_FILE = os.path.join(TEMP_DIR, f"nutsty_cmd{PROFILE_SUFFIX}.pipe")
+LOG_FILE = os.path.join(TEMP_DIR, f"nutsty_mpv{PROFILE_SUFFIX}.log")
+LAST_PATH_FILE = os.path.join(TEMP_DIR, f"nutsty_last_path{PROFILE_SUFFIX}")
+ABORT_FILE = os.path.join(TEMP_DIR, f"nutsty_abort_fade{PROFILE_SUFFIX}")
+PLAYBACK_STATE_FILE = os.path.join(TEMP_DIR, f"nutsty_playback_state{PROFILE_SUFFIX}.json")
+PLAYLIST_FILE = os.path.join(TEMP_DIR, f"nutsty_playlist{PROFILE_SUFFIX}.m3u")
+CURRENT_TRACK_FILE = os.path.join(TEMP_DIR, f"nutsty_current_track{PROFILE_SUFFIX}.json")
 MPV_TITLE = f"nutsty-audio{PROFILE_SUFFIX}"
 
 YTDL_FORMAT_MAP = {
@@ -33,9 +42,9 @@ YTDL_FORMAT_MAP = {
 }
 
 def get_current_streaming_quality():
-    settings_path = os.path.expanduser(f"~/.config/noctalia/nutsty_settings{PROFILE_SUFFIX}.json")
+    settings_path = os.path.join(CONFIG_DIR, f"nutsty_settings{PROFILE_SUFFIX}.json")
     if not os.path.exists(settings_path) and not PROFILE_SUFFIX:
-        settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+        settings_path = os.path.join(CONFIG_DIR, "nutsty_settings.json")
     if os.path.exists(settings_path):
         try:
             with open(settings_path, "r", encoding="utf-8") as f:
@@ -47,49 +56,45 @@ def get_current_streaming_quality():
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
 def is_mpv_running():
-    try:
-        res = subprocess.run(["pgrep", "-f", f"title={MPV_TITLE}"], capture_output=True, text=True)
-        return res.returncode == 0 and bool(res.stdout.strip())
-    except Exception:
-        return False
+    return pc.is_process_running(MPV_TITLE)
 
 def ensure_mpv():
-    """Ensure background MPV process is running with IPC socket safely without pkill thrashing"""
+    """Ensure background MPV process is running with IPC socket safely without process thrashing"""
     # 1. If socket responds, we are good
-    if os.path.exists(MPV_SOCKET):
-        try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(1.5)
-            s.connect(MPV_SOCKET)
-            s.close()
-            return True
-        except Exception:
-            pass
+    try:
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+        s.close()
+        return True
+    except Exception:
+        pass
 
     # 2. If MPV process is alive but socket is dead/unresponsive, kill it and restart fresh
     if is_mpv_running():
         try:
-            subprocess.run(["pkill", "-9", "-f", f"title={MPV_TITLE}"], capture_output=True)
+            pc.kill_process(MPV_TITLE)
             time.sleep(0.1)
         except Exception:
             pass
 
-    # 3. Only if MPV process is definitely not running, clean up stale socket and start it
-    if os.path.exists(MPV_SOCKET):
+    # 3. Only if MPV process is definitely not running, clean up stale socket file (if Unix socket)
+    if IPC_TYPE == "unix" and os.path.exists(IPC_TARGET):
         try:
-            os.remove(MPV_SOCKET)
+            os.remove(IPC_TARGET)
         except Exception:
             pass
 
     streaming_quality = get_current_streaming_quality()
     ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
 
+    mpv_bin = pc.get_binary_path("mpv")
+    ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
+
     cmd = [
-        "mpv",
+        mpv_bin,
         "--idle=yes",
         "--pause=no",
         "--no-video",
-        f"--input-ipc-server={MPV_SOCKET}",
+        ipc_arg,
         "--audio-buffer=0.4",
         "--demuxer-max-bytes=16M",
         "--demuxer-max-back-bytes=4M",
@@ -100,29 +105,25 @@ def ensure_mpv():
         f"--log-file={LOG_FILE}"
     ]
 
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    popen_kwargs = pc.get_daemon_popen_kwargs()
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
     
-    # Wait for socket to appear
+    # Wait for socket to appear and accept connection
     for _ in range(25):
         time.sleep(0.1)
-        if os.path.exists(MPV_SOCKET):
-            try:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(1.0)
-                s.connect(MPV_SOCKET)
-                s.close()
-                return True
-            except Exception:
-                pass
+        try:
+            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+            s.close()
+            return True
+        except Exception:
+            pass
     return False
 
 def send_mpv_cmd(command_args):
     """Send JSON IPC command to MPV"""
     ensure_mpv()
     try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
-        s.connect(MPV_SOCKET)
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=2.0)
         payload = json.dumps({"command": command_args}) + "\n"
         s.sendall(payload.encode("utf-8"))
         data = s.recv(4096)
@@ -135,9 +136,7 @@ def get_mpv_properties_batch(props):
     """Retrieve multiple MPV properties in a single socket connection (0.3ms batch query)"""
     ensure_mpv()
     try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
-        s.connect(MPV_SOCKET)
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=2.0)
         payload = "".join(json.dumps({"command": ["get_property", p], "request_id": i}) + "\n" for i, p in enumerate(props))
         s.sendall(payload.encode("utf-8"))
         buf = ""
@@ -165,8 +164,6 @@ def get_mpv_properties_batch(props):
 def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
     return res.get("data")
-
-LAST_PATH_FILE = "/tmp/nutsty_last_path"
 
 def resolve_media_path(file_path):
     if not file_path:

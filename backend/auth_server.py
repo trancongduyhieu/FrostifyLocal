@@ -21,10 +21,16 @@ import random
 import urllib.request
 import urllib.error
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
+def get_nutsty_config_dir():
+    return pc.get_config_dir()
+
 def get_cloud_relay_db_path():
-    xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    d = os.path.join(xdg, "noctalia")
-    os.makedirs(d, exist_ok=True)
+    d = get_nutsty_config_dir()
     return os.path.join(d, "nutsty_cloud_relay.db")
 
 class CloudRelayEngine:

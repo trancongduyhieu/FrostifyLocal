@@ -1,0 +1,2 @@
+module Quickshell.Wayland
+WlrLayershell 1.0 WlrLayershell.qml

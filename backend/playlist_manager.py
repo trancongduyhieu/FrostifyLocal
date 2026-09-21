@@ -8,10 +8,15 @@ import sys
 import json
 import time
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
-CONFIG_DIR = os.path.expanduser("~/.config/noctalia")
+CONFIG_DIR = pc.get_config_dir()
 PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"custom_playlists{PROFILE_SUFFIX}.json")
 
 def load_playlists():

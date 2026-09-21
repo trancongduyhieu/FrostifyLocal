@@ -18,11 +18,18 @@ import select
 import threading
 import subprocess
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
+TEMP_DIR = pc.get_temp_dir()
+CONFIG_DIR = pc.get_config_dir()
 SOCKET_PATH = f"/tmp/nutsty_download{PROFILE_SUFFIX}.sock"
-STATUS_FILE = f"/tmp/nutsty_download_status{PROFILE_SUFFIX}.json"
+STATUS_FILE = os.path.join(TEMP_DIR, f"nutsty_download_status{PROFILE_SUFFIX}.json")
 
 STATE_NOT_DOWNLOADED = 0
 STATE_PREPARING = 1
@@ -37,13 +44,13 @@ DOWNLOAD_QUALITY_CONFIG = {
         "quality": "256",
     },
     "high_aac": {
-        "format": "141/140/774/251/250/bestaudio/best",
+        "format": "141/774/140/251/250/bestaudio/best",
         "codec": "m4a",
         "quality": "256",
     },
     "medium": {
-        "format": "251/140/250/141/774/bestaudio/best",
-        "codec": "m4a",
+        "format": "251/140/141/774/250/bestaudio/best",
+        "codec": "opus",
         "quality": "128",
     },
     "low": {
@@ -54,7 +61,9 @@ DOWNLOAD_QUALITY_CONFIG = {
 }
 
 def get_current_download_quality():
-    settings_file = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+    settings_file = os.path.join(CONFIG_DIR, f"nutsty_settings{PROFILE_SUFFIX}.json")
+    if not os.path.exists(settings_file) and not PROFILE_SUFFIX:
+        settings_file = os.path.join(CONFIG_DIR, "nutsty_settings.json")
     if os.path.exists(settings_file):
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
@@ -67,7 +76,7 @@ def get_current_download_quality():
     return "high_opus"
 
 def get_download_dir():
-    music_dir = os.environ.get("XDG_MUSIC_DIR") or os.path.expanduser("~/Music")
+    music_dir = pc.get_music_dir()
     target = os.path.join(music_dir, "Downloads_Phone")
     os.makedirs(target, exist_ok=True)
     return target
