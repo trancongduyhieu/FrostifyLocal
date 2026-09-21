@@ -6,6 +6,9 @@ on:
     tags: [ 'v*' ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -19,6 +22,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: 'requirements_win.txt'
 
       - name: Install Build Dependencies
         run: |
@@ -26,26 +30,29 @@ jobs:
           pip install -r requirements_win.txt
           pip install pyinstaller
 
-      - name: Download Standalone yt-dlp
-        shell: bash
+      - name: Download Standalone Windows yt-dlp
+        shell: pwsh
         run: |
-          mkdir -p bin
-          curl -L -o bin/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+          New-Item -ItemType Directory -Force -Path bin
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "bin\yt-dlp.exe"
 
       - name: Build Windows Executable
         run: |
           pyinstaller --noconfirm --clean nutsty.spec
 
       - name: Prepare Distribution Folder
-        shell: bash
+        shell: pwsh
         run: |
-          cp start.bat dist/Nutsty/ 2>/dev/null || true
-          mkdir -p dist/Nutsty/bin
-          cp -r bin/* dist/Nutsty/bin/ 2>/dev/null || true
+          if (Test-Path "start.bat") { Copy-Item "start.bat" -Destination "dist\Nutsty\" }
+          if (Test-Path "bin") {
+            New-Item -ItemType Directory -Force -Path "dist\Nutsty\bin"
+            Copy-Item -Path "bin\*" -Destination "dist\Nutsty\bin\" -Recurse -Force
+          }
 
       - name: Archive Distribution Package
+        shell: pwsh
         run: |
-          Compress-Archive -Path dist\Nutsty\* -DestinationPath Nutsty_Windows_Portable.zip -Force
+          Compress-Archive -Path "dist\Nutsty\*" -DestinationPath "Nutsty_Windows_Portable.zip" -Force
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -62,4 +69,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
