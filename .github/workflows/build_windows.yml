@@ -53,3 +53,13 @@ jobs:
           name: Nutsty_Windows_Portable
           path: Nutsty_Windows_Portable.zip
           retention-days: 14
+
+      - name: Publish to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Nutsty_Windows_Portable.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
