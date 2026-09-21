@@ -216,8 +216,9 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
                     now_playing = {
                         "title": cur_meta.get("title", ""),
                         "artist": cur_meta.get("artist", ""),
-                        "cover": cur_meta.get("artUrl", ""),
-                        "path": cur_meta.get("path", "")
+                        "cover": cur_meta.get("artUrl", "") or cur_meta.get("cover", "") or cur_meta.get("image", ""),
+                        "path": cur_meta.get("path", ""),
+                        "accent_color": cur_meta.get("accent_color", "")
                     }
         except Exception:
             pass

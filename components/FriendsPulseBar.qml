@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Effects
+import Quickshell.Io
 import "."
 
 Item {
@@ -19,6 +20,55 @@ Item {
     property bool isPlaying: false
     property string userAvatar: ""
     property string userName: ""
+
+    property color userTrackExtractedAccent: "transparent"
+    property string lastExtractedUserTrackCover: ""
+
+    Process {
+        id: userTrackPaletteProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var parsed = JSON.parse(data);
+                    if (parsed && parsed.highlightColor) {
+                        root.userTrackExtractedAccent = parsed.highlightColor;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    function checkAndExtractUserTrackCover() {
+        if (!userNoteItem.effectiveTrack) {
+            userTrackExtractedAccent = "transparent";
+            lastExtractedUserTrackCover = "";
+            return;
+        }
+        var trk = userNoteItem.effectiveTrack;
+        if (trk.accent_color && String(trk.accent_color).trim() !== "") {
+            userTrackExtractedAccent = trk.accent_color;
+            return;
+        }
+        if (typeof win !== "undefined" && win.currentTrack && win.isSameTrack(trk, win.currentTrack) && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor) {
+            userTrackExtractedAccent = win.songAccentColor;
+            return;
+        }
+        var cov = trk.cover || trk.image || trk.thumbnail || trk.artUrl || "";
+        if (cov && typeof cov === "string" && cov.trim() !== "" && cov !== lastExtractedUserTrackCover) {
+            lastExtractedUserTrackCover = cov;
+            var appDir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal");
+            userTrackPaletteProc.running = false;
+            userTrackPaletteProc.command = [
+                "python3", "-u",
+                appDir + "/backend/palette_extractor.py",
+                "song_palette",
+                cov
+            ];
+            userTrackPaletteProc.running = true;
+        }
+    }
 
     signal postNoteClicked()
     signal userNoteDetailClicked()
@@ -135,19 +185,42 @@ Item {
                 property bool isNoteTextEmpty: root.myLatestNote ? (String(root.myLatestNote.note_text || "").trim().length === 0) : false
                 property bool isTrackOnly: root.myLatestNote !== null && isNoteTextEmpty && hasTrack
 
+                property var userNowPlayingObj: {
+                    if (!root.myLatestNote || !root.myLatestNote.now_playing) return null;
+                    var np = root.myLatestNote.now_playing;
+                    if (typeof np === "object") return np;
+                    if (typeof np === "string" && np.trim().startsWith("{")) {
+                        try { return JSON.parse(np); } catch(e) { return null; }
+                    }
+                    return null;
+                }
+
+                onEffectiveTrackChanged: root.checkAndExtractUserTrackCover()
+                Component.onCompleted: root.checkAndExtractUserTrackCover()
+
                 readonly property color userSongAccent: {
                     if (effectiveTrack && effectiveTrack.accent_color && String(effectiveTrack.accent_color).trim() !== "") {
                         return effectiveTrack.accent_color;
                     }
+                    if (root.userTrackExtractedAccent && root.userTrackExtractedAccent !== "transparent" && String(root.userTrackExtractedAccent) !== "#00000000") {
+                        return root.userTrackExtractedAccent;
+                    }
                     if (root.myLatestNote && root.myLatestNote.accent_color && String(root.myLatestNote.accent_color).trim() !== "") {
                         return root.myLatestNote.accent_color;
                     }
-                    if (typeof win !== "undefined" && win.isPlaying && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor) {
+                    if (userNowPlayingObj && typeof userNowPlayingObj === "object" && userNowPlayingObj.accent_color && String(userNowPlayingObj.accent_color).trim() !== "") {
+                        return userNowPlayingObj.accent_color;
+                    }
+                    if (typeof win !== "undefined" && win.currentTrack && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor) {
                         return win.songAccentColor;
                     }
                     return root.accentColor;
                 }
-                readonly property bool hasCustomUserAccent: (effectiveTrack && effectiveTrack.accent_color) || (root.myLatestNote && root.myLatestNote.accent_color) || (typeof win !== "undefined" && win.isPlaying && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor)
+                readonly property bool hasCustomUserAccent: Boolean((effectiveTrack && effectiveTrack.accent_color)
+                    || (root.userTrackExtractedAccent && root.userTrackExtractedAccent !== "transparent" && String(root.userTrackExtractedAccent) !== "#00000000")
+                    || (root.myLatestNote && root.myLatestNote.accent_color)
+                    || (userNowPlayingObj && typeof userNowPlayingObj === "object" && userNowPlayingObj.accent_color)
+                    || (typeof win !== "undefined" && win.currentTrack && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor))
                 readonly property color effectiveUserNoteAccent: hasCustomUserAccent ? userSongAccent : root.accentColor
 
                 width: 80
@@ -415,7 +488,15 @@ Item {
                     id: friendDelegateItem
                     property string friendNoteStr: String(modelData.note_text || "").replace(/[\r\n]+/g, " ").trim()
                     property var friendTrackObj: modelData.track
-                    property var friendNowPlayingObj: modelData.now_playing
+                    property var friendNowPlayingObj: {
+                        var np = modelData.now_playing;
+                        if (!np) return null;
+                        if (typeof np === "object") return np;
+                        if (typeof np === "string" && np.trim().startsWith("{")) {
+                            try { return JSON.parse(np); } catch(e) { return null; }
+                        }
+                        return null;
+                    }
                     property string friendTrackStr: (friendTrackObj && (friendTrackObj.title || friendTrackObj.name || friendTrackObj.id)) ? String(friendTrackObj.title || friendTrackObj.name || "").trim() : ""
                     property bool hasFriendTrack: friendTrackStr.length > 0
                     property bool hasAnyNote: friendNoteStr.length > 0 || hasFriendTrack

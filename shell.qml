@@ -1590,6 +1590,10 @@ Scope {
             rId = rId.replace(/^yt_/, "");
         }
         var tCov = track ? win.getTrackCoverUrl(track) : "";
+        var tAccent = (track && track.accent_color && String(track.accent_color).trim() !== "")
+            ? track.accent_color
+            : (win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor ? win.songAccentColor.toString() : "");
+
         var trackObj = track ? {
             id: rId,
             videoId: rId,
@@ -1598,13 +1602,21 @@ Scope {
             artist: track.artist || "",
             cover: tCov,
             image: tCov,
+            accent_color: tAccent
+        } : null;
+
+        var myNp = (win.currentTrack && win.songAccentColor) ? {
+            title: win.currentTrack.title || win.currentTrack.name || "",
+            artist: win.currentTrack.artist || "",
+            cover: win.getTrackCoverUrl(win.currentTrack),
             accent_color: win.songAccentColor ? win.songAccentColor.toString() : ""
         } : null;
 
         win.myLatestNote = {
             note_text: cleanText,
             track: trackObj,
-            accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
+            accent_color: tAccent,
+            now_playing: myNp,
             created_at: new Date().toISOString()
         };
 
@@ -1618,7 +1630,8 @@ Scope {
             user_name: win.getCurrentUserName(),
             avatar_url: win.getCurrentUserAvatar(),
             note_text: cleanText,
-            track: trackObj
+            track: trackObj,
+            now_playing: myNp
         };
 
         var xhr = new XMLHttpRequest();

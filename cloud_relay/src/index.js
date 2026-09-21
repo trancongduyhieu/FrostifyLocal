@@ -728,6 +728,11 @@ export default {
           .bind(noteId, user_id, caller.tag, caller.username, caller.avatar_url || "", cleanText, trackJson, nowPlayingStr, now, expiresAt)
           .run();
 
+        const accentColor = (trackObj && trackObj.accent_color)
+          || (now_playing && typeof now_playing === "object" && now_playing.accent_color)
+          || (caller.now_playing && typeof caller.now_playing === "object" && caller.now_playing.accent_color)
+          || "";
+
         const savedNote = {
           id: noteId,
           user_id: user_id,
@@ -738,6 +743,7 @@ export default {
           note_text: cleanText,
           track: trackObj,
           now_playing: now_playing || caller.now_playing || "",
+          accent_color: accentColor,
           created_at: new Date(now).toISOString(),
           expires_at: new Date(expiresAt).toISOString(),
           _expires_ts: expiresAt / 1000,
@@ -774,6 +780,9 @@ export default {
               myNp = JSON.parse(myNp);
             }
           } catch (_) {}
+          const noteAccent = (parsedTrack && parsedTrack.accent_color)
+            || (myNp && typeof myNp === "object" && myNp.accent_color)
+            || "";
           myNote = {
             id: myNoteRow.id,
             user_id: myNoteRow.user_id,
@@ -784,6 +793,7 @@ export default {
             note_text: myNoteRow.note_text,
             track: parsedTrack,
             now_playing: myNp,
+            accent_color: noteAccent,
             created_at: new Date(myNoteRow.created_at).toISOString(),
             expires_at: new Date(myNoteRow.expires_at).toISOString(),
             _expires_ts: myNoteRow.expires_at / 1000,
