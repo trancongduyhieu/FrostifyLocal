@@ -13,8 +13,7 @@ added_datas = [
     ('bin', 'bin'),
 ]
 
-if os.path.exists('library.json'):
-    added_datas.append(('library.json', '.'))
+# Do not bundle local developer's library.json into Windows portable release
 
 hidden_imports = [
     'PySide6.QtCore',

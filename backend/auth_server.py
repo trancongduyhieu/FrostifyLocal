@@ -394,6 +394,22 @@ class CloudRelayEngine:
             conn.execute("UPDATE nutsty_users SET now_playing = '', last_active_at = 0 WHERE id = ?", (user_id,))
             return {"success": True}
 
+def invalidate_cloud_identity_by_user_id(user_id):
+    if not user_id:
+        return
+    xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    d = os.path.join(xdg, "noctalia")
+    import glob
+    for p in glob.glob(os.path.join(d, "nutsty_cloud_identity*.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("user_id") == user_id:
+                os.remove(p)
+                sys.stderr.write(f"[CloudRelayClient] Removed invalid/unauthorized cloud identity: {p}\n")
+        except Exception:
+            pass
+
 class CloudRelayClient:
     """Client bridge: forwards to Cloudflare Worker if configured, else uses CloudRelayEngine."""
     def __init__(self, relay_url=None):
@@ -432,6 +448,11 @@ class CloudRelayClient:
             }
             try:
                 r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0)
+                if r.status_code == 401:
+                    uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
+                    if uid:
+                        invalidate_cloud_identity_by_user_id(uid)
+                    return {"success": False, "error": "Unauthorized", "unauthorized": True}
                 if r.status_code < 500:
                     return r.json()
             except Exception as req_err:
@@ -440,6 +461,11 @@ class CloudRelayClient:
                         import urllib3
                         urllib3.disable_warnings()
                         r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0, verify=False)
+                        if r.status_code == 401:
+                            uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
+                            if uid:
+                                invalidate_cloud_identity_by_user_id(uid)
+                            return {"success": False, "error": "Unauthorized", "unauthorized": True}
                         if r.status_code < 500:
                             return r.json()
                     except Exception:
@@ -466,6 +492,14 @@ class CloudRelayClient:
         try:
             with urllib.request.urlopen(req, data=body, timeout=5.0, context=ctx) as resp:
                 return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as he:
+            if he.code == 401:
+                uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
+                if uid:
+                    invalidate_cloud_identity_by_user_id(uid)
+                return {"success": False, "error": "Unauthorized", "unauthorized": True}
+            sys.stderr.write(f"[CloudRelayClient request failed]: {he}\n")
+            return None
         except Exception as e:
             if "CERTIFICATE_VERIFY_FAILED" in str(e) or "SSL" in type(e).__name__:
                 try:
@@ -475,9 +509,22 @@ class CloudRelayClient:
                     req_retry.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NutstyClient/1.0")
                     with urllib.request.urlopen(req_retry, data=body, timeout=5.0, context=unverified_ctx) as resp:
                         return json.loads(resp.read().decode("utf-8"))
+                except urllib.error.HTTPError as he2:
+                    if he2.code == 401:
+                        uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
+                        if uid:
+                            invalidate_cloud_identity_by_user_id(uid)
+                        return {"success": False, "error": "Unauthorized", "unauthorized": True}
+                    sys.stderr.write(f"[CloudRelayClient request failed]: {he2}\n")
+                    return None
                 except Exception as e2:
                     sys.stderr.write(f"[CloudRelayClient request failed]: {e2}\n")
                     return None
+            if "401" in str(e):
+                uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
+                if uid:
+                    invalidate_cloud_identity_by_user_id(uid)
+                return {"success": False, "error": "Unauthorized", "unauthorized": True}
             sys.stderr.write(f"[CloudRelayClient request failed]: {e}\n")
             return None
 
@@ -706,8 +753,17 @@ def save_cloud_identity(data, profile_suffix=""):
     except Exception:
         pass
 
-def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar=None):
-    ident = load_cloud_identity(profile_suffix)
+def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar=None, force_recreate=False):
+    if force_recreate:
+        p = get_cloud_identity_path(profile_suffix)
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+        ident = None
+    else:
+        ident = load_cloud_identity(profile_suffix)
 
     xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     d = os.path.join(xdg, "noctalia")
@@ -745,6 +801,10 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
                     if u.get("avatar_url"):
                         ident["avatar_url"] = u["avatar_url"]
                     save_cloud_identity(ident, profile_suffix)
+                elif up_res and up_res.get("unauthorized"):
+                    # Credentials rejected by Cloudflare D1 (401)! Purge invalid identity and re-register afresh!
+                    sys.stderr.write(f"[CloudRelay] Cloud identity unauthorized for {ident.get('user_id')}. Re-registering as {user_name}...\n")
+                    return ensure_cloud_identity(profile_suffix, fallback_name=user_name, fallback_avatar=avatar_url, force_recreate=True)
                 else:
                     ident["username"] = user_name
                     ident["tag"] = f"{user_name}#{ident.get('discriminator', '0001')}"
@@ -1341,14 +1401,18 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         elif path == "/api/friends":
             profile = query.get("profile", [""])[0].strip()
             user_email = query.get("user_email", [""])[0].strip()
+            preferred_name = query.get("name", [""])[0].strip()
             suffix = resolve_profile_suffix(profile, user_email)
-            caller_ident = ensure_cloud_identity(suffix)
+            caller_ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None)
 
             relay_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
+            if relay_res and relay_res.get("unauthorized"):
+                caller_ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None, force_recreate=True)
+                relay_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
             friends_data = []
             notes_vault = load_notes_vault()
 
-            for f in relay_res.get("friends", []):
+            for f in (relay_res or {}).get("friends", []):
                 f_tag = f["tag"]
                 note_item = notes_vault.get(f"note:{f_tag}") or notes_vault.get(f"note:{f['id']}") or notes_vault.get(f"note:{f['username'].lower()}")
                 friends_data.append({
@@ -1365,7 +1429,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 })
 
             incoming = []
-            for r in relay_res.get("incoming_requests", []):
+            for r in (relay_res or {}).get("incoming_requests", []):
                 incoming.append({
                     "id": f"req_{r['id']}",
                     "from_id": r["id"],
@@ -1390,17 +1454,19 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             preferred_name = query.get("name", [""])[0].strip()
             suffix = resolve_profile_suffix(profile, user_email)
             ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None)
+            display_name = preferred_name if (preferred_name and preferred_name not in ("Nutsty User", "Shiraori", "Khách", "Guest")) else ident["username"]
+            display_tag = f"{display_name}#{ident.get('discriminator', '0001')}" if display_name != ident["username"] else ident["tag"]
             self._send_json({
                 "success": True,
                 "profile": {
                     "id": ident["user_id"],
                     "user_id": ident["user_id"],
-                    "name": ident["username"],
-                    "username": ident["username"],
+                    "name": display_name,
+                    "username": display_name,
                     "discriminator": ident["discriminator"],
                     "pin_code": ident["discriminator"],
-                    "tag": ident["tag"],
-                    "nutsty_tag": ident["tag"],
+                    "tag": display_tag,
+                    "nutsty_tag": display_tag,
                     "avatar": ident.get("avatar_url", ""),
                     "avatar_url": ident.get("avatar_url", "")
                 }

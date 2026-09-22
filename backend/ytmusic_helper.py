@@ -1249,15 +1249,17 @@ def get_personalized_home():
     if all_tracks_discovered:
         cache_online_tracks(all_tracks_discovered)
 
-    # Load all existing cached moods from ~/.cache/nutsty/moods/ into preloaded_moods for 0ms QML startup
+    # Load top cached moods from ~/.cache/nutsty/moods/ into preloaded_moods (capped to 2 to prevent IPC buffer choke)
     preloaded = {}
     if os.path.exists(MOOD_CACHE_DIR):
-        for f in os.listdir(MOOD_CACHE_DIR):
-            if f.endswith(".json"):
+        p_count = 0
+        for f in sorted(os.listdir(MOOD_CACHE_DIR)):
+            if f.endswith(".json") and p_count < 2:
                 m_data = load_json(os.path.join(MOOD_CACHE_DIR, f))
                 if m_data and m_data.get("sections") and (m_data.get("quick_picks") or m_data.get("featured_playlists")):
                     m_title = f.split("_")[0]
                     preloaded[m_title] = m_data
+                    p_count += 1
 
     res = {
         "timestamp": time.time(),

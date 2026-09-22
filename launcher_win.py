@@ -400,6 +400,12 @@ class NutstyBridge(QObject):
 
                 out = out_buf.getvalue()
                 err = err_buf.getvalue()
+                if err and default_err:
+                    try:
+                        default_err.write(f"[_in_proc_run {target_script}]: {err}\n")
+                        default_err.flush()
+                    except Exception:
+                        pass
                 self.processFinished.emit(callback, out, err, code)
 
             threading.Thread(target=_in_proc_run, daemon=True).start()

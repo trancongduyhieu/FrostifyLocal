@@ -396,6 +396,42 @@ Scope {
         win.browsingTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
     }
 
+    function applyHomeFeedData(res) {
+        if (!res) return false;
+        var hasContent = false;
+        if (res.moods && Array.isArray(res.moods) && res.moods.length > 0) {
+            win.homeMoods = res.moods;
+        }
+        if (res.sections && Array.isArray(res.sections) && res.sections.length > 0) {
+            win.homeSections = res.sections;
+            hasContent = true;
+        }
+        if (res.quick_picks && Array.isArray(res.quick_picks) && res.quick_picks.length > 0) {
+            win.homeQuickPicks = res.quick_picks;
+            hasContent = true;
+        }
+        if (res.featured_playlists && Array.isArray(res.featured_playlists) && res.featured_playlists.length > 0) {
+            win.homeFeaturedPlaylists = res.featured_playlists;
+            hasContent = true;
+        }
+        win.moodCache["All"] = {
+            sections: win.homeSections,
+            quick_picks: win.homeQuickPicks,
+            featured_playlists: win.homeFeaturedPlaylists
+        };
+        if (res.preloaded_moods) {
+            for (var m in res.preloaded_moods) {
+                win.moodCache[m] = res.preloaded_moods[m];
+            }
+        }
+        if (hasContent) {
+            win.isLoadingHome = false;
+            homeLoadingSafetyTimer.stop();
+            return true;
+        }
+        return false;
+    }
+
     Process {
         id: homeProc
         stdout: SplitParser {
@@ -403,20 +439,7 @@ Scope {
             onRead: data => {
                 try {
                     var res = JSON.parse(data);
-                    if (res.moods && Array.isArray(res.moods)) win.homeMoods = res.moods;
-                    if (res.sections && Array.isArray(res.sections)) win.homeSections = res.sections;
-                    if (res.quick_picks && Array.isArray(res.quick_picks)) win.homeQuickPicks = res.quick_picks;
-                    if (res.featured_playlists && Array.isArray(res.featured_playlists)) win.homeFeaturedPlaylists = res.featured_playlists;
-                    win.moodCache["All"] = {
-                        sections: win.homeSections,
-                        quick_picks: win.homeQuickPicks,
-                        featured_playlists: win.homeFeaturedPlaylists
-                    };
-                    if (res.preloaded_moods) {
-                        for (var m in res.preloaded_moods) {
-                            win.moodCache[m] = res.preloaded_moods[m];
-                        }
-                    }
+                    win.applyHomeFeedData(res);
                 } catch(e) {
                     console.log("homeProc parse error:", e);
                 } finally {
@@ -893,7 +916,7 @@ Scope {
 
     function getCurrentUserName() {
         if (win.authAccountName) return win.authAccountName;
-        if (win.currentUserName) return win.currentUserName;
+        if (win.currentUserName && !win.currentUserName.toLowerCase().includes("shiraori")) return win.currentUserName;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") return "Hiếu Trần";
         return I18n.tr("Khách", "Guest");
@@ -926,10 +949,13 @@ Scope {
                     var res = JSON.parse(xhr.responseText);
                     if (res && res.success && res.profile) {
                         win.currentUserPin = res.profile.discriminator || res.profile.pin_code || "";
-                        win.currentUserTag = res.profile.tag || res.profile.nutsty_tag || "";
                         win.currentUserCloudId = res.profile.user_id || res.profile.id || "";
-                        if (res.profile.username) {
+                        if (win.authAccountName) {
+                            win.currentUserName = win.authAccountName;
+                            win.currentUserTag = win.authAccountName + "#" + win.currentUserPin;
+                        } else if (res.profile.username && !res.profile.username.toLowerCase().includes("shiraori")) {
                             win.currentUserName = res.profile.username;
+                            win.currentUserTag = res.profile.tag || (res.profile.username + "#" + win.currentUserPin);
                         }
                     }
                 } catch(e) {}
@@ -1387,12 +1413,44 @@ Scope {
         }
     }
 
-    function loadHomeFeed() {
-        win.isLoadingHome = true;
-        homeLoadingSafetyTimer.restart();
+    function triggerHomeProc() {
         homeProc.running = false;
         homeProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "home"];
         homeProc.running = true;
+    }
+
+    function loadHomeFeed() {
+        win.isLoadingHome = true;
+        homeLoadingSafetyTimer.restart();
+
+        // Dual-load: fast asynchronous HTTP /api/home with fallback to homeProc
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/home";
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (win.applyHomeFeedData(res)) {
+                            return;
+                        }
+                    } catch(e) {
+                        console.log("XHR /api/home parse error:", e);
+                    }
+                }
+                // Fallback to homeProc if HTTP server not ready or returned empty
+                win.triggerHomeProc();
+            }
+        };
+        xhr.onerror = function() {
+            win.triggerHomeProc();
+        };
+        try {
+            xhr.send();
+        } catch(e) {
+            win.triggerHomeProc();
+        }
     }
 
     function selectMood(title, params) {
@@ -1411,9 +1469,46 @@ Scope {
             return;
         }
         win.isLoadingHome = true;
-        moodProc.running = false;
-        moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params, title];
-        moodProc.running = true;
+
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/mood?params=" + encodeURIComponent(params) + "&title=" + encodeURIComponent(title);
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res && res.sections && res.sections.length > 0) {
+                            win.homeSections = res.sections;
+                            win.homeQuickPicks = res.quick_picks || [];
+                            win.homeFeaturedPlaylists = res.featured_playlists || [];
+                            win.moodCache[title] = {
+                                sections: win.homeSections,
+                                quick_picks: win.homeQuickPicks,
+                                featured_playlists: win.homeFeaturedPlaylists
+                            };
+                            win.isLoadingHome = false;
+                            return;
+                        }
+                    } catch(e) {}
+                }
+                moodProc.running = false;
+                moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params, title];
+                moodProc.running = true;
+            }
+        };
+        xhr.onerror = function() {
+            moodProc.running = false;
+            moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params, title];
+            moodProc.running = true;
+        };
+        try {
+            xhr.send();
+        } catch(e) {
+            moodProc.running = false;
+            moodProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "mood", params, title];
+            moodProc.running = true;
+        }
     }
 
     function isSameTrack(a, b) {
@@ -3473,10 +3568,12 @@ Scope {
             accentColor: win.accentColor
             backgroundSourceItem: glassCompositeBackdrop
             currentUserEmail: win.getCurrentUserEmail()
-            currentUserName: win.currentUserName ? win.currentUserName : win.getCurrentUserName()
+            currentUserName: win.getCurrentUserName()
             currentUserAvatar: win.getCurrentUserAvatar()
             currentUserPin: win.currentUserPin
-            currentUserTag: win.currentUserTag
+            currentUserTag: (win.currentUserTag && !win.currentUserTag.toLowerCase().includes("shiraori"))
+                ? win.currentUserTag
+                : (win.getCurrentUserName() + (win.currentUserPin ? ("#" + win.currentUserPin) : ""))
             friends: win.friendsDetails
             onSendFriendRequestRequested: targetEmail => {
                 win.sendFriendRequest(targetEmail);

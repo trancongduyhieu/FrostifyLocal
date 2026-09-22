@@ -17,6 +17,9 @@ Item {
                     if (outData && root.stdout) {
                         if (typeof root.stdout.feed === "function") {
                             root.stdout.feed(outData);
+                            if (typeof root.stdout.flush === "function") {
+                                root.stdout.flush();
+                            }
                         } else if (typeof root.stdout.read === "function") {
                             root.stdout.read(outData);
                         }
