@@ -1,5 +1,8 @@
 module Quickshell
 singleton Quickshell 1.0 QuickshellSingleton.qml
+singleton ExclusionMode 1.0 ExclusionMode.qml
 Scope 1.0 Scope.qml
 FloatingWindow 1.0 FloatingWindow.qml
 PanelWindow 1.0 PanelWindow.qml
+IpcHandler 1.0 IpcHandler.qml
+Region 1.0 Region.qml

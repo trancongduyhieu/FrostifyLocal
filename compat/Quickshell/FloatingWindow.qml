@@ -7,6 +7,8 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     visible: true
+    property real implicitWidth: 1280
+    property real implicitHeight: 820
     width: root.implicitWidth > 0 ? root.implicitWidth : 1280
     height: root.implicitHeight > 0 ? root.implicitHeight : 820
 

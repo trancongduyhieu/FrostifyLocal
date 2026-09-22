@@ -1867,5 +1867,7 @@ def run_server():
         else:
             sys.stderr.write(f"Auth server error: {e}\n")
 
+main = run_server
+
 if __name__ == "__main__":
     run_server()

@@ -9,10 +9,8 @@ Window {
     visible: true
 
     property var screen: null
-    property var WlrLayershell: QtObject {
-        property int layer: 0
-        property int scope: 0
-    }
+    property var mask: null
+    property var exclusionMode: null
 
     property var anchors: QtObject {
         property bool top: true

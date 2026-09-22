@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    enum WlrLayershell {
+    enum WlrLayer {
         Background,
         Bottom,
         Top,
