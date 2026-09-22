@@ -110,6 +110,8 @@ def ensure_mpv():
         "--loop-playlist=inf",
         "--gapless-audio=yes",
         f"--ytdl-format={ytdl_fmt}",
+        f"--user-agent={DEFAULT_UA}",
+        "--referrer=https://www.youtube.com/",
         f"--log-file={LOG_FILE}"
     ]
     if ytdl_bin and os.path.exists(ytdl_bin):
@@ -191,10 +193,47 @@ def resolve_media_path(file_path):
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
-        vid = file_path.replace("ytdl://", "")
-        if "watch?v=" in vid:
-            vid = vid.split("watch?v=")[1].split("&")[0]
-        return f"ytdl://{vid}"
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import ytmusic_helper
+            vid = file_path.replace("ytdl://", "")
+            if "watch?v=" in vid:
+                vid = vid.split("watch?v=")[1].split("&")[0]
+
+            streaming_quality = get_current_streaming_quality()
+
+            # Instant cache lookup with quality fallback
+            cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
+            cached = cache.get(f"{vid}_{streaming_quality}") or cache.get(vid)
+            if not cached:
+                for k, v in cache.items():
+                    if k.startswith(f"{vid}_") and isinstance(v, dict) and v.get("stream_url"):
+                        cached = v
+                        break
+            if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
+                ua = cached.get("user_agent")
+                if ua:
+                    try:
+                        send_mpv_cmd(["set_property", "user-agent", ua])
+                    except Exception:
+                        pass
+                return cached.get("stream_url")
+
+            # Resolve direct stream URL using authenticated format picker
+            res = ytmusic_helper.resolve_stream_url(vid, streaming_quality)
+            if res and res.get("stream_url"):
+                ua = res.get("user_agent")
+                if ua:
+                    try:
+                        send_mpv_cmd(["set_property", "user-agent", ua])
+                    except Exception:
+                        pass
+                return res.get("stream_url")
+
+            return f"ytdl://{vid}"
+        except Exception as e:
+            sys.stderr.write(f"[player_daemon resolve error]: {e}\n")
+            return file_path
     return file_path
 
 def update_current_track_metadata(file_path, title="", artist="", art_url=""):

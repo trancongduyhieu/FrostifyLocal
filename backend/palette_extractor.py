@@ -13,7 +13,11 @@ import re
 import math
 import colorsys
 from pathlib import Path
-from PIL import Image
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 def get_current_wallpaper() -> Path:
     # 1. Check CLI argument
@@ -229,6 +233,28 @@ def main():
             os.system(f'magick "{wp_path}[0]" /tmp/noctalia_wallbash_frame.png')
             img_to_open = Path("/tmp/noctalia_wallbash_frame.png")
 
+    if not HAS_PIL:
+        result = {
+            "wallpaper": str(wp_path or ""),
+            "meanLuminance": 0.2,
+            "brightRatio": 0.0,
+            "isLightArea": False,
+            "theme": "crimson",
+            "baseTextColor": "#f8fafc",
+            "highlightColor": "#f4afb3",
+            "deadTextColor": "rgba(248, 250, 252, 0.45)",
+            "shadowDirectional": "rgba(0, 0, 0, 0.70)",
+            "shadowAmbient": "rgba(0, 0, 0, 0.45)"
+        }
+        out_file = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+        legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        print(f"Fallback palette generated at {out_file}")
+        print(json.dumps(result, indent=2))
+        return
+
     try:
         img = Image.open(img_to_open).convert("RGB")
     except Exception as e:
@@ -269,7 +295,7 @@ SONG_PALETTES_CACHE = Path.home() / ".cache" / "nutsty" / "song_palettes.json"
 
 def extract_song_palette(img_src: str) -> dict:
     default_res = {"highlightColor": "#f4afb3", "theme": "crimson"}
-    if not img_src or not str(img_src).strip():
+    if not HAS_PIL or not img_src or not str(img_src).strip():
         return default_res
 
     clean_src = str(img_src).strip()

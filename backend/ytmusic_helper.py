@@ -2487,10 +2487,10 @@ def get_search_suggestions(query):
         return {"queries": [], "recommended": []}
 
 QUALITY_ITAG_PRIORITIES = {
-    "high_opus": [774, 141, 251, 140, 250],
-    "high_aac": [141, 774, 140, 251, 250],
-    "medium": [251, 140, 250, 141, 774],
-    "low": [250, 249, 139, 251, 140, 141, 774]
+    "high_opus": [774, 141, 251, 140, 250, 18],
+    "high_aac": [141, 774, 140, 251, 250, 18],
+    "medium": [251, 140, 250, 141, 774, 18],
+    "low": [250, 249, 139, 251, 140, 141, 774, 18]
 }
 
 def get_exported_cookie_file():
@@ -2560,7 +2560,7 @@ def resolve_stream_url(video_id, quality=None):
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android_music"]}}
+            "extractor_args": {"youtube": {"player_client": ["android"]}}
         }
         url = f"https://www.youtube.com/watch?v={video_id}"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -2584,6 +2584,7 @@ def resolve_stream_url(video_id, quality=None):
 
             stream_url = selected_format.get("url") if selected_format else info.get("url")
             duration = info.get("duration") or 0
+            ua = selected_format.get("http_headers", {}).get("User-Agent") if selected_format else None
             if stream_url:
                 res = {
                     "stream_url": stream_url,
@@ -2592,6 +2593,7 @@ def resolve_stream_url(video_id, quality=None):
                     "itag": selected_format.get("format_id") if selected_format else None,
                     "bitrate": selected_format.get("abr") if selected_format else None,
                     "codec": selected_format.get("acodec") if selected_format else None,
+                    "user_agent": ua,
                     "timestamp": now
                 }
                 cache[cache_key] = res

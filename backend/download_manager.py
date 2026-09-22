@@ -31,6 +31,17 @@ CONFIG_DIR = pc.get_config_dir()
 SOCKET_PATH = f"/tmp/nutsty_download{PROFILE_SUFFIX}.sock"
 STATUS_FILE = os.path.join(TEMP_DIR, f"nutsty_download_status{PROFILE_SUFFIX}.json")
 
+HAS_AF_UNIX = hasattr(socket, "AF_UNIX") and not pc.IS_WINDOWS
+_in_proc_manager = None
+_in_proc_lock = threading.Lock()
+
+def get_in_proc_manager():
+    global _in_proc_manager
+    with _in_proc_lock:
+        if _in_proc_manager is None:
+            _in_proc_manager = DownloadManager()
+        return _in_proc_manager
+
 STATE_NOT_DOWNLOADED = 0
 STATE_PREPARING = 1
 STATE_DOWNLOADING = 2
@@ -537,6 +548,16 @@ class DownloadManager:
 
 def run_daemon():
     """Run resident download daemon listening on Unix domain socket & printing stdout events"""
+    if not HAS_AF_UNIX:
+        manager = get_in_proc_manager()
+        manager.emit_event({"event": "daemon_ready", "socket": "in_proc"})
+        try:
+            while True:
+                time.sleep(1.0)
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        return
+
     if os.path.exists(SOCKET_PATH):
         try:
             os.remove(SOCKET_PATH)
@@ -637,6 +658,12 @@ def run_daemon():
 
 def client_enqueue(video_id, title="Track", artist="Artist", thumbnail="", quality=None):
     """CLI client helper to enqueue a download"""
+    if not HAS_AF_UNIX:
+        mgr = get_in_proc_manager()
+        mgr.enqueue(video_id, title, artist, thumbnail, quality)
+        print(json.dumps({"success": True, "videoId": video_id, "title": title}))
+        return True
+
     def is_socket_alive():
         if not os.path.exists(SOCKET_PATH):
             return False
@@ -693,6 +720,12 @@ def client_clear_completed():
         except Exception:
             pass
 
+    if not HAS_AF_UNIX:
+        if _in_proc_manager:
+            _in_proc_manager.clear_completed()
+        print(json.dumps({"success": True, "action": "clear_completed"}))
+        return True
+
     if os.path.exists(SOCKET_PATH):
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -719,6 +752,12 @@ def client_remove(video_id):
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
+
+    if not HAS_AF_UNIX:
+        if _in_proc_manager:
+            _in_proc_manager.remove(video_id)
+        print(json.dumps({"success": True, "action": "remove", "videoId": video_id}))
+        return True
 
     if os.path.exists(SOCKET_PATH):
         try:
