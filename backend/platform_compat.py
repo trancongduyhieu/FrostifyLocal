@@ -240,7 +240,7 @@ def get_daemon_popen_kwargs() -> dict:
     return kwargs
 
 def configure_windows_ssl():
-    """Ensure SSL certificates work reliably across Windows PyInstaller bundles."""
+    """Ensure SSL certificates work reliably across Windows PyInstaller bundles and requests/urllib."""
     try:
         import ssl
         try:
@@ -250,10 +250,18 @@ def configure_windows_ssl():
                 orig_create_default = ssl.create_default_context
                 ssl.create_default_context = lambda *args, **kwargs: orig_create_default(cafile=ca_path)
                 ssl._create_default_https_context = lambda: orig_create_default(cafile=ca_path)
+                os.environ["REQUESTS_CA_BUNDLE"] = ca_path
+                os.environ["CURL_CA_BUNDLE"] = ca_path
+                os.environ["SSL_CERT_FILE"] = ca_path
                 return
         except Exception:
             pass
         # Fallback to unverified context to prevent hard crashes on Windows when root CAs are missing
         ssl._create_default_https_context = ssl._create_unverified_context
+        try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except Exception:
+            pass
     except Exception:
         pass

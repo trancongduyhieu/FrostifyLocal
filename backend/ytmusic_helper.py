@@ -20,28 +20,51 @@ except (ImportError, ValueError):
 pc.configure_windows_ssl()
 
 # Monkey-patch ytmusicapi sapisid_from_cookie to be 100% immune to SimpleCookie syntax/token errors
+def safe_sapisid_from_cookie(raw_cookie: str) -> str:
+    match = re.search(r'(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)', raw_cookie)
+    if match:
+        return match.group(1).strip('"').strip()
+    try:
+        from http.cookies import SimpleCookie
+        cookie = SimpleCookie()
+        cookie.load(raw_cookie.replace('"', ''))
+        if "__Secure-3PAPISID" in cookie:
+            return cookie["__Secure-3PAPISID"].value
+        if "SAPISID" in cookie:
+            return cookie["SAPISID"].value
+    except Exception:
+        pass
+    raise KeyError("__Secure-3PAPISID")
+
 try:
     import ytmusicapi.auth.browser
-
-    def safe_sapisid_from_cookie(raw_cookie: str) -> str:
-        match = re.search(r'(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)', raw_cookie)
-        if match:
-            return match.group(1).strip('"').strip()
-        try:
-            from http.cookies import SimpleCookie
-            cookie = SimpleCookie()
-            cookie.load(raw_cookie.replace('"', ''))
-            if "__Secure-3PAPISID" in cookie:
-                return cookie["__Secure-3PAPISID"].value
-            if "SAPISID" in cookie:
-                return cookie["SAPISID"].value
-        except Exception:
-            pass
-        raise KeyError("__Secure-3PAPISID")
-
     ytmusicapi.auth.browser.sapisid_from_cookie = safe_sapisid_from_cookie
 except Exception:
     pass
+
+try:
+    import ytmusicapi.ytmusic
+    ytmusicapi.ytmusic.sapisid_from_cookie = safe_sapisid_from_cookie
+except Exception:
+    pass
+
+def create_resilient_session():
+    import requests
+    session = requests.Session()
+    ca_path = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+    if ca_path and os.path.exists(ca_path):
+        session.verify = ca_path
+    else:
+        try:
+            import certifi
+            cpath = certifi.where()
+            if os.path.exists(cpath):
+                session.verify = cpath
+            else:
+                session.verify = False
+        except Exception:
+            session.verify = False
+    return session
 
 def sanitize_cookie_for_ytmusic(raw_cookie: str) -> str:
     """Sanitize and prioritize Google/YouTube authentication cookies."""
@@ -272,14 +295,16 @@ def cache_online_tracks(tracks):
     except Exception:
         pass
 
-def get_ytmusic_client():
+def get_ytmusic_client(session=None):
     from ytmusicapi import YTMusic
+    if session is None:
+        session = create_resilient_session()
     if os.path.exists(AUTH_FILE):
         try:
-            return YTMusic(AUTH_FILE)
+            return YTMusic(AUTH_FILE, requests_session=session)
         except Exception as e:
             sys.stderr.write(f"[ytmusic auth load error]: {e}\n")
-    return YTMusic()
+    return YTMusic(requests_session=session)
 
 def extract_account_details_from_client(yt, headers=None):
     """
@@ -479,8 +504,10 @@ def save_auth(raw_text, profile_hint=None):
     try:
         import ytmusicapi
         from ytmusicapi.auth.browser import initialize_headers
-        headers = dict(initialize_headers())
-        headers["user-agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
+        if sys.platform == "win32":
+            headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+        else:
+            headers["user-agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
 
         # Authuser detection
         target_authuser = "0"
@@ -1071,17 +1098,34 @@ def get_personalized_home():
     if cached and (time.time() - cached.get("timestamp", 0)) < 1800:
         sections = cached.get("sections", [])
         has_legacy = any(s.get("type") == "card_carousel" for s in sections)
-        if not has_legacy and sections and (cached.get("quick_picks") or cached.get("featured_playlists")):
+        if not has_legacy and sections and len(sections) > 0 and (cached.get("quick_picks") or cached.get("featured_playlists")):
             return cached
 
     yt = get_ytmusic_client()
     quick_picks = []
     featured_playlists = []
     dynamic_moods = []
+    shelves = []
+    final_sections = []
+    all_tracks_discovered = []
+    home_res = None
 
     try:
         home_res = yt._send_request("browse", {"browseId": "FEmusic_home"})
+    except Exception as e:
+        sys.stderr.write(f"[personalized home auth browse error]: {e}\n")
+        # Automatic fallback: try guest client if user account/cookies failed
+        try:
+            from ytmusicapi import YTMusic
+            guest_session = create_resilient_session()
+            guest_yt = YTMusic(requests_session=guest_session)
+            home_res = guest_yt._send_request("browse", {"browseId": "FEmusic_home"})
+            yt = guest_yt
+            sys.stderr.write("[personalized home] Recovered using guest browse!\n")
+        except Exception as e2:
+            sys.stderr.write(f"[personalized home guest browse error]: {e2}\n")
 
+    if home_res and isinstance(home_res, dict):
         # 1. Extract dynamic mood chips directly from user's account home
         try:
             from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
@@ -1098,8 +1142,6 @@ def get_personalized_home():
 
         # 2. Extract initial sections
         raw_sections = home_res.get("contents", {}).get("singleColumnBrowseResultsRenderer", {}).get("tabs", [{}])[0].get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
-
-        shelves = []
         for s in raw_sections:
             shelf = s.get("musicCarouselShelfRenderer") or s.get("musicShelfRenderer")
             if shelf:
@@ -1109,22 +1151,20 @@ def get_personalized_home():
                 shelves.append((t, sub, shelf.get("contents", [])))
 
         # 3. Extract continuation sections (up to 12 continuation shelves)
-        from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
-        from ytmusicapi.continuations import get_continuations
-        from ytmusicapi.parsers.browsing import parse_mixed_content
+        try:
+            from ytmusicapi.navigation import nav, SINGLE_COLUMN_TAB
+            from ytmusicapi.continuations import get_continuations
+            from ytmusicapi.parsers.browsing import parse_mixed_content
 
-        section_list = nav(home_res, [*SINGLE_COLUMN_TAB, "sectionListRenderer"], True)
-        if section_list and "continuations" in section_list:
-            try:
+            section_list = nav(home_res, [*SINGLE_COLUMN_TAB, "sectionListRenderer"], True)
+            if section_list and "continuations" in section_list:
                 request_func = lambda additionalParams: yt._send_request("browse", {"browseId": "FEmusic_home"}, additionalParams)
                 conts = get_continuations(section_list, "sectionListContinuation", 4, request_func, parse_mixed_content)
                 for c in conts:
                     shelves.append((c.get("title", ""), "", c.get("contents", [])))
-            except Exception as e:
-                sys.stderr.write(f"[home continuations error]: {e}\n")
+        except Exception as e:
+            sys.stderr.write(f"[home continuations error]: {e}\n")
 
-        final_sections = []
-        all_tracks_discovered = []
         for title, subtitle, items in shelves:
             if not title or not items or (len(items) <= 1 and "together" in title.lower()):
                 continue
@@ -1154,21 +1194,38 @@ def get_personalized_home():
                 "items": norm_items
             })
 
-        # Robust fallback if no sections could be parsed
-        if not final_sections:
-            trending_tracks = search_ytmusic("Trending", limit=20)
+    # Robust multi-tier fallback: Ensure sections and quick picks are never empty
+    if not final_sections or not quick_picks:
+        sys.stderr.write("[personalized home] Running robust trending fallback...\n")
+        try:
+            trending_tracks = search_ytmusic("Trending Music", limit=20)
             if trending_tracks:
-                final_sections.append({
-                    "title": "Trending",
-                    "subtitle": "POPULAR NOW",
-                    "type": "track_grid",
-                    "items": trending_tracks
-                })
+                if not any(s.get("title") == "Trending" for s in final_sections):
+                    final_sections.append({
+                        "title": "Trending",
+                        "subtitle": "POPULAR NOW",
+                        "type": "track_grid",
+                        "items": trending_tracks
+                    })
                 if not quick_picks:
                     quick_picks = trending_tracks[:12]
+        except Exception as te:
+            sys.stderr.write(f"[trending fallback error]: {te}\n")
 
-    except Exception as e:
-        sys.stderr.write(f"[personalized home error]: {e}\n")
+    if not featured_playlists:
+        try:
+            top_playlists = search_ytmusic("Top Hits", limit=10)
+            if top_playlists:
+                if not any(s.get("title") == "Top Hits" for s in final_sections):
+                    final_sections.append({
+                        "title": "Top Hits",
+                        "subtitle": "FEATURED PLAYLISTS",
+                        "type": "album_carousel",
+                        "items": top_playlists
+                    })
+                featured_playlists = top_playlists
+        except Exception:
+            pass
 
     mood_pills = [{"title": "All", "params": ""}] + (dynamic_moods if dynamic_moods else DEFAULT_MOOD_PILLS[1:])
     save_json(MOOD_CATS_FILE, {"timestamp": time.time(), "categories": mood_pills})
@@ -1189,7 +1246,7 @@ def get_personalized_home():
         quick_picks = search_ytmusic("Trending Music", limit=12)
 
     cache_online_tracks(quick_picks)
-    if 'all_tracks_discovered' in locals() and all_tracks_discovered:
+    if all_tracks_discovered:
         cache_online_tracks(all_tracks_discovered)
 
     # Load all existing cached moods from ~/.cache/nutsty/moods/ into preloaded_moods for 0ms QML startup
@@ -1205,12 +1262,13 @@ def get_personalized_home():
     res = {
         "timestamp": time.time(),
         "moods": mood_pills,
-        "sections": final_sections if 'final_sections' in locals() and final_sections else [],
+        "sections": final_sections,
         "quick_picks": quick_picks[:20],
         "featured_playlists": featured_playlists[:50],
         "preloaded_moods": preloaded
     }
-    save_json(HOME_CACHE_FILE, res)
+    if final_sections or quick_picks:
+        save_json(HOME_CACHE_FILE, res)
 
     # Pre-warm top moods in background thread for 0ms disk cache hits
     def _prewarm():
@@ -1915,7 +1973,14 @@ def search_ytmusic(query, limit=20):
 
     try:
         ytm = get_ytmusic_client()
-        raw = ytm.search(query.strip(), filter="songs")
+        try:
+            raw = ytm.search(query.strip(), filter="songs")
+        except Exception as se:
+            sys.stderr.write(f"[ytmusic search error, guest fallback]: {se}\n")
+            from ytmusicapi import YTMusic
+            guest_yt = YTMusic(requests_session=create_resilient_session())
+            raw = guest_yt.search(query.strip(), filter="songs")
+
         tracks = []
         for item in raw[:limit]:
             norm = normalize_track(item)
@@ -1924,7 +1989,7 @@ def search_ytmusic(query, limit=20):
         cache_online_tracks(tracks)
         return tracks
     except Exception as e:
-        sys.stderr.write(f"[ytmusic search error]: {e}\n")
+        sys.stderr.write(f"[ytmusic search fatal error]: {e}\n")
         return []
 
 def search_categorized(query):
@@ -1934,7 +1999,13 @@ def search_categorized(query):
     q = query.strip()
     try:
         ytm = get_ytmusic_client()
-        raw = ytm.search(q)
+        try:
+            raw = ytm.search(q)
+        except Exception as se:
+            sys.stderr.write(f"[search_categorized auth error, guest fallback]: {se}\n")
+            from ytmusicapi import YTMusic
+            guest_yt = YTMusic(requests_session=create_resilient_session())
+            raw = guest_yt.search(q)
         top_result = None
         songs = []
         albums = []
@@ -2098,7 +2169,13 @@ def filter_search(query, category="songs"):
             "featured_playlists": "featured_playlists"
         }
         flt = cat_map.get(category, "songs")
-        raw = ytm.search(q, filter=flt, limit=60)
+        try:
+            raw = ytm.search(q, filter=flt, limit=60)
+        except Exception as se:
+            sys.stderr.write(f"[filter_search auth error, guest fallback]: {se}\n")
+            from ytmusicapi import YTMusic
+            guest_yt = YTMusic(requests_session=create_resilient_session())
+            raw = guest_yt.search(q, filter=flt, limit=60)
         items = []
         for r in raw:
             rtype = r.get("resultType")
