@@ -893,13 +893,13 @@ Scope {
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") return "Hiếu Trần";
         if (profile === "user1") return "Shiraori";
-        return "Shiraori";
+        return I18n.tr("Khách", "Guest");
     }
 
     function getCurrentUserAvatar() {
         if (win.authAccountThumb) return win.authAccountThumb;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-        if (profile === "user1" || profile === "") {
+        if (profile === "user1") {
             return "https://yt3.ggpht.com/yti/ANjgQV87mKpSJkLdeIPde7wHxvnE5VCdypuOrjkni974j7oLkaJ2=s108-c-k-c0x00ffffff-no-rj";
         }
         if (profile === "user2") {

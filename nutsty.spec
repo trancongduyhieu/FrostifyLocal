@@ -61,6 +61,8 @@ hidden_imports = [
     'ytmusic_helper',
     'social_notes',
     'platform_compat',
+    'browser_login',
+    'websockets',
 ]
 
 a = Analysis(

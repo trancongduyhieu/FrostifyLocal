@@ -104,6 +104,7 @@ BACKEND_MAP = {
     "playlist_manager.py": "playlist_manager",
     "ytmusic_helper.py": "ytmusic_helper",
     "social_notes.py": "social_notes",
+    "browser_login.py": "browser_login",
 }
 
 # Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
@@ -203,9 +204,23 @@ class NutstyBridge(QObject):
         except Exception:
             return ""
 
+    @Slot(str)
+    def copyToClipboard(self, text: str):
+        try:
+            from PySide6.QtGui import QGuiApplication
+            cb = QGuiApplication.clipboard()
+            if cb:
+                cb.setText(str(text))
+        except Exception as e:
+            sys.stderr.write(f"copyToClipboard failed: {e}\n")
+
     @Slot(list)
     def execDetached(self, args: list):
         if not args:
+            return
+
+        if args[0] == "wl-copy":
+            self.copyToClipboard(args[1] if len(args) > 1 else "")
             return
 
         # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
@@ -264,6 +279,11 @@ class NutstyBridge(QObject):
     def runProcess(self, args: list, callback):
         """Run process asynchronously and invoke JS callback(stdout, stderr, exitCode)."""
         if not args:
+            return
+
+        if args[0] == "wl-copy":
+            self.copyToClipboard(args[1] if len(args) > 1 else "")
+            QTimer.singleShot(0, lambda: callback.call(["", "", 0]))
             return
 
         clean_args = [a for a in args if not a.startswith("-")]

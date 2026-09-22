@@ -59,7 +59,7 @@ def get_current_user() -> Dict[str, str]:
                         "email": cdata.get("tag", "").lower(),
                         "tag": cdata.get("tag", ""),
                         "user_id": cdata.get("user_id", ""),
-                        "name": cdata.get("username", "Shiraori"),
+                        "name": cdata.get("username", "Nutsty User"),
                         "avatar": cdata.get("avatar_url", "")
                     }
         except Exception:

@@ -21,11 +21,16 @@ if BACKEND_DIR not in sys.path:
 
 import ytmusic_helper
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
 CDP_PORT = 19222 if not PROFILE_NAME else (19222 + (abs(hash(PROFILE_NAME)) % 100) + 1)
-PROFILE_DIR = os.path.expanduser(f"~/.config/nutsty/browser_auth{PROFILE_SUFFIX}")
+PROFILE_DIR = os.path.join(pc.get_config_dir(), f"browser_auth{PROFILE_SUFFIX}")
 
 LOGIN_URL = (
     "https://accounts.google.com/ServiceLogin?"
@@ -34,6 +39,37 @@ LOGIN_URL = (
 )
 
 def find_system_browser():
+    # 1. On Windows: Check standard paths for Edge, Chrome, Brave
+    if sys.platform == "win32" or os.name == "nt":
+        win_candidates = []
+        p_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        p_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
+
+        # Microsoft Edge (Pre-installed on every Windows 10/11)
+        win_candidates.extend([
+            os.path.join(p_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(p_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+            shutil.which("msedge") or "",
+        ])
+        # Google Chrome
+        win_candidates.extend([
+            os.path.join(p_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(p_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_appdata, "Google", "Chrome", "Application", "chrome.exe") if local_appdata else "",
+            shutil.which("chrome") or "",
+        ])
+        # Brave
+        win_candidates.extend([
+            os.path.join(p_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local_appdata, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") if local_appdata else "",
+            shutil.which("brave") or "",
+        ])
+        for p in win_candidates:
+            if p and os.path.exists(p) and os.path.isfile(p):
+                return p
+
+    # 2. On Linux: Check typical desktop Chromium paths
     candidates = [
         "brave",
         "brave-browser",
@@ -45,13 +81,30 @@ def find_system_browser():
         "chromium-browser",
         "/usr/bin/chromium",
         "microsoft-edge",
+        "msedge",
         "vivaldi"
     ]
     for c in candidates:
         bin_path = shutil.which(c)
         if bin_path and os.path.isfile(bin_path):
             return bin_path
+        if os.path.isfile(c):
+            return c
     return None
+
+def kill_browser_proc(proc):
+    if not proc:
+        return
+    try:
+        if sys.platform == "win32" or os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=3)
+        else:
+            os.killpg(os.getpgid(proc.pid), 15)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     import websockets
@@ -189,11 +242,17 @@ def start_login():
         "--window-size=680,780"
     ]
 
+    kwargs = {}
+    if sys.platform == "win32" or os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["preexec_fn"] = os.setsid
+
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid
+        **kwargs
     )
 
     ws_url = None
@@ -215,10 +274,7 @@ def start_login():
             continue
 
     if not ws_url:
-        try:
-            os.killpg(os.getpgid(proc.pid), 15)
-        except Exception:
-            pass
+        kill_browser_proc(proc)
         err = {"success": False, "error": "Failed to establish DevTools connection with browser window."}
         print(json.dumps(err, ensure_ascii=False))
         return err
@@ -230,13 +286,13 @@ def start_login():
         result = {"success": False, "error": str(e)}
     finally:
         # Gracefully terminate browser window
-        try:
-            os.killpg(os.getpgid(proc.pid), 15)
-        except Exception:
-            pass
+        kill_browser_proc(proc)
 
     print(json.dumps(result, ensure_ascii=False))
     return result
 
-if __name__ == "__main__":
+def main():
     start_login()
+
+if __name__ == "__main__":
+    main()

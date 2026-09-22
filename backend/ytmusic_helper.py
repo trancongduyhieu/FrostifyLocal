@@ -791,7 +791,7 @@ def get_personalized_home():
         if section_list and "continuations" in section_list:
             try:
                 request_func = lambda additionalParams: yt._send_request("browse", {"browseId": "FEmusic_home"}, additionalParams)
-                conts = get_continuations(section_list, "sectionListContinuation", 12, request_func, parse_mixed_content)
+                conts = get_continuations(section_list, "sectionListContinuation", 4, request_func, parse_mixed_content)
                 for c in conts:
                     shelves.append((c.get("title", ""), "", c.get("contents", [])))
             except Exception as e:
@@ -827,6 +827,19 @@ def get_personalized_home():
                 "type": classify_section(title, norm_items),
                 "items": norm_items
             })
+
+        # Robust fallback if no sections could be parsed
+        if not final_sections:
+            trending_tracks = search_ytmusic("Trending", limit=20)
+            if trending_tracks:
+                final_sections.append({
+                    "title": "Trending",
+                    "subtitle": "POPULAR NOW",
+                    "type": "track_grid",
+                    "items": trending_tracks
+                })
+                if not quick_picks:
+                    quick_picks = trending_tracks[:12]
 
     except Exception as e:
         sys.stderr.write(f"[personalized home error]: {e}\n")

@@ -603,7 +603,9 @@ GLOBAL_RELAY_CLIENT = CloudRelayClient()
 def resolve_profile_suffix(profile=None, user_email=None):
     if profile:
         p = str(profile).strip().lower()
-        if p in ("user1", "default", "main"):
+        if p in ("user1",):
+            return "_user1"
+        elif p in ("default", "main"):
             return ""
         elif p in ("user2", "friend"):
             return f"_{p}"
@@ -614,7 +616,7 @@ def resolve_profile_suffix(profile=None, user_email=None):
     if user_email:
         em = str(user_email).strip().lower()
         if "user1" in em:
-            return ""
+            return "_user1"
         elif "user2" in em:
             return "_user2"
         elif "friend" in em:
@@ -629,11 +631,13 @@ def resolve_profile_suffix(profile=None, user_email=None):
                     if (cdata.get("email") or "").strip().lower() == em or (cdata.get("handle") or "").strip().lower() == em:
                         base = os.path.basename(cache_file)
                         s = base.replace("nutsty_user_cache", "").replace(".json", "")
-                        return "" if s == "_user1" else s
+                        return s
             except Exception:
                 pass
     env_p = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    if env_p in ("user1", "default", "main"):
+    if env_p == "user1":
+        return "_user1"
+    if env_p in ("default", "main"):
         return ""
     return f"_{env_p}" if env_p else ""
 
@@ -641,10 +645,12 @@ def get_cloud_identity_path(profile_suffix=""):
     xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     d = os.path.join(xdg, "noctalia")
     os.makedirs(d, exist_ok=True)
-    if profile_suffix in ("_user1", "user1", ""):
-        suffix = ""
-    else:
+    if profile_suffix in ("_user1", "user1"):
+        suffix = "_user1"
+    elif profile_suffix:
         suffix = profile_suffix
+    else:
+        suffix = ""
     return os.path.join(d, f"nutsty_cloud_identity{suffix}.json")
 
 def load_cloud_identity(profile_suffix=""):
@@ -693,10 +699,10 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
     if not user_name:
         if profile_suffix == "_user2":
             user_name = "Hiếu Trần"
-        elif profile_suffix in ("_user1", ""):
+        elif profile_suffix in ("_user1", "user1"):
             user_name = "Shiraori"
         else:
-            user_name = f"Nutsty{profile_suffix.replace('_', '').title()}"
+            user_name = "Nutsty User"
 
     reg_res = GLOBAL_RELAY_CLIENT.register(
         username=user_name,
