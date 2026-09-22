@@ -45,8 +45,22 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = SafeLogWriter(log_file_path)
 
-# Add backend to path
-APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+# Resolve App and Resource Root across source runs and PyInstaller onedir bundles
+def resolve_app_root():
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass and os.path.exists(os.path.join(meipass, "shell.qml")):
+            return meipass
+        exe_dir = os.path.dirname(sys.executable)
+        internal_dir = os.path.join(exe_dir, "_internal")
+        if os.path.exists(os.path.join(internal_dir, "shell.qml")):
+            return internal_dir
+        if os.path.exists(os.path.join(exe_dir, "shell.qml")):
+            return exe_dir
+        return meipass or exe_dir
+    return os.path.dirname(os.path.abspath(__file__))
+
+APP_ROOT = resolve_app_root()
 sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
 
 import platform_compat as pc
@@ -126,6 +140,8 @@ class NutstyBridge(QObject):
     def getEnv(self, key: str) -> str:
         if key == "HOME":
             return os.path.expanduser("~")
+        elif key == "NUTSTY_APP_DIR":
+            return APP_ROOT
         return os.environ.get(key, "")
 
     @Slot(str, result=str)
@@ -297,10 +313,21 @@ def main():
     start_daemons()
 
     engine = QQmlApplicationEngine()
-    
+    engine.warnings.connect(lambda warns: [sys.stderr.write(f"QML Warning: {w.toString()}\n") for w in warns])
+
     compat_path = os.path.join(APP_ROOT, "compat")
     engine.addImportPath(compat_path)
     engine.addImportPath(APP_ROOT)
+    engine.addImportPath(os.path.join(APP_ROOT, "components"))
+
+    if getattr(sys, "frozen", False):
+        pyside_qml = os.path.join(APP_ROOT, "PySide6", "qml")
+        if os.path.exists(pyside_qml):
+            engine.addImportPath(pyside_qml)
+        exe_dir = os.path.dirname(sys.executable)
+        alt_pyside_qml = os.path.join(exe_dir, "_internal", "PySide6", "qml")
+        if os.path.exists(alt_pyside_qml):
+            engine.addImportPath(alt_pyside_qml)
 
     bridge = NutstyBridge()
     engine.rootContext().setContextProperty("__NutstyBridge", bridge)
@@ -309,7 +336,22 @@ def main():
     engine.load(QUrl.fromLocalFile(shell_qml))
 
     if not engine.rootObjects():
-        sys.stderr.write("Fatal: Failed to load QML root object.\n")
+        err_details = [
+            f"Target QML: {shell_qml}",
+            f"File Exists: {os.path.exists(shell_qml)}",
+            f"APP_ROOT: {APP_ROOT}",
+            f"Executable: {sys.executable}",
+            f"sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}",
+            f"Log File: {log_file_path}",
+        ]
+        msg = "Fatal: Failed to load QML root object.\n\n" + "\n".join(err_details)
+        sys.stderr.write(msg + "\n")
+        try:
+            if sys.platform == "win32":
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(0, msg, "Nutsty Error", 0x10)
+        except Exception:
+            pass
         sys.exit(1)
 
     sys.exit(app.exec())

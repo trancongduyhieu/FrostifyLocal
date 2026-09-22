@@ -34,7 +34,7 @@ Scope {
 
         property var activeLyrics: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? ytNowPlayingView.activeLyrics : []
 
-    readonly property string appDir: Quickshell.env("HOME") + "/Applications/FrostifyLocal"
+    readonly property string appDir: Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal")
 
     property string currentView: "home" // "home", "library", "playlist", "search"
     property string previousView: "home"

@@ -42,12 +42,17 @@ jobs:
 
       - name: Prepare Distribution Folder
         shell: pwsh
-        run: |
           if (Test-Path "start.bat") { Copy-Item "start.bat" -Destination "dist\Nutsty\" }
+          if (Test-Path "run_debug.bat") { Copy-Item "run_debug.bat" -Destination "dist\Nutsty\" }
           if (Test-Path "bin") {
             New-Item -ItemType Directory -Force -Path "dist\Nutsty\bin"
             Copy-Item -Path "bin\*" -Destination "dist\Nutsty\bin\" -Recurse -Force
           }
+          Copy-Item "shell.qml" -Destination "dist\Nutsty\" -Force
+          Copy-Item "compat" -Destination "dist\Nutsty\" -Recurse -Force
+          Copy-Item "components" -Destination "dist\Nutsty\" -Recurse -Force
+          Copy-Item "backend" -Destination "dist\Nutsty\" -Recurse -Force
+          Copy-Item "assets" -Destination "dist\Nutsty\" -Recurse -Force
 
       - name: Archive Distribution Package
         shell: pwsh
