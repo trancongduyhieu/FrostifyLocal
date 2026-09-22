@@ -130,22 +130,135 @@ def get_ytmusic_client():
             sys.stderr.write(f"[ytmusic auth load error]: {e}\n")
     return YTMusic()
 
+def extract_account_details_from_client(yt, headers=None):
+    """
+    Safely extract account information (name, email, avatar photo, channel handle)
+    from YouTube Music InnerTube API without throwing KeyError if accountPhoto is missing
+    (e.g. accounts using default initial letter avatar like 'H' or without custom brand photo).
+    """
+    info = {"name": "", "email": "", "thumb": "", "handle": ""}
+
+    # Method 1: Query InnerTube account/account_menu
+    try:
+        endpoint = "account/account_menu"
+        resp = yt._send_request(endpoint, {})
+        if isinstance(resp, dict):
+            def find_node(obj, target_key):
+                if isinstance(obj, dict):
+                    if target_key in obj:
+                        return obj[target_key]
+                    for v in obj.values():
+                        res = find_node(v, target_key)
+                        if res: return res
+                elif isinstance(obj, list):
+                    for item in obj:
+                        res = find_node(item, target_key)
+                        if res: return res
+                return None
+
+            header = find_node(resp, "activeAccountHeaderRenderer")
+            if header and isinstance(header, dict):
+                # Extract Account Name
+                name_obj = header.get("accountName") or header.get("name")
+                if isinstance(name_obj, dict):
+                    runs = name_obj.get("runs", [])
+                    if runs and isinstance(runs, list) and len(runs) > 0:
+                        info["name"] = runs[0].get("text", "").strip()
+                    elif "simpleText" in name_obj:
+                        info["name"] = name_obj.get("simpleText", "").strip()
+                elif isinstance(name_obj, str):
+                    info["name"] = name_obj.strip()
+
+                # Extract Email & Channel Handle
+                for field in ["email", "channelHandle", "byline"]:
+                    f_obj = header.get(field)
+                    if isinstance(f_obj, dict):
+                        runs = f_obj.get("runs", [])
+                        if runs and isinstance(runs, list) and len(runs) > 0:
+                            txt = runs[0].get("text", "").strip()
+                            if "@" in txt and "." in txt:
+                                if not info["email"]: info["email"] = txt
+                            elif not info["handle"]:
+                                info["handle"] = txt
+                        elif "simpleText" in f_obj:
+                            txt = f_obj.get("simpleText", "").strip()
+                            if "@" in txt and "." in txt:
+                                if not info["email"]: info["email"] = txt
+                            elif not info["handle"]:
+                                info["handle"] = txt
+
+                # Extract Avatar Photo safely (no KeyError if missing)
+                for photo_key in ["accountPhoto", "avatar", "thumbnail", "thumbnails"]:
+                    p_obj = header.get(photo_key)
+                    if isinstance(p_obj, dict):
+                        thumbs = p_obj.get("thumbnails", [])
+                        if thumbs and isinstance(thumbs, list) and len(thumbs) > 0:
+                            info["thumb"] = thumbs[-1].get("url", "")
+                            break
+
+            # If email was not explicitly in header, search the entire menu response for email address
+            if not info["email"]:
+                try:
+                    raw_str = json.dumps(resp)
+                    emails = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', raw_str)
+                    valid_emails = [e for e in emails if not e.endswith("@youtube.com") and not e.endswith("@google.com")]
+                    if valid_emails:
+                        info["email"] = valid_emails[0]
+                except Exception:
+                    pass
+    except Exception as e:
+        sys.stderr.write(f"[extract_account_details account_menu error]: {e}\n")
+
+    # Method 2: Standard ytmusicapi get_account_info fallback
+    if not info["name"] or info["name"] == "Google User":
+        try:
+            std_user = yt.get_account_info()
+            if isinstance(std_user, dict):
+                if std_user.get("accountName"):
+                    info["name"] = std_user.get("accountName")
+                if std_user.get("channelHandle") and not info["handle"]:
+                    info["handle"] = std_user.get("channelHandle")
+                if std_user.get("accountPhotoUrl") and not info["thumb"]:
+                    info["thumb"] = std_user.get("accountPhotoUrl")
+        except Exception:
+            pass
+
+    return info
+
 def get_auth_status():
     if not os.path.exists(AUTH_FILE):
         return {"logged_in": False, "name": "", "thumb": "", "email": ""}
     user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
+    
+    cached_info = {}
+    if os.path.exists(user_cache_file):
+        try:
+            with open(user_cache_file, "r", encoding="utf-8") as ucf:
+                cached_info = json.load(ucf)
+        except Exception:
+            pass
+
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic(AUTH_FILE)
-        user = yt.get_account_info()
-        name = user.get("accountName") or user.get("name") or "Google User"
-        thumb = user.get("accountPhotoUrl") or ""
-        if not thumb:
-            thumbs = user.get("thumbnails", [])
-            thumb = thumbs[-1].get("url") if thumbs else ""
-        handle = user.get("channelHandle") or ""
+        user = extract_account_details_from_client(yt)
+        
+        name = user.get("name") or ""
+        thumb = user.get("thumb") or ""
+        handle = user.get("handle") or ""
         email = user.get("email") or handle or ""
-        if not email and name:
+
+        # Merge with cached info if user lacked name/email in InnerTube response
+        if (not name or name == "Google User") and cached_info.get("name") and cached_info.get("name") != "Google User":
+            name = cached_info.get("name")
+        if not email and cached_info.get("email") and "@" in cached_info.get("email") and not cached_info.get("email").startswith("googleuser@"):
+            email = cached_info.get("email")
+        if not thumb and cached_info.get("avatar"):
+            thumb = cached_info.get("avatar")
+
+        if not name:
+            name = "Google User"
+        if not email and name and name != "Google User":
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
 
@@ -153,7 +266,7 @@ def get_auth_status():
         try:
             with open(user_cache_file, "w", encoding="utf-8") as ucf:
                 json.dump({
-                    "email": email.strip().lower(),
+                    "email": (email or "").strip().lower(),
                     "name": name,
                     "avatar": thumb,
                     "handle": handle
@@ -163,34 +276,28 @@ def get_auth_status():
 
         return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
     except Exception as e:
-        # Fallback 1: Check cached profile if available
-        if os.path.exists(user_cache_file):
-            try:
-                with open(user_cache_file, "r", encoding="utf-8") as ucf:
-                    cached = json.load(ucf)
-                    if cached.get("name"):
-                        return {
-                            "logged_in": True,
-                            "name": cached.get("name"),
-                            "thumb": cached.get("avatar") or "",
-                            "email": cached.get("email") or ""
-                        }
-            except Exception:
-                pass
+        # Fallback 1: Return cached profile if available
+        if cached_info and cached_info.get("name"):
+            return {
+                "logged_in": True,
+                "name": cached_info.get("name"),
+                "thumb": cached_info.get("avatar") or "",
+                "email": cached_info.get("email") or ""
+            }
 
         # Fallback 2: Check if AUTH_FILE has LOGIN_INFO (temporary offline/network hiccup)
         try:
             with open(AUTH_FILE, "r", encoding="utf-8") as f:
                 auth_data = json.load(f)
             cookie_data = auth_data.get("cookie", "")
-            if "login_info" in cookie_data.lower():
+            if "login_info" in cookie_data.lower() or "sapisid" in cookie_data.lower():
                 return {"logged_in": True, "name": "Google User", "thumb": "", "email": ""}
         except Exception:
             pass
 
         return {"logged_in": False, "name": "", "thumb": "", "email": "", "error": str(e)}
 
-def save_auth(raw_text):
+def save_auth(raw_text, profile_hint=None):
     if isinstance(raw_text, dict):
         raw_text = "; ".join(f"{k}={v}" for k, v in raw_text.items())
     raw_text = str(raw_text).strip()
@@ -267,14 +374,14 @@ def save_auth(raw_text):
         account_info = {}
         try:
             test_client = ytmusicapi.YTMusic(temp_file)
-            account_info = test_client.get_account_info()
+            account_info = extract_account_details_from_client(test_client, headers)
         except Exception as err1:
             if target_authuser != "0":
                 try:
                     headers["x-goog-authuser"] = "0"
                     save_json(temp_file, headers)
                     test_client = ytmusicapi.YTMusic(temp_file)
-                    account_info = test_client.get_account_info()
+                    account_info = extract_account_details_from_client(test_client, headers)
                 except Exception as err2:
                     sys.stderr.write(f"[get_account_info fallback error]: {err2}\n")
             else:
@@ -283,12 +390,23 @@ def save_auth(raw_text):
         if not isinstance(account_info, dict):
             account_info = {}
 
-        name = account_info.get("accountName") or account_info.get("name") or "Google User"
-        thumbs = account_info.get("thumbnails", [])
-        thumb = account_info.get("accountPhotoUrl") or (thumbs[-1].get("url") if thumbs else "")
-        handle = account_info.get("channelHandle") or ""
+        # Merge profile_hint if available (e.g. from browser DOM / CDP evaluation)
+        if isinstance(profile_hint, dict):
+            if not account_info.get("name") or account_info.get("name") == "Google User":
+                if profile_hint.get("name"):
+                    account_info["name"] = profile_hint.get("name")
+            if not account_info.get("email"):
+                if profile_hint.get("email"):
+                    account_info["email"] = profile_hint.get("email")
+            if not account_info.get("thumb"):
+                if profile_hint.get("thumb"):
+                    account_info["thumb"] = profile_hint.get("thumb")
+
+        name = account_info.get("name") or account_info.get("accountName") or "Google User"
+        thumb = account_info.get("thumb") or account_info.get("accountPhotoUrl") or ""
+        handle = account_info.get("handle") or account_info.get("channelHandle") or ""
         email = account_info.get("email") or handle or ""
-        if not email and name:
+        if not email and name and name != "Google User":
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
 

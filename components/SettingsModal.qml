@@ -473,12 +473,19 @@ Rectangle {
                                     cache: true
                                 }
 
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    source: "../assets/icons/preferences-system-symbolic.svg"
-                                    iconSize: 20
-                                    color: Theme.textSecondary
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: (typeof win !== "undefined" && win.accentColor) ? Qt.tint(win.accentColor, Qt.rgba(0.2, 0.1, 0.4, 0.7)) : "#6366f1"
                                     visible: root.accountThumb === ""
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: (root.accountName && root.accountName.length > 0) ? root.accountName.substring(0, 1).toUpperCase() : "G"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                        color: "#ffffff"
+                                    }
                                 }
                             }
 

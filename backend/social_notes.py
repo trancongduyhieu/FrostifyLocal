@@ -13,6 +13,13 @@ import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
+pc.configure_windows_ssl()
+
 # Default Cloudflare Worker URL (Defaults to local daemon 127.0.0.1:17890, or Cloudflare Worker via NUTSTY_WORKER_URL)
 DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
 COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"

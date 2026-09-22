@@ -238,3 +238,22 @@ def get_daemon_popen_kwargs() -> dict:
     else:
         kwargs["start_new_session"] = True
     return kwargs
+
+def configure_windows_ssl():
+    """Ensure SSL certificates work reliably across Windows PyInstaller bundles."""
+    try:
+        import ssl
+        try:
+            import certifi
+            ca_path = certifi.where()
+            if os.path.exists(ca_path):
+                orig_create_default = ssl.create_default_context
+                ssl.create_default_context = lambda *args, **kwargs: orig_create_default(cafile=ca_path)
+                ssl._create_default_https_context = lambda: orig_create_default(cafile=ca_path)
+                return
+        except Exception:
+            pass
+        # Fallback to unverified context to prevent hard crashes on Windows when root CAs are missing
+        ssl._create_default_https_context = ssl._create_unverified_context
+    except Exception:
+        pass

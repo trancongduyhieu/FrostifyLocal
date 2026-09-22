@@ -26,6 +26,8 @@ try:
 except (ImportError, ValueError):
     import platform_compat as pc
 
+pc.configure_windows_ssl()
+
 def get_nutsty_config_dir():
     return pc.get_config_dir()
 
@@ -420,9 +422,35 @@ class CloudRelayClient:
         url = self.relay_url.rstrip("/") + endpoint
         if params:
             url += "?" + urllib.parse.urlencode(params)
+
+        # Priority 1: Use requests library with auto-retry and SSL tolerance
+        try:
+            import requests
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0"
+            }
+            try:
+                r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0)
+                if r.status_code < 500:
+                    return r.json()
+            except Exception as req_err:
+                if "CERTIFICATE_VERIFY_FAILED" in str(req_err) or "SSLError" in type(req_err).__name__:
+                    try:
+                        import urllib3
+                        urllib3.disable_warnings()
+                        r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0, verify=False)
+                        if r.status_code < 500:
+                            return r.json()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Priority 2: urllib.request with unverified SSL fallback
         req = urllib.request.Request(url, method=method)
         req.add_header("Content-Type", "application/json")
-        req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0")
+        req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0")
         body = json.dumps(data).encode("utf-8") if data is not None else None
         import ssl
         ctx = None
@@ -442,7 +470,10 @@ class CloudRelayClient:
             if "CERTIFICATE_VERIFY_FAILED" in str(e):
                 try:
                     unverified_ctx = ssl._create_unverified_context()
-                    with urllib.request.urlopen(req, data=body, timeout=5.0, context=unverified_ctx) as resp:
+                    req_retry = urllib.request.Request(url, method=method)
+                    req_retry.add_header("Content-Type", "application/json")
+                    req_retry.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NutstyClient/1.0")
+                    with urllib.request.urlopen(req_retry, data=body, timeout=5.0, context=unverified_ctx) as resp:
                         return json.loads(resp.read().decode("utf-8"))
                 except Exception:
                     pass

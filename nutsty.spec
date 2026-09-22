@@ -76,11 +76,25 @@ hidden_imports = [
     'platform_compat',
     'browser_login',
     'websockets',
+    'websockets.client',
+    'websockets.exceptions',
+    'websockets.legacy',
+    'websockets.legacy.client',
+    'certifi',
+    'urllib3',
 ]
+
+try:
+    import certifi
+    certifi_dir = os.path.dirname(certifi.__file__)
+    if os.path.exists(certifi_dir):
+        added_datas.append((certifi_dir, 'certifi'))
+except Exception:
+    pass
 
 a = Analysis(
     ['launcher_win.py'],
-    pathex=['.'],
+    pathex=['.', 'backend'],
     binaries=[],
     datas=added_datas,
     hiddenimports=hidden_imports,

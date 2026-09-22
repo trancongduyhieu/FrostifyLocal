@@ -101,6 +101,7 @@ if os.path.exists(bin_dir) and bin_dir not in os.environ.get("PATH", ""):
 sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
 
 import platform_compat as pc
+pc.configure_windows_ssl()
 
 sys_argv_lock = threading.Lock()
 

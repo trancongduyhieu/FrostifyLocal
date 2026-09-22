@@ -154,6 +154,66 @@ def kill_browser_proc(proc):
         except Exception:
             pass
 
+async def query_browser_profile(cdp_port):
+    """Query logged-in user profile from active YouTube Music tab via CDP Runtime.evaluate."""
+    import websockets
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
+            pages = json.loads(r.read().decode("utf-8"))
+
+        yt_tab = None
+        for p in pages:
+            url = p.get("url", "")
+            if "music.youtube.com" in url or "youtube.com" in url:
+                yt_tab = p
+                break
+
+        if not yt_tab or not yt_tab.get("webSocketDebuggerUrl"):
+            return None
+
+        tab_ws = yt_tab["webSocketDebuggerUrl"].replace("localhost", "127.0.0.1")
+        async with websockets.connect(tab_ws, ping_interval=None) as p_sock:
+            js = """
+            (() => {
+                let name = "";
+                let email = "";
+                let thumb = "";
+                try {
+                    if (window.ytcfg) {
+                        const d = window.ytcfg.data_ || {};
+                        name = window.ytcfg.get("USER_NAME") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.name) || "";
+                        email = window.ytcfg.get("USER_EMAIL") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.email) || "";
+                        thumb = window.ytcfg.get("USER_AVATAR") || "";
+                    }
+                    if (!name || !email) {
+                        const acc = document.querySelector("ytd-active-account-header-renderer, ytmusic-active-account-header-renderer, #avatar-btn");
+                        if (acc) {
+                            const nEl = acc.querySelector("#account-name, #channel-title, #name");
+                            if (nEl && !name) name = nEl.textContent.trim();
+                            const eEl = acc.querySelector("#email, #byline");
+                            if (eEl && !email) email = eEl.textContent.trim();
+                            const img = acc.querySelector("img#img, #account-photo img");
+                            if (img && !thumb && img.src) thumb = img.src;
+                        }
+                    }
+                } catch(e) {}
+                return { name: name, email: email, thumb: thumb };
+            })()
+            """
+            await p_sock.send(json.dumps({
+                "id": 9999,
+                "method": "Runtime.evaluate",
+                "params": {"expression": js, "returnByValue": True}
+            }))
+            resp_raw = await asyncio.wait_for(p_sock.recv(), timeout=1.5)
+            parsed = json.loads(resp_raw)
+            val = parsed.get("result", {}).get("result", {}).get("value", {})
+            if isinstance(val, dict) and (val.get("name") or val.get("email")):
+                return val
+    except Exception as e:
+        log(f"query_browser_profile debug: {e}", "DEBUG")
+    return None
+
 async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     import websockets
 
@@ -334,11 +394,19 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
 
                         full_cookie_str = "; ".join(f"{k}={v}" for k, v in merged.items())
 
+                        profile_hint = None
+                        try:
+                            profile_hint = await query_browser_profile(cdp_port)
+                            if profile_hint:
+                                log(f"Extracted profile hint from browser: {profile_hint.get('name')} ({profile_hint.get('email')})")
+                        except Exception as pe:
+                            log(f"Profile hint extraction error: {pe}", "DEBUG")
+
                         # Verify auth using ytmusic_helper
                         try:
-                            res = ytmusic_helper.save_auth(full_cookie_str)
+                            res = ytmusic_helper.save_auth(full_cookie_str, profile_hint=profile_hint)
                             if res.get("success"):
-                                log(f"Authentication verified successfully! Account: {res.get('name', 'Google User')}")
+                                log(f"Authentication verified successfully! Account: {res.get('name', 'Google User')} ({res.get('email', '')})")
                                 await asyncio.sleep(0.5)
                                 return res
                             else:
