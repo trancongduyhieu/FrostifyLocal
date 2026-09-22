@@ -219,7 +219,8 @@ def register_qml_types():
         @QmlAttached(WlrLayershellAttached)
         class WlrLayershell(QObject):
             @staticmethod
-            def qmlAttachedProperties(parent):
+            def qmlAttachedProperties(*args, **kwargs):
+                parent = args[-1] if (args and isinstance(args[-1], QObject)) else None
                 return WlrLayershellAttached(parent)
         qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell")
     else:
