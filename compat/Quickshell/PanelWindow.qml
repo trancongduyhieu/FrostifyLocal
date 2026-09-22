@@ -12,10 +12,5 @@ Window {
     property var mask: null
     property var exclusionMode: null
 
-    property var anchors: QtObject {
-        property bool top: true
-        property bool bottom: true
-        property bool left: true
-        property bool right: true
-    }
+    property PanelAnchors anchors: PanelAnchors {}
 }

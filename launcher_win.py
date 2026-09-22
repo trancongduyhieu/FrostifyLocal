@@ -214,57 +214,6 @@ class WlrLayershellAttached(QObject):
     @namespace.setter
     def namespace(self, v): self._namespace = v
 
-class PanelAnchors(QObject):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._top = True
-        self._bottom = True
-        self._left = True
-        self._right = True
-    @Property(bool)
-    def top(self): return self._top
-    @top.setter
-    def top(self, v): self._top = v
-    @Property(bool)
-    def bottom(self): return self._bottom
-    @bottom.setter
-    def bottom(self, v): self._bottom = v
-    @Property(bool)
-    def left(self): return self._left
-    @left.setter
-    def left(self, v): self._left = v
-    @Property(bool)
-    def right(self): return self._right
-    @right.setter
-    def right(self, v): self._right = v
-
-class PanelWindow(QQuickWindow):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._anchors = PanelAnchors(self)
-        self._screen = None
-        self._mask = None
-        self._exclusionMode = 0
-        scr = QGuiApplication.primaryScreen()
-        if scr:
-            sz = scr.size()
-            self.setWidth(sz.width())
-            self.setHeight(sz.height())
-    @Property(PanelAnchors)
-    def anchors(self): return self._anchors
-    @Property(QObject)
-    def screen(self): return self._screen
-    @screen.setter
-    def screen(self, v): self._screen = v
-    @Property(QObject)
-    def mask(self): return self._mask
-    @mask.setter
-    def mask(self, v): self._mask = v
-    @Property(int)
-    def exclusionMode(self): return self._exclusionMode
-    @exclusionMode.setter
-    def exclusionMode(self, v): self._exclusionMode = v
-
 def register_qml_types():
     if IS_PYSIDE:
         @QmlAttached(WlrLayershellAttached)
@@ -277,9 +226,6 @@ def register_qml_types():
         class WlrLayershell(QObject):
             qmlAttachedProperties = WlrLayershellAttached
         qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell", attachedProperties=WlrLayershellAttached)
-
-    qmlRegisterType(PanelAnchors, "Quickshell", 1, 0, "PanelAnchors")
-    qmlRegisterType(PanelWindow, "Quickshell", 1, 0, "PanelWindow")
 
 def start_daemons():
     """Start resident backend daemons (auth_server HTTP daemon)."""
