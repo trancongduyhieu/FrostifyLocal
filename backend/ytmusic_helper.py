@@ -3121,171 +3121,174 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}
 
+def handle_cli(args):
+    """Entry point for thread-safe in-process execution without modifying sys.argv."""
+    execute_command(list(args))
+
 def main():
-        if len(sys.argv) < 2:
-            print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating> | song_related <id>]")
-            sys.exit(1)
+    execute_command(sys.argv[1:])
 
-        cmd = sys.argv[1].lower()
-        if cmd == "song_related" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            title = sys.argv[3] if len(sys.argv) > 3 else ""
-            artist = sys.argv[4] if len(sys.argv) > 4 else ""
-            res = get_song_related_content(vid, title, artist)
-            print(json.dumps(res, ensure_ascii=False))
+def execute_command(args):
+    if len(args) < 1:
+        print("Usage: ytmusic_helper.py [home | radio <id> | mood <params> | playlist <id> | search <q> | get_url <id> | auth_status | save_auth <text> | logout | track_playback <id> | song_details <id> | rate_song <id> <rating> | song_related <id>]")
+        return
 
-        elif cmd == "song_details" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            res = get_song_details(vid)
-            print(json.dumps(res, ensure_ascii=False))
+    cmd = args[0].lower()
+    if cmd == "song_related" and len(args) > 1:
+        vid = args[1]
+        title = args[2] if len(args) > 2 else ""
+        artist = args[3] if len(args) > 3 else ""
+        res = get_song_related_content(vid, title, artist)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "rate_song" and len(sys.argv) > 3:
-            vid = sys.argv[2]
-            rating = sys.argv[3]
-            res = rate_song_action(vid, rating)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "song_details" and len(args) > 1:
+        vid = args[1]
+        res = get_song_details(vid)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "disliked_list":
-            print(json.dumps(load_disliked_songs(), ensure_ascii=False))
+    elif cmd == "rate_song" and len(args) > 2:
+        vid = args[1]
+        rating = args[2]
+        res = rate_song_action(vid, rating)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "home":
-            res = get_personalized_home()
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "disliked_list":
+        print(json.dumps(load_disliked_songs(), ensure_ascii=False))
 
-        elif cmd == "radio" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            res = get_radio(vid)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "home":
+        res = get_personalized_home()
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "next_chips" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            res = get_watch_playlist_chips(vid)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "radio" and len(args) > 1:
+        vid = args[1]
+        res = get_radio(vid)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "filter_queue" and len(sys.argv) > 3:
-            vid = sys.argv[2]
-            pl_id = sys.argv[3]
-            params = sys.argv[4] if len(sys.argv) > 4 else None
-            res = get_filtered_radio_queue(vid, pl_id, params)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "next_chips" and len(args) > 1:
+        vid = args[1]
+        res = get_watch_playlist_chips(vid)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "mood" and len(sys.argv) > 2:
-            params = sys.argv[2]
-            title = sys.argv[3] if len(sys.argv) > 3 else ""
-            res = get_mood_feed(params, title)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "filter_queue" and len(args) > 2:
+        vid = args[1]
+        pl_id = args[2]
+        params = args[3] if len(args) > 3 else None
+        res = get_filtered_radio_queue(vid, pl_id, params)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "playlist" and len(sys.argv) > 2:
-            pl_id = sys.argv[2]
-            res = get_playlist_tracks(pl_id)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "mood" and len(args) > 1:
+        params = args[1]
+        title = args[2] if len(args) > 2 else ""
+        res = get_mood_feed(params, title)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "album" and len(sys.argv) > 2:
-            alb_id = sys.argv[2]
-            res = get_album_details(alb_id)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "playlist" and len(args) > 1:
+        pl_id = args[1]
+        res = get_playlist_tracks(pl_id)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "search_albums" and len(sys.argv) > 2:
-            q = sys.argv[2]
-            res = search_albums(q)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "album" and len(args) > 1:
+        alb_id = args[1]
+        res = get_album_details(alb_id)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "categorized_search":
-            q = sys.argv[2] if len(sys.argv) > 2 else "Trending"
-            res = search_categorized(q)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "search_albums" and len(args) > 1:
+        q = args[1]
+        res = search_albums(q)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "search":
-            q = sys.argv[2] if len(sys.argv) > 2 else "Trending"
-            res = search_ytmusic(q)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "categorized_search":
+        q = args[1] if len(args) > 1 else "Trending"
+        res = search_categorized(q)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "suggestions" and len(sys.argv) > 2:
-            q = sys.argv[2]
-            res = get_search_suggestions(q)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "search":
+        q = args[1] if len(args) > 1 else "Trending"
+        res = search_ytmusic(q)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "get_url":
-            vid = sys.argv[2] if len(sys.argv) > 2 else ""
-            res = resolve_stream_url(vid)
-            print(json.dumps(res or {}, ensure_ascii=False))
+    elif cmd == "suggestions" and len(args) > 1:
+        q = args[1]
+        res = get_search_suggestions(q)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "auth_status":
-            res = get_auth_status()
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "get_url":
+        vid = args[1] if len(args) > 1 else ""
+        res = resolve_stream_url(vid)
+        print(json.dumps(res or {}, ensure_ascii=False))
 
-        elif cmd == "save_auth" and len(sys.argv) > 2:
-            text = sys.argv[2]
-            res = save_auth(text)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "auth_status":
+        res = get_auth_status()
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "logout":
-            res = logout()
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "save_auth" and len(args) > 1:
+        text = args[1]
+        res = save_auth(text)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "track_playback" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            title = sys.argv[3] if len(sys.argv) > 3 else ""
-            artist = sys.argv[4] if len(sys.argv) > 4 else ""
-            pl_id = sys.argv[5] if len(sys.argv) > 5 else None
-            res = send_playback_tracking(vid, title, artist, pl_id)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "logout":
+        res = logout()
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "artist" and len(sys.argv) > 2:
-            art_id = sys.argv[2]
-            res = get_artist(art_id)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "track_playback" and len(args) > 1:
+        vid = args[1]
+        title = args[2] if len(args) > 2 else ""
+        artist = args[3] if len(args) > 3 else ""
+        pl_id = args[4] if len(args) > 4 else None
+        res = send_playback_tracking(vid, title, artist, pl_id)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "subscribe" and len(sys.argv) > 2:
-            channel_id = sys.argv[2]
-            sub = True
-            if len(sys.argv) > 3:
-                sub = str(sys.argv[3]).lower() in ("true", "1", "yes")
-            res = subscribe_artist_action(channel_id, sub)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "artist" and len(args) > 1:
+        art_id = args[1]
+        res = get_artist(art_id)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "cached_avatar" and len(sys.argv) > 2:
-            name = sys.argv[2]
-            url = get_cached_artist_avatar(name)
-            print(json.dumps({"artist": name, "avatar": url}, ensure_ascii=False))
+    elif cmd == "subscribe" and len(args) > 1:
+        channel_id = args[1]
+        sub = True
+        if len(args) > 2:
+            sub = str(args[2]).lower() in ("true", "1", "yes")
+        res = subscribe_artist_action(channel_id, sub)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "filter_search" and len(sys.argv) > 2:
-            q = sys.argv[2]
-            flt = sys.argv[3] if len(sys.argv) > 3 else "songs"
-            res = filter_search(q, flt)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "cached_avatar" and len(args) > 1:
+        name = args[1]
+        url = get_cached_artist_avatar(name)
+        print(json.dumps({"artist": name, "avatar": url}, ensure_ascii=False))
 
-        elif cmd == "artist_shuffle" and len(sys.argv) > 2:
-            name = sys.argv[2]
-            browse_id = sys.argv[3] if len(sys.argv) > 3 else None
-            res = get_artist_shuffle(name, browse_id)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "filter_search" and len(args) > 1:
+        q = args[1]
+        flt = args[2] if len(args) > 2 else "songs"
+        res = filter_search(q, flt)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "animated_artwork" and len(sys.argv) > 2:
-            title = sys.argv[2]
-            artist = sys.argv[3] if len(sys.argv) > 3 else ""
-            dur = float(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 0.0
-            album_hint = sys.argv[5] if len(sys.argv) > 5 else ""
-            res = get_apple_music_animated_artwork(title, artist, dur, album_hint)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "artist_shuffle" and len(args) > 1:
+        name = args[1]
+        browse_id = args[2] if len(args) > 2 else None
+        res = get_artist_shuffle(name, browse_id)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "resolve_stream" and len(sys.argv) > 2:
-            vid = sys.argv[2]
-            qual = sys.argv[3] if len(sys.argv) > 3 else None
-            res = resolve_stream_url(vid, qual)
-            print(json.dumps(res, ensure_ascii=False) if res else "{}")
+    elif cmd == "animated_artwork" and len(args) > 1:
+        title = args[1]
+        artist = args[2] if len(args) > 2 else ""
+        dur = float(args[3]) if len(args) > 3 and args[3] else 0.0
+        album_hint = args[4] if len(args) > 4 else ""
+        res = get_apple_music_animated_artwork(title, artist, dur, album_hint)
+        print(json.dumps(res, ensure_ascii=False))
 
-        elif cmd == "resolve_cover" and len(sys.argv) > 2:
-            title = sys.argv[2]
-            artist = sys.argv[3] if len(sys.argv) > 3 else ""
-            vid = sys.argv[4] if len(sys.argv) > 4 else None
-            curr = sys.argv[5] if len(sys.argv) > 5 else None
-            res = resolve_square_cover(title, artist, vid, curr)
-            print(json.dumps(res, ensure_ascii=False))
+    elif cmd == "resolve_stream" and len(args) > 1:
+        vid = args[1]
+        qual = args[2] if len(args) > 2 else None
+        res = resolve_stream_url(vid, qual)
+        print(json.dumps(res, ensure_ascii=False) if res else "{}")
 
-
-
-
+    elif cmd == "resolve_cover" and len(args) > 1:
+        title = args[1]
+        artist = args[2] if len(args) > 2 else ""
+        vid = args[3] if len(args) > 3 else None
+        curr = args[4] if len(args) > 4 else None
+        res = resolve_square_cover(title, artist, vid, curr)
+        print(json.dumps(res, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

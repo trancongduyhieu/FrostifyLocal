@@ -273,6 +273,19 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
     # -------------------------------------------------------------------------
     return db_lyrics or get_lyrics_from_local_db(title, artist, video_id)
 
+def handle_cli(args):
+    """Entry point for thread-safe in-process execution without modifying sys.argv."""
+    if len(args) < 1:
+        print("[]")
+        return
+    title_arg = args[0] if len(args) > 0 else ""
+    artist_arg = args[1] if len(args) > 1 and args[1].strip() != "" else None
+    vid_arg = args[2] if len(args) > 2 and args[2].strip() != "" else None
+    path_arg = args[3] if len(args) > 3 and args[3].strip() != "" else None
+
+    res = get_lyrics(title_arg, artist_arg, vid_arg, path_arg)
+    print(json.dumps(res, ensure_ascii=False))
+
 def main():
     if len(sys.argv) < 2:
         print("[]")

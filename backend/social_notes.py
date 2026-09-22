@@ -471,46 +471,53 @@ def set_offline(worker_url: Optional[str] = None) -> Dict[str, Any]:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: social_notes.py [get | post <text> [track_json] | now_playing [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events | offline]")
-        sys.exit(1)
+def handle_cli(args):
+    """Entry point for thread-safe in-process execution without modifying sys.argv."""
+    execute_command(list(args))
 
-    cmd = sys.argv[1].lower()
+def main():
+    execute_command(sys.argv[1:])
+
+def execute_command(args):
+    if len(args) < 1:
+        print("Usage: social_notes.py [get | post <text> [track_json] | now_playing [track_json] | add_friend <email> | list_friends | send_event <type> <to_email> | get_events | offline]")
+        return
+
+    cmd = args[0].lower()
     if cmd == "get":
         notes_data = fetch_notes()
         print(json.dumps(notes_data, ensure_ascii=False))
     elif cmd == "post":
-        text = sys.argv[2] if len(sys.argv) > 2 else "Chilling with Nutsty"
+        text = args[1] if len(args) > 1 else "Chilling with Nutsty"
         track = None
-        if len(sys.argv) > 3:
+        if len(args) > 2:
             try:
-                track = json.loads(sys.argv[3])
+                track = json.loads(args[2])
             except Exception:
                 pass
         res = publish_note(text, track)
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "now_playing":
         data = None
-        if len(sys.argv) > 2 and sys.argv[2].strip():
+        if len(args) > 1 and args[1].strip():
             try:
-                data = json.loads(sys.argv[2])
+                data = json.loads(args[1])
             except Exception:
-                data = {"title": sys.argv[2], "is_playing": True}
+                data = {"title": args[1], "is_playing": True}
         res = update_now_playing(data)
         print(json.dumps(res, ensure_ascii=False))
     elif cmd in ("offline", "leave"):
         res = set_offline()
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "add_friend":
-        if len(sys.argv) > 2:
-            ok = add_friend(sys.argv[2])
+        if len(args) > 1:
+            ok = add_friend(args[1])
             print(json.dumps({"success": ok, "friends": load_friends()}, ensure_ascii=False))
     elif cmd == "list_friends":
         print(json.dumps(load_friends(), ensure_ascii=False))
     elif cmd == "send_event":
-        ev_type = sys.argv[2] if len(sys.argv) > 2 else "leave"
-        to_email = sys.argv[3] if len(sys.argv) > 3 else ""
+        ev_type = args[1] if len(args) > 1 else "leave"
+        to_email = args[2] if len(args) > 2 else ""
         res = send_social_event(ev_type, to_email)
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "delete":
@@ -521,7 +528,6 @@ def main():
         print(json.dumps(events, ensure_ascii=False))
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
-        sys.exit(1)
 
 if __name__ == "__main__":
     main()

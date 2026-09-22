@@ -1558,7 +1558,7 @@ Scope {
             }
         }
 
-        if (startRadio && rVid) {
+        if ((startRadio || !win.currentTracks || win.currentTracks.length <= 1) && rVid) {
             radioProc.running = false;
             radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", rVid];
             radioProc.running = true;
@@ -4411,7 +4411,7 @@ Scope {
                             win.isPlaying = false;
                             return;
                         }
-                        var hasStarted = !s.is_loading && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0));
+                        var hasStarted = (!s.is_loading || (s.time_pos && s.time_pos > 0.5) || s.is_playing) && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0));
                         if (!hasStarted) {
                             win.currentTime = 0.0;
                             return;

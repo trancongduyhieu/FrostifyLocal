@@ -102,6 +102,8 @@ sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
 
 import platform_compat as pc
 
+sys_argv_lock = threading.Lock()
+
 BACKEND_MAP = {
     "player_daemon.py": "player_daemon",
     "auth_server.py": "auth_server",
@@ -254,20 +256,22 @@ class NutstyBridge(QObject):
                     if hasattr(mod, "handle_cli"):
                         mod.handle_cli(script_args)
                     elif hasattr(mod, "main"):
-                        old_argv = sys.argv
-                        sys.argv = [target_script] + script_args
-                        try:
-                            mod.main()
-                        finally:
-                            sys.argv = old_argv
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                mod.main()
+                            finally:
+                                sys.argv = old_argv
                     else:
                         import runpy
-                        old_argv = sys.argv
-                        sys.argv = [target_script] + script_args
-                        try:
-                            runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
-                        finally:
-                            sys.argv = old_argv
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                            finally:
+                                sys.argv = old_argv
                 except SystemExit:
                     pass
                 except Exception as e:
@@ -335,8 +339,6 @@ class NutstyBridge(QObject):
                 if hasattr(sys.stderr, "set_stream"):
                     sys.stderr.set_stream(err_buf)
 
-                old_argv = sys.argv
-                sys.argv = [target_script] + script_args
                 try:
                     if mod_name in sys.modules:
                         mod = sys.modules[mod_name]
@@ -346,17 +348,28 @@ class NutstyBridge(QObject):
                     if hasattr(mod, "handle_cli"):
                         mod.handle_cli(script_args)
                     elif hasattr(mod, "main"):
-                        mod.main()
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                mod.main()
+                            finally:
+                                sys.argv = old_argv
                     else:
                         import runpy
-                        runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                            finally:
+                                sys.argv = old_argv
                 except SystemExit as se:
                     code = se.code if isinstance(se.code, int) else 0
                 except Exception as e:
                     err_buf.write(str(e))
                     code = 1
                 finally:
-                    sys.argv = old_argv
                     if hasattr(sys.stdout, "clear_stream"):
                         sys.stdout.clear_stream()
                     if hasattr(sys.stderr, "clear_stream"):

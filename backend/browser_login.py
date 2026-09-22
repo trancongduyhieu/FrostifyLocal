@@ -123,11 +123,11 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                 msg_id += 1
                 cmd = {
                     "id": msg_id,
-                    "method": "Storage.getCookies"
+                    "method": "Network.getAllCookies"
                 }
                 await ws.send(json.dumps(cmd))
                 
-                # Drain WebSocket frames until we get cookies from Storage.getCookies
+                # Drain WebSocket frames until we get cookies from Network.getAllCookies or Storage.getCookies
                 cookies = []
                 drain_start = time.time()
                 while time.time() - drain_start < 2.0:
@@ -164,11 +164,14 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                             ]
                                         }
                                     }))
-                                    p_resp = await asyncio.wait_for(p_sock.recv(), timeout=1.0)
-                                    p_parsed = json.loads(p_resp)
-                                    p_cks = p_parsed.get("result", {}).get("cookies", [])
-                                    if p_cks:
-                                        cookies.extend(p_cks)
+                                    for _ in range(8):
+                                        p_resp = await asyncio.wait_for(p_sock.recv(), timeout=1.0)
+                                        p_parsed = json.loads(p_resp)
+                                        if p_parsed.get("id") == 777:
+                                            p_cks = p_parsed.get("result", {}).get("cookies", [])
+                                            if p_cks:
+                                                cookies.extend(p_cks)
+                                            break
                             except Exception:
                                 pass
                             break
@@ -285,6 +288,11 @@ def start_login():
         "--no-default-browser-check",
         "--window-size=680,780"
     ]
+
+    ext_dir = os.path.join(BACKEND_DIR, "extension")
+    if os.path.exists(ext_dir) and os.path.exists(os.path.join(ext_dir, "manifest.json")):
+        cmd.append(f"--load-extension={ext_dir}")
+        cmd.append(f"--disable-extensions-except={ext_dir}")
 
     kwargs = {}
     if sys.platform == "win32" or os.name == "nt":

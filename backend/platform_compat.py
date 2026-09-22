@@ -11,6 +11,7 @@ import tempfile
 import socket
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -80,7 +81,8 @@ if IS_WINDOWS:
     class WindowsNamedPipeClient:
         def __init__(self, pipe_name: str, timeout: float = 2.0):
             self.pipe_name = pipe_name
-            timeout_ms = int(timeout * 1000)
+            self.timeout = float(timeout)
+            timeout_ms = int(self.timeout * 1000)
             kernel32.WaitNamedPipeW(pipe_name, max(100, timeout_ms))
             self.handle = kernel32.CreateFileW(
                 pipe_name,
@@ -95,6 +97,9 @@ if IS_WINDOWS:
                 err = ctypes.GetLastError()
                 raise OSError(f"Failed to open named pipe {pipe_name}, win32 error: {err}")
 
+        def settimeout(self, timeout: float):
+            self.timeout = max(0.1, float(timeout))
+
         def sendall(self, data: bytes):
             bytes_written = ctypes.c_ulong()
             res = kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(bytes_written), None)
@@ -103,15 +108,36 @@ if IS_WINDOWS:
                 raise OSError(f"WriteFile to named pipe failed, error: {err}")
 
         def recv(self, bufsize: int = 4096) -> bytes:
+            if self.handle == INVALID_HANDLE_VALUE:
+                return b""
+
             buf = ctypes.create_string_buffer(bufsize)
             bytes_read = ctypes.c_ulong()
-            res = kernel32.ReadFile(self.handle, buf, bufsize, ctypes.byref(bytes_read), None)
-            if not res:
-                err = ctypes.GetLastError()
-                if err == 109:  # ERROR_BROKEN_PIPE
-                    return b""
-                raise OSError(f"ReadFile from named pipe failed, error: {err}")
-            return buf.raw[:bytes_read.value]
+            avail = ctypes.c_ulong()
+
+            deadline = time.time() + self.timeout
+            while time.time() < deadline:
+                res_peek = kernel32.PeekNamedPipe(self.handle, None, 0, None, ctypes.byref(avail), None)
+                if not res_peek:
+                    err = ctypes.GetLastError()
+                    if err in (109, 233):  # ERROR_BROKEN_PIPE or ERROR_PIPE_NOT_CONNECTED
+                        return b""
+                    raise OSError(f"PeekNamedPipe failed, error: {err}")
+
+                if avail.value > 0:
+                    to_read = min(bufsize, avail.value)
+                    res = kernel32.ReadFile(self.handle, buf, to_read, ctypes.byref(bytes_read), None)
+                    if not res:
+                        err = ctypes.GetLastError()
+                        if err in (109, 233):
+                            return b""
+                        raise OSError(f"ReadFile from named pipe failed, error: {err}")
+                    return buf.raw[:bytes_read.value]
+
+                time.sleep(0.015)
+
+            # Timeout elapsed without incoming data: return empty bytes gracefully
+            return b""
 
         def close(self):
             if self.handle != INVALID_HANDLE_VALUE:

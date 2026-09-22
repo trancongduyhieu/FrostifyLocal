@@ -146,17 +146,23 @@ def send_mpv_cmd(command_args):
 def get_mpv_properties_batch(props):
     """Retrieve multiple MPV properties in a single socket connection (0.3ms batch query)"""
     ensure_mpv()
+    s = None
     try:
-        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=2.0)
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
         payload = "".join(json.dumps({"command": ["get_property", p], "request_id": i}) + "\n" for i, p in enumerate(props))
         s.sendall(payload.encode("utf-8"))
         buf = ""
         results = {}
-        while len(results) < len(props):
-            data = s.recv(4096).decode("utf-8")
+        deadline = time.time() + 0.8
+        while len(results) < len(props) and time.time() < deadline:
+            data = s.recv(4096)
             if not data:
                 break
-            buf += data
+            try:
+                chunk = data.decode("utf-8", errors="ignore")
+            except Exception:
+                chunk = ""
+            buf += chunk
             while "\n" in buf:
                 line, buf = buf.split("\n", 1)
                 if line.strip():
@@ -167,10 +173,15 @@ def get_mpv_properties_batch(props):
                             results[props[idx]] = obj.get("data")
                     except Exception:
                         pass
-        s.close()
         return results
     except Exception:
         return {}
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
 
 def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
@@ -319,13 +330,15 @@ def get_status_dict():
     vol = batch.get("volume") if batch.get("volume") is not None else 100
     idle = batch.get("idle-active")
 
+    is_stream_playback = ("googlevideo" in path) or (filename == "videoplayback")
     is_target_active = True
     if target_vid:
-        is_target_active = (target_vid in path) or (target_vid in filename)
+        is_target_active = (target_vid in path) or (target_vid in filename) or is_stream_playback
     elif target_path:
-        is_target_active = (path == target_path) or (filename and target_path.endswith(filename))
+        is_target_active = (path == target_path) or (filename and target_path.endswith(filename)) or is_stream_playback
 
-    if is_loading and is_target_active and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
+    has_audio_flowing = (time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)
+    if is_loading and (is_target_active or (time_pos is not None and time_pos > 0.5)) and has_audio_flowing:
         is_loading = False
         try:
             with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
@@ -349,26 +362,24 @@ def get_status_json():
     return json.dumps(get_status_dict())
 
 def handle_cli(args):
-    """Entry point for in-process execution without spawning a new Python subprocess."""
-    old_argv = sys.argv
-    sys.argv = ["player_daemon.py"] + list(args)
-    try:
-        main()
-    finally:
-        sys.argv = old_argv
+    """Entry point for thread-safe in-process execution without modifying sys.argv."""
+    execute_command(list(args))
 
 def main():
-    if len(sys.argv) < 2:
+    execute_command(sys.argv[1:])
+
+def execute_command(args):
+    if len(args) < 1:
         print("Usage: player_daemon.py [play <path> [title] [artist] [art_url] | pause | resume | toggle | seek <sec> | stop | status]")
-        sys.exit(1)
+        return
 
-    action = sys.argv[1].lower()
+    action = args[0].lower()
 
-    if action == "play" and len(sys.argv) > 2:
-        file_path = sys.argv[2]
-        title_arg = sys.argv[3] if len(sys.argv) > 3 else ""
-        artist_arg = sys.argv[4] if len(sys.argv) > 4 else ""
-        art_arg = sys.argv[5] if len(sys.argv) > 5 else ""
+    if action == "play" and len(args) > 1:
+        file_path = args[1]
+        title_arg = args[2] if len(args) > 2 else ""
+        artist_arg = args[3] if len(args) > 3 else ""
+        art_arg = args[4] if len(args) > 4 else ""
 
         is_online = file_path.startswith("ytdl://") or "youtube.com" in file_path or "youtu.be" in file_path
         initial_state = "loading" if is_online else "playing"
@@ -410,14 +421,14 @@ def main():
         send_mpv_cmd(["playlist-prev"])
         print("Previous track")
 
-    elif action == "set_playlist" and len(sys.argv) > 2:
-        idx = int(sys.argv[2])
+    elif action == "set_playlist" and len(args) > 1:
+        idx = int(args[1])
         m3u_file = PLAYLIST_FILE
         tracks = []
         meta = None
-        if len(sys.argv) > 3:
+        if len(args) > 2:
             try:
-                tracks = json.loads(sys.argv[3])
+                tracks = json.loads(args[2])
                 if len(tracks) > idx:
                     meta = update_current_track_metadata(tracks[idx])
             except Exception as e:
@@ -454,7 +465,7 @@ def main():
         ensure_mpv()
         path = get_mpv_property("path")
         idle = get_mpv_property("idle-active")
-        target_file = sys.argv[2] if len(sys.argv) > 2 else ""
+        target_file = args[1] if len(args) > 1 else ""
 
         # Check if daemon is already loading a track to prevent duplicate loading loops
         is_already_loading = False
@@ -469,7 +480,7 @@ def main():
 
         if is_already_loading:
             print("Track is currently loading, skipping duplicate toggle")
-            sys.exit(0)
+            return
 
         if not path or idle:
             if target_file:
@@ -507,7 +518,7 @@ def main():
 
     elif action == "resume":
         ensure_mpv()
-        target_file = sys.argv[2] if len(sys.argv) > 2 else ""
+        target_file = args[1] if len(args) > 1 else ""
         idle = get_mpv_property("idle-active")
         path = get_mpv_property("path")
 
@@ -539,16 +550,16 @@ def main():
     elif action == "stop":
         send_mpv_cmd(["stop"])
 
-    elif action == "seek" and len(sys.argv) > 2:
-        sec = float(sys.argv[2])
+    elif action == "seek" and len(args) > 1:
+        sec = float(args[1])
         send_mpv_cmd(["seek", sec, "absolute"])
 
-    elif action == "volume" and len(sys.argv) > 2:
-        vol = float(sys.argv[2])
+    elif action == "volume" and len(args) > 1:
+        vol = float(args[1])
         send_mpv_cmd(["set_property", "volume", vol])
 
     elif action == "fade_out_and_pause":
-        dur = float(sys.argv[2]) if len(sys.argv) > 2 else 5.0
+        dur = float(args[1]) if len(args) > 1 else 5.0
         fade_out_and_pause(dur)
 
     elif action == "cancel_fade":
@@ -558,8 +569,8 @@ def main():
         except Exception:
             pass
 
-    elif action == "prewarm" and len(sys.argv) > 2:
-        vid = sys.argv[2]
+    elif action == "prewarm" and len(args) > 1:
+        vid = args[1]
         if vid:
             ytmusic_helper.resolve_stream_url(vid)
 
@@ -591,9 +602,9 @@ def main():
             "sample_rate_str": samplerate_str,
             "channels": channel_str
         }
-    elif action == "set_streaming_quality" and len(sys.argv) > 2:
+    elif action == "set_streaming_quality" and len(args) > 1:
         ensure_mpv()
-        qual = sys.argv[2]
+        qual = args[1]
         ytdl_fmt = YTDL_FORMAT_MAP.get(qual, "774/141/251/140/bestaudio/best")
         send_mpv_cmd(["set_property", "ytdl-format", ytdl_fmt])
         print(json.dumps({"success": True, "quality": qual, "ytdl_format": ytdl_fmt}))
