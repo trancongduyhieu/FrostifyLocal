@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Nutsty - Native Google / YouTube Music Login Assistant
-Launches an isolated browser app window for official Google login
+Launches an isolated browser window for official Google login
 and automatically captures auth cookies via Chrome DevTools Protocol (CDP).
 Zero extension required, zero manual copy-pasting.
+Includes deep forensic logging for instant diagnosis.
 """
 import os
 import sys
@@ -11,6 +12,8 @@ import json
 import time
 import shutil
 import asyncio
+import datetime
+import traceback
 import subprocess
 import urllib.request
 import urllib.error
@@ -38,18 +41,45 @@ LOGIN_URL = (
     "continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fmusic.youtube.com%252F%26feature%3D__FEATURE__&hl=en"
 )
 
+# Forensic Logger Targets
+LOG_FILE_PRIMARY = os.path.join(pc.get_config_dir(), "browser_login.log")
+LOG_FILE_TEMP = os.path.join(pc.get_temp_dir(), "browser_login.log")
+
+def log(msg, level="INFO"):
+    """Thread-safe forensic logger with millisecond timestamps and dual-path sync."""
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    entry = f"[{now_str}] [{level}] {msg}"
+    
+    # Print to stderr for immediate console / IPC inspection
+    try:
+        sys.stderr.write(f"[BrowserLogin] {entry}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+    # Persist to disk
+    for path in (LOG_FILE_PRIMARY, LOG_FILE_TEMP):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a", encoding="utf-8", errors="replace") as f:
+                f.write(entry + "\n")
+        except Exception:
+            pass
+
 def find_system_browser():
-    # 1. On Windows: Check standard paths for Edge, Chrome, Brave
+    log("Scanning system for Chromium-based browsers...")
+    # 1. On Windows: Check standard paths for Edge, Chrome, Brave, Opera, Vivaldi
     if sys.platform == "win32" or os.name == "nt":
         win_candidates = []
         p_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
         p_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         local_appdata = os.environ.get("LOCALAPPDATA", "")
 
-        # Microsoft Edge (Pre-installed on every Windows 10/11)
+        # Microsoft Edge (Standard & Per-User installs)
         win_candidates.extend([
             os.path.join(p_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
             os.path.join(p_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(local_appdata, "Microsoft", "Edge", "Application", "msedge.exe") if local_appdata else "",
             shutil.which("msedge") or "",
         ])
         # Google Chrome
@@ -62,14 +92,24 @@ def find_system_browser():
         # Brave
         win_candidates.extend([
             os.path.join(p_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(p_files_x86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
             os.path.join(local_appdata, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") if local_appdata else "",
             shutil.which("brave") or "",
         ])
+        # Vivaldi & Opera GX
+        if local_appdata:
+            win_candidates.extend([
+                os.path.join(local_appdata, "Vivaldi", "Application", "vivaldi.exe"),
+                os.path.join(local_appdata, "Programs", "Opera GX", "opera.exe"),
+                os.path.join(local_appdata, "Programs", "Opera", "opera.exe"),
+            ])
+
         for p in win_candidates:
             if p and os.path.exists(p) and os.path.isfile(p):
+                log(f"Found Windows browser executable: {p}")
                 return p
 
-    # 2. On Linux: Check typical desktop Chromium paths
+    # 2. On Linux: Check typical desktop Chromium binaries
     candidates = [
         "brave",
         "brave-browser",
@@ -81,27 +121,34 @@ def find_system_browser():
         "chromium-browser",
         "/usr/bin/chromium",
         "microsoft-edge",
+        "microsoft-edge-stable",
         "msedge",
         "vivaldi"
     ]
     for c in candidates:
         bin_path = shutil.which(c)
         if bin_path and os.path.isfile(bin_path):
+            log(f"Found Linux browser executable via PATH: {bin_path}")
             return bin_path
         if os.path.isfile(c):
+            log(f"Found Linux browser executable directly: {c}")
             return c
+
+    log("No compatible Chromium-based browser found on this system.", "ERROR")
     return None
 
 def kill_browser_proc(proc):
     if not proc:
         return
+    log(f"Terminating browser process (PID {proc.pid})...")
     try:
         if sys.platform == "win32" or os.name == "nt":
             CREATE_NO_WINDOW = 0x08000000
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=3, creationflags=CREATE_NO_WINDOW)
         else:
             os.killpg(os.getpgid(proc.pid), 15)
-    except Exception:
+    except Exception as e:
+        log(f"Taskkill error (fallback to proc.kill): {e}", "WARN")
         try:
             proc.kill()
         except Exception:
@@ -110,46 +157,73 @@ def kill_browser_proc(proc):
 async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     import websockets
 
+    # Guarantee IPv4 loopback to avoid Windows IPv6 [WinError 10061]
+    ws_url = ws_url.replace("localhost", "127.0.0.1")
+    log(f"Initiating CDP connection to Browser Target: {ws_url}")
+
     start_time = time.time()
     google_signed_in_time = None
+    last_cookie_summary_time = 0
     msg_id = 1
 
     try:
         async with websockets.connect(ws_url, ping_interval=None) as ws:
+            log("WebSocket connection to Browser Target established successfully.")
             while time.time() - start_time < max_timeout:
                 if proc.poll() is not None:
+                    log("Browser window was closed by user.", "WARN")
                     return {"success": False, "error": "Login window was closed by user."}
 
-                msg_id += 1
-                cmd = {
-                    "id": msg_id,
-                    "method": "Network.getAllCookies"
-                }
-                await ws.send(json.dumps(cmd))
-                
-                # Drain WebSocket frames until we get cookies from Network.getAllCookies or Storage.getCookies
                 cookies = []
+                msg_id += 1
+
+                # 1. Primary Query: Storage.getCookies on Browser Target (CDP standard for Chrome 120+, Edge, Brave)
+                storage_cmd = {
+                    "id": msg_id,
+                    "method": "Storage.getCookies"
+                }
+                await ws.send(json.dumps(storage_cmd))
+
+                # Drain response
                 drain_start = time.time()
-                while time.time() - drain_start < 2.0:
+                while time.time() - drain_start < 1.5:
                     try:
-                        resp_text = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                        resp_text = await asyncio.wait_for(ws.recv(), timeout=0.8)
                         parsed = json.loads(resp_text)
+                        
+                        # Handle potential error code
+                        if "error" in parsed:
+                            err_code = parsed["error"].get("code")
+                            err_msg = parsed["error"].get("message")
+                            log(f"CDP Browser Target returned error: code={err_code}, msg='{err_msg}'", "WARN")
+                            
+                            # Fallback if Storage.getCookies is not supported: try Network.getAllCookies
+                            if err_code == -32601 and parsed.get("id") == msg_id:
+                                msg_id += 1
+                                await ws.send(json.dumps({"id": msg_id, "method": "Network.getAllCookies"}))
+                                continue
+
                         if "cookies" in parsed.get("result", {}):
                             cookies.extend(parsed["result"]["cookies"])
                             break
                     except asyncio.TimeoutError:
                         break
-                    except Exception:
+                    except Exception as e:
+                        log(f"Error draining Browser Target WebSocket: {e}", "DEBUG")
                         break
 
-                # Dual-layer fallback: also query active page target via Network.getCookies
+                # 2. Dual-Layer Fallback: Query all active page targets in /json/list (NO early break!)
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
                         pages = json.loads(r.read().decode("utf-8"))
+
                     for p in pages:
                         p_ws = p.get("webSocketDebuggerUrl")
                         p_url = p.get("url", "")
-                        if p_ws and p.get("type") == "page":
+                        p_type = p.get("type")
+
+                        if p_ws and p_type == "page":
+                            p_ws = p_ws.replace("localhost", "127.0.0.1")
                             try:
                                 async with websockets.connect(p_ws, ping_interval=None) as p_sock:
                                     await p_sock.send(json.dumps({
@@ -164,26 +238,27 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                             ]
                                         }
                                     }))
-                                    for _ in range(8):
-                                        p_resp = await asyncio.wait_for(p_sock.recv(), timeout=1.0)
+                                    for _ in range(6):
+                                        p_resp = await asyncio.wait_for(p_sock.recv(), timeout=0.6)
                                         p_parsed = json.loads(p_resp)
                                         if p_parsed.get("id") == 777:
                                             p_cks = p_parsed.get("result", {}).get("cookies", [])
                                             if p_cks:
                                                 cookies.extend(p_cks)
                                             break
-                            except Exception:
-                                pass
-                            break
-                except Exception:
-                    pass
+                            except Exception as pe:
+                                log(f"Page query error for target [{p_url}]: {pe}", "DEBUG")
+                            # CRITICAL FIX: DO NOT BREAK HERE! Continue scanning remaining tabs/redirects
+                except Exception as le:
+                    log(f"Error reading /json/list: {le}", "DEBUG")
 
+                # 3. Analyze accumulated cookies
                 if cookies:
                     yt_cookies = {}
                     google_cookies = {}
                     has_login_info = False
                     has_sapisid = False
-                    
+
                     for c in cookies:
                         name = c.get("name", "")
                         val = c.get("value", "")
@@ -201,15 +276,30 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                             yt_cookies[name] = val
                         elif "google" in domain:
                             google_cookies[name] = val
-                    
-                    has_session = has_login_info or any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in yt_cookies) or any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in google_cookies)
 
-                    # Note when Google Accounts credentials have been accepted
+                    has_session = (
+                        has_login_info or 
+                        any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in yt_cookies) or 
+                        any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in google_cookies)
+                    )
+
+                    # Periodic diagnostic log (every 3 seconds)
+                    if time.time() - last_cookie_summary_time > 3.0:
+                        last_cookie_summary_time = time.time()
+                        log(
+                            f"Cookie scan summary: total={len(cookies)}, "
+                            f"yt_cookies={len(yt_cookies)}, google_cookies={len(google_cookies)}, "
+                            f"has_sapisid={has_sapisid}, has_login_info={has_login_info}, has_session={has_session}"
+                        )
+
+                    # Note when Google Accounts credentials have arrived
                     if has_sapisid and not google_signed_in_time:
                         google_signed_in_time = time.time()
+                        log("Google authentication detected (SAPISID found). Awaiting YouTube Music redirect...")
 
-                    # If user authenticated with Google but hasn't reached music.youtube.com after 5s
-                    if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 5.0):
+                    # Auto-navigate to music.youtube.com if stuck on Google Accounts page > 4.0s
+                    if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 4.0):
+                        log("User signed into Google but not yet at music.youtube.com. Triggering auto-navigation...", "INFO")
                         try:
                             with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
                                 pages = json.loads(r.read().decode("utf-8"))
@@ -218,19 +308,21 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                 if p.get("type") == "page" and "music.youtube.com" not in p_url:
                                     p_ws = p.get("webSocketDebuggerUrl")
                                     if p_ws:
+                                        p_ws = p_ws.replace("localhost", "127.0.0.1")
                                         async with websockets.connect(p_ws, ping_interval=None) as page_ws:
                                             await page_ws.send(json.dumps({
                                                 "id": 999,
                                                 "method": "Page.navigate",
                                                 "params": {"url": "https://music.youtube.com/"}
                                             }))
+                                            log("Dispatched Page.navigate to https://music.youtube.com/")
                                             break
                         except Exception as ne:
-                            sys.stderr.write(f"[Page nav helper]: {ne}\n")
+                            log(f"Page navigation helper error: {ne}", "WARN")
 
                     # Crucial condition: must have both auth (SAPISID) and a session credential
                     if has_sapisid and (has_login_info or has_session):
-                        # Merge cookies: YouTube cookies take priority
+                        log("Candidate credentials complete! Merging and verifying...")
                         merged = dict(google_cookies)
                         merged.update(yt_cookies)
 
@@ -246,25 +338,38 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         try:
                             res = ytmusic_helper.save_auth(full_cookie_str)
                             if res.get("success"):
+                                log(f"Authentication verified successfully! Account: {res.get('name', 'Google User')}")
                                 await asyncio.sleep(0.5)
                                 return res
                             else:
-                                sys.stderr.write(f"[Auth verification pending]: {res.get('error')}\n")
+                                log(f"save_auth pending/failed: {res.get('error')}", "WARN")
                         except Exception as se:
-                            sys.stderr.write(f"[save_auth exception]: {se}\n")
+                            log(f"save_auth exception: {se}\n{traceback.format_exc()}", "ERROR")
 
                 await asyncio.sleep(1.0)
     except websockets.exceptions.ConnectionClosed:
+        log("CDP WebSocket connection was closed prematurely.", "WARN")
         return {"success": False, "error": "Login window was closed."}
     except Exception as e:
+        log(f"CDP capture error: {e}\n{traceback.format_exc()}", "ERROR")
         return {"success": False, "error": str(e)}
 
+    log("Login timed out after 5 minutes.", "WARN")
     return {"success": False, "error": "Login timed out after 5 minutes."}
 
 def start_login():
+    log("=" * 60)
+    log("Nutsty Browser Login Session Started")
+    log(f"Platform: {sys.platform} ({os.name}), Python: {sys.version.split()[0]}")
+    log(f"Profile: '{PROFILE_NAME}', CDP Port: {CDP_PORT}")
+    log(f"Profile Dir: {PROFILE_DIR}")
+    log(f"Logs: {LOG_FILE_PRIMARY}")
+    log("=" * 60)
+
     browser_bin = find_system_browser()
     if not browser_bin:
-        err = {"success": False, "error": "No Chromium-based browser (Brave, Chrome, Chromium) found."}
+        err = {"success": False, "error": "No Chromium-based browser (Edge, Chrome, Brave) found."}
+        log(f"Aborting: {err['error']}", "ERROR")
         print(json.dumps(err, ensure_ascii=False))
         return err
 
@@ -276,23 +381,26 @@ def start_login():
         if os.path.islink(lock_path) or os.path.exists(lock_path):
             try:
                 os.remove(lock_path)
-            except Exception:
-                pass
+                log(f"Removed stale lock: {lock_name}")
+            except Exception as le:
+                log(f"Could not remove lock {lock_name}: {le}", "DEBUG")
 
+    # Command line: Standard isolated window with explicit IPv4 debugging port and background-mode disabled
     cmd = [
         browser_bin,
-        f"--app={LOGIN_URL}",
+        "--new-window",
+        LOGIN_URL,
         f"--remote-debugging-port={CDP_PORT}",
+        "--remote-debugging-address=127.0.0.1",
         f"--user-data-dir={PROFILE_DIR}",
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-mode",
+        "--disable-features=Translate,OptimizationHints,MediaRouter",
         "--window-size=680,780"
     ]
 
-    ext_dir = os.path.join(BACKEND_DIR, "extension")
-    if os.path.exists(ext_dir) and os.path.exists(os.path.join(ext_dir, "manifest.json")):
-        cmd.append(f"--load-extension={ext_dir}")
-        cmd.append(f"--disable-extensions-except={ext_dir}")
+    log(f"Launching browser command: {' '.join(cmd)}")
 
     kwargs = {}
     if sys.platform == "win32" or os.name == "nt":
@@ -300,18 +408,26 @@ def start_login():
     else:
         kwargs["preexec_fn"] = os.setsid
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        **kwargs
-    )
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **kwargs
+        )
+        log(f"Browser spawned with PID: {proc.pid}")
+    except Exception as e:
+        err = {"success": False, "error": f"Failed to spawn browser process: {e}"}
+        log(f"Spawn error: {e}\n{traceback.format_exc()}", "ERROR")
+        print(json.dumps(err, ensure_ascii=False))
+        return err
 
     ws_url = None
-    for _ in range(40):
+    log(f"Polling CDP endpoint at http://127.0.0.1:{CDP_PORT}/json/version...")
+    for attempt in range(40):
         time.sleep(0.5)
         if proc.poll() is not None:
-            # User closed window before CDP connection
+            log(f"Browser process exited prematurely with code {proc.poll()}.", "WARN")
             err = {"success": False, "error": "Login window was closed."}
             print(json.dumps(err, ensure_ascii=False))
             return err
@@ -321,13 +437,19 @@ def start_login():
                 ver_info = json.loads(r.read().decode("utf-8"))
                 ws_url = ver_info.get("webSocketDebuggerUrl")
                 if ws_url:
+                    # Enforce IPv4 loopback
+                    ws_url = ws_url.replace("localhost", "127.0.0.1")
+                    log(f"CDP endpoint ready at attempt #{attempt + 1}: {ws_url}")
                     break
-        except Exception:
+        except Exception as pe:
+            if attempt % 10 == 0:
+                log(f"CDP polling attempt #{attempt + 1}: {pe}", "DEBUG")
             continue
 
     if not ws_url:
         kill_browser_proc(proc)
         err = {"success": False, "error": "Failed to establish DevTools connection with browser window."}
+        log(f"CDP connection timeout: {err['error']}", "ERROR")
         print(json.dumps(err, ensure_ascii=False))
         return err
 
@@ -336,12 +458,17 @@ def start_login():
         result = asyncio.run(capture_cookies_via_cdp(ws_url, CDP_PORT, proc))
     except Exception as e:
         result = {"success": False, "error": str(e)}
+        log(f"CDP capture exception: {e}\n{traceback.format_exc()}", "ERROR")
     finally:
-        # Gracefully terminate browser window
         kill_browser_proc(proc)
 
+    log(f"Browser Login Session Finished. Result: success={result.get('success')}, error={result.get('error')}")
     print(json.dumps(result, ensure_ascii=False))
     return result
+
+def handle_cli(args=None):
+    """Thread-safe CLI dispatcher entry point for launcher_win.py in-process runner."""
+    return start_login()
 
 def main():
     start_login()

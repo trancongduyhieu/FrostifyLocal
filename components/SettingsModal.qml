@@ -32,6 +32,69 @@ Rectangle {
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    property bool manualCookieExpanded: false
+
+    onVisibleChanged: {
+        if (!visible) {
+            closeAllDropdowns();
+            if (root.isProcessing) {
+                root.isProcessing = false;
+            }
+        }
+    }
+
+    Timer {
+        id: loginTimeoutTimer
+        interval: 60000 // 60 seconds fail-safe timeout
+        running: root.isProcessing
+        repeat: false
+        onTriggered: {
+            if (root.isProcessing) {
+                root.isProcessing = false;
+                root.statusMessage = I18n.tr(
+                    "Đã hết thời gian chờ trình duyệt (60s). Hãy thử lại hoặc dùng dán cookie dự phòng ở dưới.",
+                    "Browser login timed out (60s). Please try again or use backup cookie paste below."
+                );
+            }
+        }
+    }
+
+    function pasteAndConnectFromClipboard() {
+        var text = "";
+        if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.getClipboardText === "function") {
+            text = __NutstyBridge.getClipboardText();
+        }
+        if (!text && typeof authInput !== "undefined" && authInput) {
+            authInput.selectAll();
+            authInput.paste();
+            text = authInput.text;
+        }
+        text = (text || "").trim();
+        if (!text) {
+            root.statusMessage = I18n.tr("Clipboard đang rỗng. Hãy copy mã cookie rồi thử lại.", "Clipboard is empty. Please copy cookie text first.");
+            root.manualCookieExpanded = true;
+            return;
+        }
+
+        var textLower = text.toLowerCase();
+        var hasAuthToken = textLower.indexOf("sapisid=") !== -1 ||
+                           textLower.indexOf("__secure-3papisid=") !== -1 ||
+                           textLower.indexOf("login_info=") !== -1 ||
+                           textLower.indexOf("cookie:") !== -1 ||
+                           textLower.indexOf("sid=") !== -1;
+
+        if (typeof authInput !== "undefined" && authInput) {
+            authInput.text = text;
+        }
+
+        if (hasAuthToken) {
+            root.statusMessage = I18n.tr("Đã nhận diện cookie từ Clipboard! Đang kết nối...", "Detected cookie from Clipboard! Connecting...");
+            root.connectRequested(text);
+        } else {
+            root.statusMessage = I18n.tr("Dữ liệu Clipboard không chứa cookie YouTube Music hợp lệ. Hãy kiểm tra lại.", "Clipboard does not contain valid YouTube Music cookies. Please check.");
+            root.manualCookieExpanded = true;
+        }
+    }
 
     // =========================================================================
     // Signals (100% preserved for shell.qml integration)
@@ -490,44 +553,350 @@ Rectangle {
                 }
 
 
-                // 1-Click Native Login Button (When NOT Logged In)
-                Rectangle {
+                // =============================================================
+                // Unified Account Login Block (When NOT Logged In)
+                // =============================================================
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
-                    radius: 12
+                    spacing: 8
                     visible: !root.isLoggedIn
-                    color: root.isProcessing ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : (browserLoginMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
-                    border.color: Qt.rgba(255, 255, 255, 0.16)
-                    border.width: 1
-                    Behavior on color { ColorAnimation { duration: 120 } }
 
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 8
+                    // 1-Click Native Browser Login Card
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        radius: 12
+                        color: root.isProcessing ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : (browserLoginMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
+                        border.color: Qt.rgba(255, 255, 255, 0.16)
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
-                        AppIcon {
-                            source: "../assets/icons/arrow-outward-symbolic.svg"
-                            iconSize: 14
-                            color: "#000000"
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            AppIcon {
+                                source: root.isProcessing ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/arrow-outward-symbolic.svg"
+                                iconSize: 14
+                                color: "#000000"
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.isProcessing ? I18n.tr("Đang chờ đăng nhập trên trình duyệt...", "Waiting for browser login...") : I18n.tr("Đăng nhập Google qua Trình duyệt (1-Chạm)", "Sign in with Google via Browser (1-Click)")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#000000"
+                                elide: Text.ElideRight
+                            }
+
+                            // Quick Cancel Button when process is waiting
+                            Rectangle {
+                                Layout.preferredWidth: 64
+                                Layout.preferredHeight: 28
+                                radius: 6
+                                visible: root.isProcessing
+                                color: cancelWaitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.35) : Qt.rgba(244, 63, 94, 0.20)
+                                border.color: Qt.rgba(244, 63, 94, 0.40)
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: I18n.tr("Hủy", "Cancel")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+
+                                MouseArea {
+                                    id: cancelWaitMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.isProcessing = false;
+                                        root.statusMessage = I18n.tr("Đã hủy chờ đăng nhập.", "Login cancelled.");
+                                    }
+                                }
+                            }
                         }
 
-                        Text {
-                            text: root.isProcessing ? I18n.tr("Đang chờ đăng nhập trên trình duyệt...", "Waiting for browser login...") : I18n.tr("Đăng nhập Google qua Trình duyệt (1-Chạm)", "Sign in with Google via Browser (1-Click)")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
-                            color: "#000000"
+                        MouseArea {
+                            id: browserLoginMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: root.isProcessing ? Qt.ArrowCursor : Qt.PointingHandCursor
+                            enabled: !root.isProcessing
+                            onClicked: {
+                                loginTimeoutTimer.restart();
+                                root.launchBrowserLoginRequested();
+                            }
                         }
                     }
 
-                    MouseArea {
-                        id: browserLoginMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        preventStealing: false
-                        cursorShape: root.isProcessing ? Qt.ArrowCursor : Qt.PointingHandCursor
-                        enabled: !root.isProcessing
-                        onClicked: root.launchBrowserLoginRequested()
+                    // Smart Backup Actions Row (Zero Extension Required)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        // Quick Auto-Paste from Clipboard & Login (2-Second Fallback)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 34
+                            radius: 8
+                            color: pasteAutoMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                AppIcon {
+                                    source: "../assets/icons/edit-select-all-symbolic.svg"
+                                    iconSize: 12
+                                    color: root.accentColor
+                                }
+
+                                Text {
+                                    text: I18n.tr("Dán nhanh từ Clipboard & Đăng nhập", "Quick Paste Clipboard & Sign In")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            MouseArea {
+                                id: pasteAutoMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: !root.isProcessing
+                                onClicked: root.pasteAndConnectFromClipboard()
+                            }
+                        }
+
+                        // Toggle Manual Input Accordion
+                        Rectangle {
+                            Layout.preferredWidth: manualToggleTxt.implicitWidth + 28
+                            Layout.preferredHeight: 34
+                            radius: 8
+                            color: manualToggleMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
+                            border.color: Qt.rgba(255, 255, 255, 0.10)
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Text {
+                                    id: manualToggleTxt
+                                    text: root.manualCookieExpanded ? I18n.tr("Thu gọn", "Collapse") : I18n.tr("Nhập thủ công", "Manual Paste")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textSecondary
+                                }
+
+                                AppIcon {
+                                    source: "../assets/icons/go-down-symbolic.svg"
+                                    iconSize: 10
+                                    color: Theme.textSecondary
+                                    rotation: root.manualCookieExpanded ? 180 : 0
+                                    Behavior on rotation { NumberAnimation { duration: 160 } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: manualToggleMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.manualCookieExpanded = !root.manualCookieExpanded
+                            }
+                        }
+                    }
+
+                    // Collapsible Manual Cookie Entry Panel
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.manualCookieExpanded ? manualCol.implicitHeight + 20 : 0
+                        radius: 10
+                        color: Qt.rgba(255, 255, 255, 0.03)
+                        border.color: Qt.rgba(255, 255, 255, 0.08)
+                        border.width: root.manualCookieExpanded ? 1 : 0
+                        clip: true
+                        visible: height > 0
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                        ColumnLayout {
+                            id: manualCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 10
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr(
+                                    "💡 Mẹo: Mở trình duyệt > Vào music.youtube.com > F12 > Thẻ Network > F5 > Bấm dòng 'music.youtube.com' > Copy giá trị 'cookie' và dán vào đây.",
+                                    "💡 Tip: Open browser > Go to music.youtube.com > F12 > Network tab > F5 > Click 'music.youtube.com' > Copy 'cookie' value and paste here."
+                                )
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Qt.rgba(255, 255, 255, 0.65)
+                                wrapMode: Text.Wrap
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 70
+                                radius: 8
+                                color: "#0a0a0f"
+                                border.color: (typeof authInput !== "undefined" && authInput.activeFocus) ? root.accentColor : Qt.rgba(255, 255, 255, 0.10)
+                                border.width: 1
+
+                                ScrollView {
+                                    anchors.fill: parent
+                                    anchors.margins: 6
+
+                                    TextArea {
+                                        id: authInput
+                                        placeholderText: I18n.tr("Dán mã cookie (SAPISID=...; SSID=...) hoặc Request Headers...", "Paste cookie (SAPISID=...; SSID=...) or Request Headers...")
+                                        placeholderTextColor: "#555555"
+                                        font.family: "Monospace"
+                                        font.pixelSize: 11
+                                        color: Theme.textPrimary
+                                        wrapMode: TextEdit.Wrap
+                                        selectByMouse: true
+                                        background: null
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Rectangle {
+                                    Layout.preferredHeight: 28
+                                    Layout.preferredWidth: pasteManualTxt.implicitWidth + 16
+                                    radius: 6
+                                    color: pasteManualMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
+                                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                                    border.width: 1
+
+                                    Text {
+                                        id: pasteManualTxt
+                                        anchors.centerIn: parent
+                                        text: I18n.tr("Dán", "Paste")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Theme.textSecondary
+                                    }
+
+                                    MouseArea {
+                                        id: pasteManualMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            authInput.selectAll();
+                                            authInput.paste();
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.preferredHeight: 28
+                                    Layout.preferredWidth: clearManualTxt.implicitWidth + 16
+                                    radius: 6
+                                    color: clearManualMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
+                                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                                    border.width: 1
+
+                                    Text {
+                                        id: clearManualTxt
+                                        anchors.centerIn: parent
+                                        text: I18n.tr("Xóa", "Clear")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Theme.textSecondary
+                                    }
+
+                                    MouseArea {
+                                        id: clearManualMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: authInput.text = ""
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Rectangle {
+                                    Layout.preferredHeight: 28
+                                    Layout.preferredWidth: 120
+                                    radius: 6
+                                    color: (!root.isProcessing && authInput.text.trim().length > 0) ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.isProcessing ? I18n.tr("Đang xác thực...", "Verifying...") : I18n.tr("Xác thực & Kết nối", "Verify & Connect")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: "#000000"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: (!root.isProcessing && authInput.text.trim().length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        enabled: !root.isProcessing && authInput.text.trim().length > 0
+                                        onClicked: root.connectRequested(authInput.text.trim())
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Direct Status & Diagnostic Feedback Message
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        visible: root.statusMessage.length > 0
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.statusMessage
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (root.statusMessage.indexOf("Success") !== -1 || root.statusMessage.indexOf("Connected") !== -1) ? root.accentColor : "#f87171"
+                            wrapMode: Text.Wrap
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr(
+                                "Log chẩn đoán: ~/.config/noctalia/browser_login.log (Linux) hoặc %TEMP%\\nutsty\\browser_login.log (Windows)",
+                                "Diagnostic log: ~/.config/noctalia/browser_login.log (Linux) or %TEMP%\\nutsty\\browser_login.log (Windows)"
+                            )
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            color: Qt.rgba(255, 255, 255, 0.40)
+                            wrapMode: Text.Wrap
+                            visible: root.statusMessage.indexOf("Error") !== -1 || root.statusMessage.indexOf("Failed") !== -1 || root.statusMessage.indexOf("timed out") !== -1
+                        }
                     }
                 }
 
@@ -1238,146 +1607,15 @@ Rectangle {
                     }
                 }
 
-                // Separator Hairline (When NOT Logged In)
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-                    visible: !root.isLoggedIn
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(255, 255, 255, 0.07) }
-                    Text {
-                        text: I18n.tr("HOẶC NHẬP MÃ COOKIE DỰ PHÒNG", "OR ENTER BACKUP COOKIE")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: "#666666"
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(255, 255, 255, 0.07) }
-                }
-
-                // Cookie Input Box (When NOT Logged In)
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 74
-                    radius: 10
-                    visible: !root.isLoggedIn
-                    color: "#0e0e13"
-                    border.color: authInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.08)
-                    border.width: 1
-
-                    ScrollView {
-                        anchors.fill: parent
-                        anchors.margins: 8
-
-                        TextArea {
-                            id: authInput
-                            placeholderText: I18n.tr("Dán mã raw cookie (SAPISID=...; SSID=...) hoặc Request Headers tại đây...", "Paste raw cookie (SAPISID=...; SSID=...) or Request Headers here...")
-                            placeholderTextColor: "#555555"
-                            font.family: "Monospace"
-                            font.pixelSize: 11
-                            color: Theme.textPrimary
-                            wrapMode: TextEdit.Wrap
-                            selectByMouse: true
-                            background: null
-                        }
-                    }
-                }
-
-                // Cookie Actions Row (When NOT Logged In)
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    visible: !root.isLoggedIn
-
-                    Rectangle {
-                        height: 32
-                        Layout.preferredWidth: pasteTxt.implicitWidth + 24
-                        radius: 8
-                        color: pasteMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
-                        border.color: Qt.rgba(255, 255, 255, 0.08)
-                        border.width: 1
-
-                        Text {
-                            id: pasteTxt
-                            anchors.centerIn: parent
-                            text: I18n.tr("Dán từ Clipboard", "Paste from Clipboard")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: pasteMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                authInput.selectAll();
-                                authInput.paste();
-                            }
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    Rectangle {
-                        height: 32
-                        Layout.preferredWidth: 70
-                        radius: 8
-                        color: cancelMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
-                        border.color: Qt.rgba(255, 255, 255, 0.08)
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.tr("Hủy", "Cancel")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: cancelMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.closeRequested()
-                        }
-                    }
-
-                    Rectangle {
-                        height: 32
-                        Layout.preferredWidth: 120
-                        radius: 8
-                        color: (!root.isProcessing && authInput.text.trim().length > 0) ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.isProcessing ? "Đang xác thực..." : "Kết nối & Lưu"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: "#000000"
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: (!root.isProcessing && authInput.text.trim().length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            enabled: !root.isProcessing && authInput.text.trim().length > 0
-                            onClicked: root.connectRequested(authInput.text.trim())
-                        }
-                    }
-                }
-
-                // Status Message
+                // Status Message (When Logged In)
                 Text {
                     Layout.fillWidth: true
                     text: root.statusMessage
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
-                    color: root.statusMessage.indexOf("Success") !== -1 ? root.accentColor : "#ff6b6b"
-                    visible: root.statusMessage.length > 0
+                    font.bold: true
+                    color: (root.statusMessage.indexOf("Success") !== -1 || root.statusMessage.indexOf("Connected") !== -1) ? root.accentColor : "#f87171"
+                    visible: root.isLoggedIn && root.statusMessage.length > 0
                     wrapMode: Text.Wrap
                 }
 

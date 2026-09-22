@@ -224,6 +224,17 @@ class NutstyBridge(QObject):
         except Exception as e:
             sys.stderr.write(f"copyToClipboard failed: {e}\n")
 
+    @Slot(result=str)
+    def getClipboardText(self) -> str:
+        try:
+            from PySide6.QtGui import QGuiApplication
+            cb = QGuiApplication.clipboard()
+            if cb:
+                return cb.text() or ""
+        except Exception as e:
+            sys.stderr.write(f"getClipboardText failed: {e}\n")
+        return ""
+
     @Slot(list)
     def execDetached(self, args: list):
         if not args:
