@@ -118,6 +118,16 @@ def ensure_mpv():
         safe_ytdl = ytdl_bin.replace("\\", "/")
         cmd.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
 
+    try:
+        import ytmusic_helper
+        cookie_file = ytmusic_helper.get_exported_cookie_file()
+        if cookie_file and os.path.exists(cookie_file):
+            safe_cookie = cookie_file.replace("\\", "/")
+            cmd.append(f"--cookies-file={safe_cookie}")
+            cmd.append(f"--ytdl-raw-options=cookies={safe_cookie}")
+    except Exception:
+        pass
+
     popen_kwargs = pc.get_daemon_popen_kwargs()
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
     

@@ -2501,7 +2501,9 @@ def get_exported_cookie_file():
         raw_cookie = data.get("cookie", "")
         if not raw_cookie:
             return None
-        out_path = "/tmp/nutsty_yt_cookies.txt"
+        temp_dir = pc.get_temp_dir()
+        os.makedirs(temp_dir, exist_ok=True)
+        out_path = os.path.join(temp_dir, f"nutsty_yt_cookies{PROFILE_SUFFIX}.txt")
         now = int(time.time()) + 365 * 86400
         lines = ["# Netscape HTTP Cookie File\n"]
         for item in raw_cookie.split(";"):
@@ -2513,7 +2515,8 @@ def get_exported_cookie_file():
         with open(out_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return out_path
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"[get_exported_cookie_file error]: {e}\n")
         return None
 
 def resolve_stream_url(video_id, quality=None):
@@ -2523,10 +2526,14 @@ def resolve_stream_url(video_id, quality=None):
     if video_id.startswith("ytdl://"):
         video_id = video_id.replace("ytdl://", "")
     elif "watch?v=" in video_id:
-        video_id = video_id.split("watch?v=")[1].split("&")[0]
+        vid_match = re.search(r"[?&]v=([^&#]+)", video_id)
+        if vid_match:
+            video_id = vid_match.group(1)
+        else:
+            video_id = video_id.split("watch?v=")[1].split("&")[0]
 
     if not quality:
-        settings_path = os.path.expanduser("~/.config/noctalia/nutsty_settings.json")
+        settings_path = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
         if os.path.exists(settings_path):
             try:
                 with open(settings_path, "r", encoding="utf-8") as f:
@@ -2554,51 +2561,90 @@ def resolve_stream_url(video_id, quality=None):
     try:
         import yt_dlp
 
-        ydl_opts = {
+        cookie_file = get_exported_cookie_file()
+        url = f"https://www.youtube.com/watch?v={video_id}"
+
+        attempts = []
+
+        # Attempt 1: Authenticated session with user cookies (mweb/web/web_embedded/tv)
+        if cookie_file and os.path.exists(cookie_file):
+            attempts.append({
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "check_formats": False,
+                "noplaylist": True,
+                "cookiefile": cookie_file,
+                "remote_components": ["ejs:github"],
+                "extractor_args": {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
+            })
+
+        # Attempt 2: Unauthenticated web_embedded / mweb / android fallback
+        attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}}
-        }
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = [f for f in info.get("formats", []) if f.get("acodec") != "none"]
+            "remote_components": ["ejs:github"],
+            "extractor_args": {"youtube": {"player_client": ["web_embedded", "mweb", "android"]}}
+        })
 
-            # Select format matching priority list (SimpMusic Twin Fallback)
-            priority = QUALITY_ITAG_PRIORITIES.get(quality, QUALITY_ITAG_PRIORITIES["high_opus"])
-            selected_format = None
-            for itag in priority:
-                for f in formats:
-                    fid = str(f.get("format_id") or "")
-                    if fid == str(itag) and f.get("url"):
-                        selected_format = f
-                        break
-                if selected_format:
-                    break
+        # Attempt 3: Browser cookie extraction fallback on desktop
+        for browser in ["firefox", "chrome", "chromium", "brave", "edge"]:
+            attempts.append({
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "check_formats": False,
+                "noplaylist": True,
+                "cookiesfrombrowser": (browser,),
+                "remote_components": ["ejs:github"],
+                "extractor_args": {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
+            })
 
-            if not selected_format and formats:
-                selected_format = formats[-1]
+        for ydl_opts in attempts:
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    formats = [f for f in info.get("formats", []) if f.get("acodec") != "none"]
+                    if not formats and info.get("url"):
+                        formats = [info]
 
-            stream_url = selected_format.get("url") if selected_format else info.get("url")
-            duration = info.get("duration") or 0
-            ua = selected_format.get("http_headers", {}).get("User-Agent") if selected_format else None
-            if stream_url:
-                res = {
-                    "stream_url": stream_url,
-                    "duration": duration,
-                    "quality": quality,
-                    "itag": selected_format.get("format_id") if selected_format else None,
-                    "bitrate": selected_format.get("abr") if selected_format else None,
-                    "codec": selected_format.get("acodec") if selected_format else None,
-                    "user_agent": ua,
-                    "timestamp": now
-                }
-                cache[cache_key] = res
-                save_json(STREAM_CACHE_FILE, cache)
-                return res
+                    # Select format matching priority list (SimpMusic Twin Fallback)
+                    priority = QUALITY_ITAG_PRIORITIES.get(quality, QUALITY_ITAG_PRIORITIES["high_opus"])
+                    selected_format = None
+                    for itag in priority:
+                        for f in formats:
+                            fid = str(f.get("format_id") or "")
+                            if fid == str(itag) and f.get("url"):
+                                selected_format = f
+                                break
+                        if selected_format:
+                            break
+
+                    if not selected_format and formats:
+                        selected_format = formats[-1]
+
+                    stream_url = selected_format.get("url") if selected_format else info.get("url")
+                    duration = info.get("duration") or 0
+                    ua = selected_format.get("http_headers", {}).get("User-Agent") if selected_format else None
+                    if stream_url:
+                        res = {
+                            "stream_url": stream_url,
+                            "duration": duration,
+                            "quality": quality,
+                            "itag": selected_format.get("format_id") if selected_format else None,
+                            "bitrate": selected_format.get("abr") if selected_format else None,
+                            "codec": selected_format.get("acodec") if selected_format else None,
+                            "user_agent": ua,
+                            "timestamp": now
+                        }
+                        cache[cache_key] = res
+                        save_json(STREAM_CACHE_FILE, cache)
+                        return res
+            except Exception:
+                continue
     except Exception as e:
         sys.stderr.write(f"[resolve_stream_url error for {video_id} ({quality})]: {e}\n")
 

@@ -28,7 +28,7 @@ PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
 TEMP_DIR = pc.get_temp_dir()
 CONFIG_DIR = pc.get_config_dir()
-SOCKET_PATH = f"/tmp/nutsty_download{PROFILE_SUFFIX}.sock"
+SOCKET_PATH = os.path.join(TEMP_DIR, f"nutsty_download{PROFILE_SUFFIX}.sock")
 STATUS_FILE = os.path.join(TEMP_DIR, f"nutsty_download_status{PROFILE_SUFFIX}.json")
 
 HAS_AF_UNIX = hasattr(socket, "AF_UNIX") and not pc.IS_WINDOWS
@@ -320,9 +320,17 @@ class DownloadManager:
                     self.batch_failed = 0
 
     def _get_exported_cookie_file(self):
-        auth_file = os.path.expanduser(f"~/.config/noctalia/ytmusic_auth{PROFILE_SUFFIX}.json")
+        try:
+            import ytmusic_helper
+            cf = ytmusic_helper.get_exported_cookie_file()
+            if cf and os.path.exists(cf):
+                return cf
+        except Exception:
+            pass
+
+        auth_file = os.path.join(pc.get_config_dir(), f"ytmusic_auth{PROFILE_SUFFIX}.json")
         if not os.path.exists(auth_file) and not PROFILE_SUFFIX:
-            auth_file = os.path.expanduser("~/.config/noctalia/ytmusic_auth.json")
+            auth_file = os.path.join(pc.get_config_dir(), "ytmusic_auth.json")
         if not os.path.exists(auth_file):
             return None
         try:
@@ -331,7 +339,9 @@ class DownloadManager:
             raw_cookie = data.get("cookie", "")
             if not raw_cookie:
                 return None
-            out_path = f"/tmp/nutsty_yt_cookies{PROFILE_SUFFIX}.txt"
+            temp_dir = pc.get_temp_dir()
+            os.makedirs(temp_dir, exist_ok=True)
+            out_path = os.path.join(temp_dir, f"nutsty_yt_cookies{PROFILE_SUFFIX}.txt")
             now = int(time.time()) + 365 * 86400
             lines = ["# Netscape HTTP Cookie File\n"]
             for item in raw_cookie.split(";"):

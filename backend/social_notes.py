@@ -214,7 +214,7 @@ def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_
     # Đính kèm now_playing nếu bài hát đang phát trong MPV
     now_playing = None
     suffix = get_profile_suffix()
-    cur_track_file = Path(f"/tmp/nutsty_current_track{suffix}.json")
+    cur_track_file = Path(pc.get_temp_dir()) / f"nutsty_current_track{suffix}.json"
     if cur_track_file.exists():
         try:
             with open(cur_track_file, "r", encoding="utf-8") as f:
@@ -416,7 +416,7 @@ def update_now_playing(now_playing_data: Optional[Dict[str, Any]] = None, worker
 
     if now_playing_data is None:
         suffix = get_profile_suffix()
-        cur_track_file = Path(f"/tmp/nutsty_current_track{suffix}.json")
+        cur_track_file = Path(pc.get_temp_dir()) / f"nutsty_current_track{suffix}.json"
         if cur_track_file.exists():
             try:
                 with open(cur_track_file, "r", encoding="utf-8") as f:

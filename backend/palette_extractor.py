@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 Nutsty - Intelligent Adaptive Wallpaper Palette & Luminance Inversion Engine
 Analyzes the desktop wallpaper and local lyric region (x: 14%..52%, y: 69%..77%).
@@ -13,11 +14,19 @@ import re
 import math
 import colorsys
 from pathlib import Path
+from typing import Any
+
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
 try:
     from PIL import Image
     HAS_PIL = True
 except ImportError:
     HAS_PIL = False
+    Image = None
 
 def get_current_wallpaper() -> Path:
     # 1. Check CLI argument
@@ -148,8 +157,10 @@ def get_theme_name_from_deg(deg):
     else:
         return "amethyst"
 
-def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
+def analyze_crop(img: Any, box_norm=(0.14, 0.69, 0.52, 0.77)):
     """Analyze mean luminance and bright pixel ratio of lyric region."""
+    if not HAS_PIL or img is None:
+        return 0.3, 0.0, False
     w, h = img.size
     x1, y1 = int(box_norm[0] * w), int(box_norm[1] * h)
     x2, y2 = int(box_norm[2] * w), int(box_norm[3] * h)
@@ -167,11 +178,21 @@ def analyze_crop(img: Image.Image, box_norm=(0.14, 0.69, 0.52, 0.77)):
 
     return round(mean_lum, 3), round(bright_ratio, 3), is_light
 
-def extract_adaptive_palette(img: Image.Image, is_light: bool):
+def extract_adaptive_palette(img: Any, is_light: bool):
     """
     Extract aesthetic, readable colors based on OKLAB Chromatic Salience Clustering,
     and OKLCH Jewel Tone normalization with universal cinematic dark drop shadows.
     """
+    if not HAS_PIL or img is None:
+        return {
+            "isLightArea": False,
+            "theme": "crimson",
+            "baseTextColor": "#f8fafc",
+            "highlightColor": "#f4afb3",
+            "deadTextColor": "rgba(248, 250, 252, 0.45)",
+            "shadowDirectional": "rgba(0, 0, 0, 0.70)",
+            "shadowAmbient": "rgba(0, 0, 0, 0.45)"
+        }
     thumb = img.resize((96, 96)).convert("RGB")
     pixels = [thumb.getpixel((x, y)) for y in range(thumb.height) for x in range(thumb.width)]
     ok_all = [rgb_to_oklab(r, g, b) for r, g, b in pixels]
@@ -246,11 +267,12 @@ def main():
             "shadowDirectional": "rgba(0, 0, 0, 0.70)",
             "shadowAmbient": "rgba(0, 0, 0, 0.45)"
         }
-        out_file = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
+        out_file = Path(pc.get_config_dir()) / "nutsty_palette.json"
         out_file.parent.mkdir(parents=True, exist_ok=True)
         out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
-        legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
-        legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        if not pc.IS_WINDOWS:
+            legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+            legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(f"Fallback palette generated at {out_file}")
         print(json.dumps(result, indent=2))
         return
@@ -277,12 +299,12 @@ def main():
         "shadowAmbient": palette_info["shadowAmbient"]
     }
 
-    out_file = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
+    out_file = Path(pc.get_config_dir()) / "nutsty_palette.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    # Legacy sync for Noctalia Bar
-    legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
-    legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    if not pc.IS_WINDOWS:
+        legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
+        legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     local_out = Path(__file__).resolve().parent.parent / "assets" / "nutsty_palette.json"
     local_out.parent.mkdir(parents=True, exist_ok=True)
@@ -291,7 +313,7 @@ def main():
     print(f"Successfully generated palette at {out_file}")
     print(json.dumps(result, indent=2))
 
-SONG_PALETTES_CACHE = Path.home() / ".cache" / "nutsty" / "song_palettes.json"
+SONG_PALETTES_CACHE = Path(pc.get_cache_dir()) / "song_palettes.json"
 
 def extract_song_palette(img_src: str) -> dict:
     default_res = {"highlightColor": "#f4afb3", "theme": "crimson"}
