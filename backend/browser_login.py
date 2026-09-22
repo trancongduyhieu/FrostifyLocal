@@ -97,7 +97,8 @@ def kill_browser_proc(proc):
         return
     try:
         if sys.platform == "win32" or os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=3)
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=3, creationflags=CREATE_NO_WINDOW)
         else:
             os.killpg(os.getpgid(proc.pid), 15)
     except Exception:
@@ -126,85 +127,97 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                 }
                 await ws.send(json.dumps(cmd))
                 
-                try:
-                    resp_text = await asyncio.wait_for(ws.recv(), timeout=2.0)
-                    data = json.loads(resp_text)
-                    if data.get("id") == msg_id:
-                        cookies = data.get("result", {}).get("cookies", [])
-                        
-                        yt_cookies = {}
-                        google_cookies = {}
-                        has_login_info = False
-                        has_sapisid = False
-                        
-                        for c in cookies:
-                            name = c.get("name", "")
-                            val = c.get("value", "")
-                            domain = c.get("domain", "")
-                            if not name or not val:
-                                continue
+                # Drain WebSocket frames until we get the response matching msg_id (skip async CDP notifications)
+                data = None
+                drain_start = time.time()
+                while time.time() - drain_start < 2.0:
+                    try:
+                        resp_text = await asyncio.wait_for(ws.recv(), timeout=0.8)
+                        parsed = json.loads(resp_text)
+                        if parsed.get("id") == msg_id:
+                            data = parsed
+                            break
+                    except asyncio.TimeoutError:
+                        break
+                    except Exception:
+                        break
 
-                            if name == "LOGIN_INFO":
-                                has_login_info = True
+                if data and data.get("id") == msg_id:
+                    cookies = data.get("result", {}).get("cookies", [])
+                    
+                    yt_cookies = {}
+                    google_cookies = {}
+                    has_login_info = False
+                    has_sapisid = False
+                    
+                    for c in cookies:
+                        name = c.get("name", "")
+                        val = c.get("value", "")
+                        domain = c.get("domain", "")
+                        if not name or not val:
+                            continue
 
-                            if name in ("SAPISID", "__Secure-3PAPISID"):
-                                has_sapisid = True
+                        if name == "LOGIN_INFO":
+                            has_login_info = True
 
-                            if "youtube" in domain:
-                                yt_cookies[name] = val
-                            elif "google" in domain:
-                                google_cookies[name] = val
-                        
-                        # Note when Google Accounts credentials have been accepted
-                        if has_sapisid and not google_signed_in_time:
-                            google_signed_in_time = time.time()
+                        if name in ("SAPISID", "__Secure-3PAPISID"):
+                            has_sapisid = True
 
-                        # If user authenticated with Google but hasn't reached music.youtube.com after 5s
-                        if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 5.0):
-                            try:
-                                with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
-                                    pages = json.loads(r.read().decode("utf-8"))
-                                for p in pages:
-                                    p_url = p.get("url", "")
-                                    if p.get("type") == "page" and "music.youtube.com" not in p_url:
-                                        p_ws = p.get("webSocketDebuggerUrl")
-                                        if p_ws:
-                                            async with websockets.connect(p_ws, ping_interval=None) as page_ws:
-                                                await page_ws.send(json.dumps({
-                                                    "id": 999,
-                                                    "method": "Page.navigate",
-                                                    "params": {"url": "https://music.youtube.com/"}
-                                                }))
-                                                break
-                            except Exception as ne:
-                                sys.stderr.write(f"[Page nav helper]: {ne}\n")
+                        if "youtube" in domain:
+                            yt_cookies[name] = val
+                        elif "google" in domain:
+                            google_cookies[name] = val
+                    
+                    has_session = has_login_info or any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in yt_cookies) or any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in google_cookies)
 
-                        # Crucial condition: must have both YouTube session (LOGIN_INFO) and auth (SAPISID)
-                        if has_login_info and has_sapisid:
-                            # Merge cookies: YouTube cookies take priority
-                            merged = dict(google_cookies)
-                            merged.update(yt_cookies)
+                    # Note when Google Accounts credentials have been accepted
+                    if has_sapisid and not google_signed_in_time:
+                        google_signed_in_time = time.time()
 
-                            # Defensive: ensure __Secure-3PAPISID exists if SAPISID does
-                            if "SAPISID" in merged and "__Secure-3PAPISID" not in merged:
-                                merged["__Secure-3PAPISID"] = merged["SAPISID"]
-                            elif "__Secure-3PAPISID" in merged and "SAPISID" not in merged:
-                                merged["SAPISID"] = merged["__Secure-3PAPISID"]
+                    # If user authenticated with Google but hasn't reached music.youtube.com after 5s
+                    if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 5.0):
+                        try:
+                            with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
+                                pages = json.loads(r.read().decode("utf-8"))
+                            for p in pages:
+                                p_url = p.get("url", "")
+                                if p.get("type") == "page" and "music.youtube.com" not in p_url:
+                                    p_ws = p.get("webSocketDebuggerUrl")
+                                    if p_ws:
+                                        async with websockets.connect(p_ws, ping_interval=None) as page_ws:
+                                            await page_ws.send(json.dumps({
+                                                "id": 999,
+                                                "method": "Page.navigate",
+                                                "params": {"url": "https://music.youtube.com/"}
+                                            }))
+                                            break
+                        except Exception as ne:
+                            sys.stderr.write(f"[Page nav helper]: {ne}\n")
 
-                            full_cookie_str = "; ".join(f"{k}={v}" for k, v in merged.items())
+                    # Crucial condition: must have both auth (SAPISID) and a session credential
+                    if has_sapisid and (has_login_info or has_session):
+                        # Merge cookies: YouTube cookies take priority
+                        merged = dict(google_cookies)
+                        merged.update(yt_cookies)
 
-                            # Verify auth using ytmusic_helper
+                        # Defensive: ensure __Secure-3PAPISID exists if SAPISID does
+                        if "SAPISID" in merged and "__Secure-3PAPISID" not in merged:
+                            merged["__Secure-3PAPISID"] = merged["SAPISID"]
+                        elif "__Secure-3PAPISID" in merged and "SAPISID" not in merged:
+                            merged["SAPISID"] = merged["__Secure-3PAPISID"]
+
+                        full_cookie_str = "; ".join(f"{k}={v}" for k, v in merged.items())
+
+                        # Verify auth using ytmusic_helper
+                        try:
                             res = ytmusic_helper.save_auth(full_cookie_str)
                             if res.get("success"):
                                 await asyncio.sleep(0.8)
                                 return res
                             else:
                                 sys.stderr.write(f"[Auth verification pending]: {res.get('error')}\n")
-
-                except asyncio.TimeoutError:
-                    pass
-                except Exception as e:
-                    sys.stderr.write(f"[CDP loop error]: {e}\n")
+                        except Exception as se:
+                            sys.stderr.write(f"[save_auth exception]: {se}\n")
 
                 await asyncio.sleep(1.0)
     except websockets.exceptions.ConnectionClosed:

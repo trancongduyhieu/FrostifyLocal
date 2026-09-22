@@ -249,30 +249,39 @@ def save_auth(raw_text):
                 sha1_hash = hashlib.sha1(hash_input.encode("utf-8")).hexdigest()
                 headers["authorization"] = f"SAPISIDHASH {now_ts}_{sha1_hash}"
 
-        # Gate check: Must have LOGIN_INFO to authenticate as YouTube Music account
-        if "login_info" not in headers.get("cookie", "").lower():
+        # Gate check: Must have SAPISID and at least one session token (LOGIN_INFO, SID, __Secure-3PSID, SSID)
+        cookie_lower = headers.get("cookie", "").lower()
+        has_sapisid = "sapisid=" in cookie_lower or "__secure-3papisid=" in cookie_lower
+        has_session = any(s in cookie_lower for s in ("login_info=", "sid=", "__secure-3psid=", "__secure-1psid=", "ssid="))
+        if not (has_sapisid and has_session):
             return {
                 "success": False,
-                "error": "Missing LOGIN_INFO session cookie. Please ensure YouTube Music sign-in redirect has completed."
+                "error": "Missing SAPISID or session cookies. Please ensure YouTube Music sign-in redirect has completed."
             }
 
         temp_file = AUTH_FILE + ".tmp"
         save_json(temp_file, headers)
 
-        # Rigorous verification: get_account_info MUST succeed
+        # Verify and fetch account info (non-fatal if account lacks channel or API format differs)
         test_client = None
-        account_info = None
+        account_info = {}
         try:
             test_client = ytmusicapi.YTMusic(temp_file)
             account_info = test_client.get_account_info()
         except Exception as err1:
             if target_authuser != "0":
-                headers["x-goog-authuser"] = "0"
-                save_json(temp_file, headers)
-                test_client = ytmusicapi.YTMusic(temp_file)
-                account_info = test_client.get_account_info()
+                try:
+                    headers["x-goog-authuser"] = "0"
+                    save_json(temp_file, headers)
+                    test_client = ytmusicapi.YTMusic(temp_file)
+                    account_info = test_client.get_account_info()
+                except Exception as err2:
+                    sys.stderr.write(f"[get_account_info fallback error]: {err2}\n")
             else:
-                raise err1
+                sys.stderr.write(f"[get_account_info error]: {err1}\n")
+
+        if not isinstance(account_info, dict):
+            account_info = {}
 
         name = account_info.get("accountName") or account_info.get("name") or "Google User"
         thumbs = account_info.get("thumbnails", [])

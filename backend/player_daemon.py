@@ -56,6 +56,8 @@ def get_current_streaming_quality():
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
 def is_mpv_running():
+    if pc.IS_WINDOWS:
+        return pc.is_process_running("mpv.exe")
     return pc.is_process_running(MPV_TITLE)
 
 def ensure_mpv():
@@ -71,7 +73,10 @@ def ensure_mpv():
     # 2. If MPV process is alive but socket is dead/unresponsive, kill it and restart fresh
     if is_mpv_running():
         try:
-            pc.kill_process(MPV_TITLE)
+            if pc.IS_WINDOWS:
+                pc.kill_process("mpv.exe")
+            else:
+                pc.kill_process(MPV_TITLE)
             time.sleep(0.1)
         except Exception:
             pass
@@ -87,6 +92,7 @@ def ensure_mpv():
     ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
 
     mpv_bin = pc.get_binary_path("mpv")
+    ytdl_bin = pc.get_binary_path("yt-dlp")
     ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
 
     cmd = [
@@ -94,6 +100,8 @@ def ensure_mpv():
         "--idle=yes",
         "--pause=no",
         "--no-video",
+        "--no-terminal",
+        "--force-window=no",
         ipc_arg,
         "--audio-buffer=0.4",
         "--demuxer-max-bytes=16M",
@@ -104,6 +112,8 @@ def ensure_mpv():
         f"--ytdl-format={ytdl_fmt}",
         f"--log-file={LOG_FILE}"
     ]
+    if ytdl_bin and os.path.exists(ytdl_bin):
+        cmd.append(f"--script-opts=ytdl_hook-ytdl_path={ytdl_bin}")
 
     popen_kwargs = pc.get_daemon_popen_kwargs()
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)

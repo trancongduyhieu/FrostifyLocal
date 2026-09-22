@@ -90,6 +90,14 @@ def resolve_app_root():
     return os.path.dirname(os.path.abspath(__file__))
 
 APP_ROOT = resolve_app_root()
+os.environ["NUTSTY_APP_DIR"] = APP_ROOT
+if "HOME" not in os.environ:
+    os.environ["HOME"] = os.path.expanduser("~")
+
+bin_dir = os.path.join(APP_ROOT, "bin")
+if os.path.exists(bin_dir) and bin_dir not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
 sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
 
 import platform_compat as pc

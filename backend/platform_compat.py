@@ -17,7 +17,11 @@ IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
 IS_MACOS = platform.system() == "Darwin"
 
-APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_ROOT = os.getenv("NUTSTY_APP_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+_bin_dir = os.path.join(APP_ROOT, "bin")
+if os.path.exists(_bin_dir) and _bin_dir not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
 
 def get_config_dir() -> str:
     """Return platform-appropriate configuration directory."""
@@ -106,9 +110,10 @@ def is_process_running(name_or_title: str) -> bool:
     """Check if process with title or image name is currently active."""
     if IS_WINDOWS:
         try:
+            CREATE_NO_WINDOW = 0x08000000
             exe_name = name_or_title if name_or_title.endswith(".exe") else f"{name_or_title}.exe"
             cmd = ["tasklist", "/fi", f"imagename eq {exe_name}"]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=2, creationflags=CREATE_NO_WINDOW)
             return exe_name.lower() in res.stdout.lower()
         except Exception:
             return False
@@ -123,8 +128,9 @@ def kill_process(name_or_title: str):
     """Force terminate process cleanly across platforms."""
     if IS_WINDOWS:
         try:
+            CREATE_NO_WINDOW = 0x08000000
             exe_name = name_or_title if name_or_title.endswith(".exe") else f"{name_or_title}.exe"
-            subprocess.run(["taskkill", "/f", "/im", exe_name], capture_output=True, timeout=3)
+            subprocess.run(["taskkill", "/f", "/im", exe_name], capture_output=True, timeout=3, creationflags=CREATE_NO_WINDOW)
         except Exception:
             pass
     else:
@@ -141,7 +147,14 @@ def get_binary_path(name: str) -> str:
         return local_bin
     
     found = shutil.which(name if not IS_WINDOWS else f"{name}{bin_ext}")
-    return found if found else name
+    if found:
+        # On Windows, never use .com console wrapper if .exe exists
+        if IS_WINDOWS and found.lower().endswith(".com"):
+            exe_alt = found[:-4] + ".exe"
+            if os.path.exists(exe_alt):
+                return exe_alt
+        return found
+    return name
 
 def get_daemon_popen_kwargs() -> dict:
     """Return platform-safe subprocess flags for detached background execution."""
