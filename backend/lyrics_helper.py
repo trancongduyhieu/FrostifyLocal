@@ -12,7 +12,10 @@ import os
 import re
 import sqlite3
 
-CACHE_DIR = os.path.expanduser("~/.cache/nutsty/lyrics")
+import platform_compat as pc
+pc.configure_windows_ssl()
+
+CACHE_DIR = os.path.join(pc.get_cache_dir(), "lyrics")
 
 def sanitize_filename(name):
     if not name:
@@ -126,8 +129,8 @@ def clean_search_title(title):
     return t or title
 
 def get_lyrics_from_local_db(title, artist=None, video_id=None):
-    p1 = os.path.expanduser('~/Music/Nutsty/extracted/Music Database')
-    p2 = os.path.expanduser('~/Music/SimpMusic/extracted/Music Database')
+    p1 = os.path.join(pc.get_music_dir(), "Nutsty", "extracted", "Music Database")
+    p2 = os.path.join(pc.get_music_dir(), "SimpMusic", "extracted", "Music Database")
     db_path = p1 if os.path.exists(p1) else p2
     if not os.path.exists(db_path):
         return []

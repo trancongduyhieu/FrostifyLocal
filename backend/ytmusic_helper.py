@@ -271,7 +271,7 @@ def is_song_disliked(video_id):
     data = load_disliked_songs()
     return clean_vid in data
 
-ARTIST_AVATARS_FILE = os.path.expanduser("~/.cache/nutsty/artist_avatars.json")
+ARTIST_AVATARS_FILE = os.path.join(pc.get_cache_dir(), "artist_avatars.json")
 
 def load_artist_avatars():
     return load_json(ARTIST_AVATARS_FILE, {})
@@ -2650,8 +2650,8 @@ def resolve_stream_url(video_id, quality=None):
 
     return None
 
-PENDING_HISTORY_FILE = os.path.expanduser("~/.cache/nutsty/pending_history.json")
-LOCAL_YT_MAPPINGS_FILE = os.path.expanduser("~/.cache/nutsty/local_yt_mappings.json")
+PENDING_HISTORY_FILE = os.path.join(pc.get_cache_dir(), "pending_history.json")
+LOCAL_YT_MAPPINGS_FILE = os.path.join(pc.get_cache_dir(), "local_yt_mappings.json")
 
 def resolve_video_id_for_track(video_id, title="", artist=""):
     """If video_id is valid, return it. If local song, lookup via Title + Artist on YTMusic"""
@@ -3007,7 +3007,7 @@ def rate_song_action(video_id, rating):
     except Exception as e:
         sys.stderr.write(f"[rate_song error for {clean_vid}]: {e}\n")
         res["ytm_error"] = str(e)
-RELATED_CACHE_DIR = os.path.expanduser("~/.cache/nutsty/related")
+RELATED_CACHE_DIR = os.path.join(pc.get_cache_dir(), "related")
 
 def get_song_related_content(video_id, title="", artist=""):
     clean_vid = resolve_video_id_for_track(video_id, title, artist)
@@ -3086,8 +3086,8 @@ def get_song_related_content(video_id, title="", artist=""):
 # ==============================================================================
 # APPLE MUSIC ANIMATED ALBUM ARTWORK EXTRACTION (Item 25)
 # ==============================================================================
-AM_TOKEN_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/am_token.json")
-ANIMATED_ARTWORK_CACHE_FILE = os.path.expanduser("~/.cache/nutsty/animated_artworks.json")
+AM_TOKEN_CACHE_FILE = os.path.join(pc.get_cache_dir(), "am_token.json")
+ANIMATED_ARTWORK_CACHE_FILE = os.path.join(pc.get_cache_dir(), "animated_artworks.json")
 
 def get_am_token():
     """Scrapes the public web-player bearer token (JWT) from music.apple.com."""
@@ -3102,14 +3102,15 @@ def get_am_token():
             pass
 
     try:
+        ssl_ctx = pc.get_ssl_context()
         req = urllib.request.Request("https://music.apple.com", headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
-        html = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+        html = urllib.request.urlopen(req, timeout=8, context=ssl_ctx).read().decode("utf-8", errors="ignore")
         m = re.search(r"/assets/index~[^/\"]+\.js", html)
         if not m:
             return None
         js_url = "https://music.apple.com" + m.group(0)
         js_req = urllib.request.Request(js_url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
-        js = urllib.request.urlopen(js_req, timeout=12).read().decode("utf-8", errors="ignore")
+        js = urllib.request.urlopen(js_req, timeout=12, context=ssl_ctx).read().decode("utf-8", errors="ignore")
         jwts = re.findall(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", js)
         token = None
         for j in jwts:
@@ -3293,7 +3294,8 @@ def get_apple_music_animated_artwork(title, artist, duration_seconds=0, album_hi
                 }
             )
             try:
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                ssl_ctx = pc.get_ssl_context()
+                with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
                     data = json.loads(resp.read().decode("utf-8", errors="ignore"))
             except Exception:
                 continue
@@ -3511,7 +3513,8 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
             import urllib.request, urllib.parse
             itunes_url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=song&limit=5"
             it_req = urllib.request.Request(itunes_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(it_req, timeout=3.5) as resp:
+            ssl_ctx = pc.get_ssl_context()
+            with urllib.request.urlopen(it_req, timeout=3.5, context=ssl_ctx) as resp:
                 it_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
                 for r in it_data.get("results", []):
                     t = r.get("trackName", "")

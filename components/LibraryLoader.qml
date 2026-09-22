@@ -7,7 +7,7 @@ Item {
 
     property string libraryPath: (typeof win !== "undefined" && win.appDir)
         ? (win.appDir + "/library.json")
-        : (Quickshell.env("HOME") + "/Applications/FrostifyLocal/library.json")
+        : ((Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/library.json")
 
     property var playlists: []
     property var allTracks: []

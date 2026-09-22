@@ -128,31 +128,27 @@ def check_cli_dispatch():
     args = sys.argv[1:]
     if not args:
         return
-    clean_args = [a for a in args if not a.startswith("-")]
-    if not clean_args:
-        return
-
-    target_script = clean_args[0]
-    script_name = os.path.basename(target_script)
-
-    if script_name in BACKEND_MAP:
-        mod_name = BACKEND_MAP[script_name]
-        idx = args.index(target_script)
-        sys.argv = [target_script] + args[idx + 1:]
-        try:
-            import importlib
-            mod = importlib.import_module(mod_name)
-            if hasattr(mod, "main"):
-                mod.main()
-            else:
-                import runpy
-                runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
-            sys.exit(0)
-        except SystemExit as se:
-            sys.exit(se.code if isinstance(se.code, int) else 0)
-        except Exception as e:
-            sys.stderr.write(f"Error running {script_name}: {e}\n")
-            sys.exit(1)
+    for i, a in enumerate(args):
+        base_a = os.path.basename(a)
+        if base_a in BACKEND_MAP:
+            mod_name = BACKEND_MAP[base_a]
+            sys.argv = [a] + args[i + 1:]
+            try:
+                import importlib
+                mod = importlib.import_module(mod_name)
+                if hasattr(mod, "handle_cli"):
+                    mod.handle_cli(args[i + 1:])
+                elif hasattr(mod, "main"):
+                    mod.main()
+                else:
+                    import runpy
+                    runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
+                sys.exit(0)
+            except SystemExit as se:
+                sys.exit(se.code if isinstance(se.code, int) else 0)
+            except Exception as e:
+                sys.stderr.write(f"Error running {base_a}: {e}\n")
+                sys.exit(1)
 
 # Run CLI dispatch check immediately
 check_cli_dispatch()
@@ -257,14 +253,13 @@ class NutstyBridge(QObject):
             return
 
         # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
-        clean_args = [a for a in args if not a.startswith("-")]
         target_script = ""
         script_args = []
-        for i, a in enumerate(clean_args):
+        for i, a in enumerate(args):
             base_a = os.path.basename(a)
             if base_a in BACKEND_MAP:
                 target_script = base_a
-                script_args = clean_args[i+1:]
+                script_args = list(args[i+1:])
                 break
 
         if target_script:
@@ -321,14 +316,13 @@ class NutstyBridge(QObject):
             self.processFinished.emit(callback, "", "", 0)
             return
 
-        clean_args = [a for a in args if not a.startswith("-")]
         target_script = ""
         script_args = []
-        for i, a in enumerate(clean_args):
+        for i, a in enumerate(args):
             base_a = os.path.basename(a)
             if base_a in BACKEND_MAP:
                 target_script = base_a
-                script_args = clean_args[i+1:]
+                script_args = list(args[i+1:])
                 break
 
         # Fast path for player_daemon status (executes in 0.1ms in-process with direct JSON getter)

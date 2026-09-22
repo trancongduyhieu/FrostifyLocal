@@ -266,6 +266,21 @@ def configure_windows_ssl():
     except Exception:
         pass
 
+def get_ssl_context():
+    """Returns an SSLContext configured with certifi or unverified fallback for Windows."""
+    import ssl
+    try:
+        import certifi
+        ca_path = certifi.where()
+        if os.path.exists(ca_path):
+            return ssl.create_default_context(cafile=ca_path)
+    except Exception:
+        pass
+    try:
+        return ssl._create_unverified_context()
+    except Exception:
+        return None
+
 def patch_gettext_translation():
     """Ensure gettext.translation does not crash if locale files are missing (common in PyInstaller bundles)."""
     try:

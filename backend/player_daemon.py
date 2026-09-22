@@ -267,7 +267,7 @@ def update_current_track_metadata(file_path, title="", artist="", art_url=""):
 
         # Fallback to online tracks cache if not in local library
         if not title:
-            online_json = os.path.expanduser("~/.cache/nutsty/online_tracks.json")
+            online_json = os.path.join(pc.get_cache_dir(), "online_tracks.json")
             if os.path.exists(online_json):
                 try:
                     with open(online_json, "r", encoding="utf-8") as f:

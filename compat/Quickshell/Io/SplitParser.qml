@@ -14,6 +14,9 @@ QtObject {
         _buffer = lines.pop() || "";
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
+            if (line.endsWith("\r")) {
+                line = line.substring(0, line.length - 1);
+            }
             if (line.length > 0) {
                 root.read(line);
             }
@@ -24,7 +27,12 @@ QtObject {
         if (_buffer.length > 0) {
             var remaining = _buffer;
             _buffer = "";
-            root.read(remaining);
+            if (remaining.endsWith("\r")) {
+                remaining = remaining.substring(0, remaining.length - 1);
+            }
+            if (remaining.length > 0) {
+                root.read(remaining);
+            }
         }
     }
 }

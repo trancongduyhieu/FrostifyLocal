@@ -21,6 +21,7 @@ Rectangle {
     property int currentLyricIndex: -1
 
     property string compactTab: "lyrics" // "lyrics" or "art"
+    property string appDir: (typeof win !== "undefined" && win && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"))
 
     property color accentColor: "#deb06c"
     property var frostifyPalette: ({
@@ -103,7 +104,7 @@ Rectangle {
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",
-                (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/lyrics_helper.py",
+                root.appDir + "/backend/lyrics_helper.py",
                 songTitle, songArtist, songVid, songPath
             ];
             lyricsProc.running = true;
@@ -234,7 +235,7 @@ Rectangle {
             songDetailsProc.running = false;
             songDetailsProc.command = [
                 "python3", "-u",
-                (typeof win !== "undefined" && win.appDir ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal")) + "/backend/ytmusic_helper.py",
+                root.appDir + "/backend/ytmusic_helper.py",
                 "song_details", vid
             ];
             songDetailsProc.running = true;
@@ -244,7 +245,7 @@ Rectangle {
 
     function fetchAudioSpecs() {
         audioSpecsProc.running = false;
-        var daemonPath = (typeof win !== "undefined" && win.appDir) ? (win.appDir + "/backend/player_daemon.py") : (Quickshell.env("HOME") + "/Applications/FrostifyLocal/backend/player_daemon.py");
+        var daemonPath = root.appDir + "/backend/player_daemon.py";
         audioSpecsProc.command = [
             "python3", "-u",
             daemonPath,

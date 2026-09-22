@@ -58,7 +58,7 @@ Item {
         var cov = trk.cover || trk.image || trk.thumbnail || trk.artUrl || "";
         if (cov && typeof cov === "string" && cov.trim() !== "" && cov !== lastExtractedUserTrackCover) {
             lastExtractedUserTrackCover = cov;
-            var appDir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal");
+            var appDir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"));
             userTrackPaletteProc.running = false;
             userTrackPaletteProc.command = [
                 "python3", "-u",

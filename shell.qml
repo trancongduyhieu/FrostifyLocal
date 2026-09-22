@@ -3204,6 +3204,7 @@ Scope {
                     Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
                     track: win.currentTrack
+                    appDir: win.appDir
                     animatedCoverEnabled: win.animatedCoverEnabled
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration
