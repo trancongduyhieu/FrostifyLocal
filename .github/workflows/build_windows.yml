@@ -42,6 +42,7 @@ jobs:
 
       - name: Prepare Distribution Folder
         shell: pwsh
+        run: |
           if (Test-Path "start.bat") { Copy-Item "start.bat" -Destination "dist\Nutsty\" }
           if (Test-Path "run_debug.bat") { Copy-Item "run_debug.bat" -Destination "dist\Nutsty\" }
           if (Test-Path "bin") {
