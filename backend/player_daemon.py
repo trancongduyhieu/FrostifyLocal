@@ -113,7 +113,8 @@ def ensure_mpv():
         f"--log-file={LOG_FILE}"
     ]
     if ytdl_bin and os.path.exists(ytdl_bin):
-        cmd.append(f"--script-opts=ytdl_hook-ytdl_path={ytdl_bin}")
+        safe_ytdl = ytdl_bin.replace("\\", "/")
+        cmd.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
 
     popen_kwargs = pc.get_daemon_popen_kwargs()
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)

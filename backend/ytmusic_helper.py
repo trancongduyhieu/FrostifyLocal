@@ -292,7 +292,20 @@ def save_auth(raw_text):
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
 
-        os.replace(temp_file, AUTH_FILE)
+        try:
+            os.replace(temp_file, AUTH_FILE)
+        except Exception:
+            try:
+                if os.path.exists(AUTH_FILE):
+                    os.remove(AUTH_FILE)
+                os.replace(temp_file, AUTH_FILE)
+            except Exception:
+                shutil.copy2(temp_file, AUTH_FILE)
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except Exception:
+                        pass
 
         # Cache profile info for instant sub-millisecond access
         user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")

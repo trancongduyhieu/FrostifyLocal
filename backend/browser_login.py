@@ -127,24 +127,55 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                 }
                 await ws.send(json.dumps(cmd))
                 
-                # Drain WebSocket frames until we get the response matching msg_id (skip async CDP notifications)
-                data = None
+                # Drain WebSocket frames until we get cookies from Storage.getCookies
+                cookies = []
                 drain_start = time.time()
                 while time.time() - drain_start < 2.0:
                     try:
-                        resp_text = await asyncio.wait_for(ws.recv(), timeout=0.8)
+                        resp_text = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         parsed = json.loads(resp_text)
-                        if parsed.get("id") == msg_id:
-                            data = parsed
+                        if "cookies" in parsed.get("result", {}):
+                            cookies.extend(parsed["result"]["cookies"])
                             break
                     except asyncio.TimeoutError:
                         break
                     except Exception:
                         break
 
-                if data and data.get("id") == msg_id:
-                    cookies = data.get("result", {}).get("cookies", [])
-                    
+                # Dual-layer fallback: also query active page target via Network.getCookies
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
+                        pages = json.loads(r.read().decode("utf-8"))
+                    for p in pages:
+                        p_ws = p.get("webSocketDebuggerUrl")
+                        p_url = p.get("url", "")
+                        if p_ws and p.get("type") == "page":
+                            try:
+                                async with websockets.connect(p_ws, ping_interval=None) as p_sock:
+                                    await p_sock.send(json.dumps({
+                                        "id": 777,
+                                        "method": "Network.getCookies",
+                                        "params": {
+                                            "urls": [
+                                                "https://music.youtube.com",
+                                                "https://youtube.com",
+                                                "https://www.youtube.com",
+                                                "https://accounts.google.com"
+                                            ]
+                                        }
+                                    }))
+                                    p_resp = await asyncio.wait_for(p_sock.recv(), timeout=1.0)
+                                    p_parsed = json.loads(p_resp)
+                                    p_cks = p_parsed.get("result", {}).get("cookies", [])
+                                    if p_cks:
+                                        cookies.extend(p_cks)
+                            except Exception:
+                                pass
+                            break
+                except Exception:
+                    pass
+
+                if cookies:
                     yt_cookies = {}
                     google_cookies = {}
                     has_login_info = False
@@ -212,7 +243,7 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         try:
                             res = ytmusic_helper.save_auth(full_cookie_str)
                             if res.get("success"):
-                                await asyncio.sleep(0.8)
+                                await asyncio.sleep(0.5)
                                 return res
                             else:
                                 sys.stderr.write(f"[Auth verification pending]: {res.get('error')}\n")

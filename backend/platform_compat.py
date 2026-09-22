@@ -68,34 +68,82 @@ def get_music_dir() -> str:
                 return m
     return os.path.expanduser("~/Music")
 
+if IS_WINDOWS:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    GENERIC_READ = 0x80000000
+    GENERIC_WRITE = 0x40000000
+    OPEN_EXISTING = 3
+    INVALID_HANDLE_VALUE = -1
+
+    class WindowsNamedPipeClient:
+        def __init__(self, pipe_name: str, timeout: float = 2.0):
+            self.pipe_name = pipe_name
+            timeout_ms = int(timeout * 1000)
+            kernel32.WaitNamedPipeW(pipe_name, max(100, timeout_ms))
+            self.handle = kernel32.CreateFileW(
+                pipe_name,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                None,
+                OPEN_EXISTING,
+                0,
+                None
+            )
+            if self.handle == INVALID_HANDLE_VALUE:
+                err = ctypes.GetLastError()
+                raise OSError(f"Failed to open named pipe {pipe_name}, win32 error: {err}")
+
+        def sendall(self, data: bytes):
+            bytes_written = wintypes.DWORD()
+            res = kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(bytes_written), None)
+            if not res:
+                err = ctypes.GetLastError()
+                raise OSError(f"WriteFile to named pipe failed, error: {err}")
+
+        def recv(self, bufsize: int = 4096) -> bytes:
+            buf = ctypes.create_string_buffer(bufsize)
+            bytes_read = wintypes.DWORD()
+            res = kernel32.ReadFile(self.handle, buf, bufsize, ctypes.byref(bytes_read), None)
+            if not res:
+                err = ctypes.GetLastError()
+                if err == 109:  # ERROR_BROKEN_PIPE
+                    return b""
+                raise OSError(f"ReadFile from named pipe failed, error: {err}")
+            return buf.raw[:bytes_read.value]
+
+        def close(self):
+            if self.handle != INVALID_HANDLE_VALUE:
+                kernel32.CloseHandle(self.handle)
+                self.handle = INVALID_HANDLE_VALUE
+else:
+    class WindowsNamedPipeClient:
+        pass
+
 def get_mpv_ipc_target(profile_suffix: str = ""):
-    """
+    r"""
     Return (ipc_type, address) for MPV IPC communication.
     On Linux: ('unix', '/tmp/nutsty_mpv<suffix>.sock')
-    On Windows: ('tcp', ('127.0.0.1', 17891 + profile_offset))
+    On Windows: ('pipe', r'\\.\pipe\nutsty_mpv<suffix>')
     """
     if IS_WINDOWS:
-        base_port = 17891
-        offset = 0
-        if profile_suffix:
-            # Deterministic offset based on profile name
-            offset = sum(ord(c) for c in profile_suffix) % 20 + 1
-        port = base_port + offset
-        return ("tcp", ("127.0.0.1", port))
+        pipe_path = rf"\\.\pipe\nutsty_mpv{profile_suffix}"
+        return ("pipe", pipe_path)
     else:
         sock_path = f"/tmp/nutsty_mpv{profile_suffix}.sock"
         return ("unix", sock_path)
 
 def get_mpv_ipc_arg(ipc_type: str, address) -> str:
     """Return the --input-ipc-server argument for MPV CLI."""
-    if ipc_type == "tcp":
-        ip, port = address
-        return f"--input-ipc-server={ip}:{port}"
     return f"--input-ipc-server={address}"
 
-def connect_mpv_socket(ipc_type: str, address, timeout: float = 2.0) -> socket.socket:
-    """Open and return a connected socket to MPV IPC server."""
-    if ipc_type == "tcp":
+def connect_mpv_socket(ipc_type: str, address, timeout: float = 2.0):
+    """Open and return a connected socket or pipe client to MPV IPC server."""
+    if ipc_type == "pipe":
+        return WindowsNamedPipeClient(address, timeout=timeout)
+    elif ipc_type == "tcp":
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(address)
