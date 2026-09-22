@@ -176,8 +176,19 @@ except ImportError:
         sys.exit(1)
 
 class NutstyBridge(QObject):
+    processFinished = Signal(object, str, str, int)
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.processFinished.connect(self._onProcessFinished)
+
+    @Slot(object, str, str, int)
+    def _onProcessFinished(self, callback, out, err, code):
+        try:
+            if callback:
+                callback.call([str(out or ""), str(err or ""), int(code or 0)])
+        except Exception as e:
+            sys.stderr.write(f"Process callback execution error: {e}\n")
 
     @Slot(str, result=str)
     def getEnv(self, key: str) -> str:
@@ -306,7 +317,7 @@ class NutstyBridge(QObject):
 
         if args[0] == "wl-copy":
             self.copyToClipboard(args[1] if len(args) > 1 else "")
-            QTimer.singleShot(0, lambda: callback.call(["", "", 0]))
+            self.processFinished.emit(callback, "", "", 0)
             return
 
         clean_args = [a for a in args if not a.startswith("-")]
@@ -331,7 +342,7 @@ class NutstyBridge(QObject):
                     out = ""
                     err = str(e)
                     code = 1
-                QTimer.singleShot(0, lambda: callback.call([out, err, code]))
+                self.processFinished.emit(callback, out, err, code)
             threading.Thread(target=_status_worker, daemon=True).start()
             return
 
@@ -388,7 +399,7 @@ class NutstyBridge(QObject):
 
                 out = out_buf.getvalue()
                 err = err_buf.getvalue()
-                QTimer.singleShot(0, lambda: callback.call([out, err, code]))
+                self.processFinished.emit(callback, out, err, code)
 
             threading.Thread(target=_in_proc_run, daemon=True).start()
             return
@@ -408,7 +419,7 @@ class NutstyBridge(QObject):
                 err = str(e)
                 code = 1
             
-            QTimer.singleShot(0, lambda: callback.call([out, err, code]))
+            self.processFinished.emit(callback, out, err, code)
 
         threading.Thread(target=_worker, daemon=True).start()
 
