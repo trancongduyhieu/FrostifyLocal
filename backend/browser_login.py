@@ -155,61 +155,107 @@ def kill_browser_proc(proc):
             pass
 
 async def query_browser_profile(cdp_port):
-    """Query logged-in user profile from active YouTube Music tab via CDP Runtime.evaluate."""
+    """Query logged-in user profile from active tabs via CDP Runtime.evaluate."""
     import websockets
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
             pages = json.loads(r.read().decode("utf-8"))
 
-        yt_tab = None
-        for p in pages:
-            url = p.get("url", "")
-            if "music.youtube.com" in url or "youtube.com" in url:
-                yt_tab = p
-                break
+        # Sort candidate tabs: music.youtube.com first, then youtube.com, then accounts.google.com, then others
+        def tab_score(p):
+            u = p.get("url", "").lower()
+            if "music.youtube.com" in u: return 0
+            if "youtube.com" in u: return 1
+            if "myaccount.google.com" in u: return 2
+            if "accounts.google.com" in u: return 3
+            return 4
 
-        if not yt_tab or not yt_tab.get("webSocketDebuggerUrl"):
-            return None
+        candidate_tabs = [p for p in pages if p.get("type") == "page" and p.get("webSocketDebuggerUrl")]
+        candidate_tabs.sort(key=tab_score)
 
-        tab_ws = yt_tab["webSocketDebuggerUrl"].replace("localhost", "127.0.0.1")
-        async with websockets.connect(tab_ws, ping_interval=None) as p_sock:
-            js = """
-            (() => {
-                let name = "";
-                let email = "";
-                let thumb = "";
-                try {
-                    if (window.ytcfg) {
-                        const d = window.ytcfg.data_ || {};
-                        name = window.ytcfg.get("USER_NAME") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.name) || "";
-                        email = window.ytcfg.get("USER_EMAIL") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.email) || "";
-                        thumb = window.ytcfg.get("USER_AVATAR") || "";
+        js = r"""
+        (() => {
+            let name = "";
+            let email = "";
+            let thumb = "";
+            try {
+                // 1. InnerTube context (YouTube Music / YouTube)
+                if (window.ytcfg) {
+                    const d = window.ytcfg.data_ || {};
+                    name = window.ytcfg.get("USER_NAME") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.name) || "";
+                    email = window.ytcfg.get("USER_EMAIL") || (d.INNERTUBE_CONTEXT && d.INNERTUBE_CONTEXT.user && d.INNERTUBE_CONTEXT.user.email) || "";
+                    thumb = window.ytcfg.get("USER_AVATAR") || "";
+                }
+                // 2. YouTube DOM Elements
+                if (!name || !email) {
+                    const acc = document.querySelector("ytd-active-account-header-renderer, ytmusic-active-account-header-renderer, #avatar-btn");
+                    if (acc) {
+                        const nEl = acc.querySelector("#account-name, #channel-title, #name");
+                        if (nEl && !name) name = nEl.textContent.trim();
+                        const eEl = acc.querySelector("#email, #byline");
+                        if (eEl && !email) email = eEl.textContent.trim();
+                        const img = acc.querySelector("img#img, #account-photo img");
+                        if (img && !thumb && img.src) thumb = img.src;
                     }
-                    if (!name || !email) {
-                        const acc = document.querySelector("ytd-active-account-header-renderer, ytmusic-active-account-header-renderer, #avatar-btn");
-                        if (acc) {
-                            const nEl = acc.querySelector("#account-name, #channel-title, #name");
-                            if (nEl && !name) name = nEl.textContent.trim();
-                            const eEl = acc.querySelector("#email, #byline");
-                            if (eEl && !email) email = eEl.textContent.trim();
-                            const img = acc.querySelector("img#img, #account-photo img");
-                            if (img && !thumb && img.src) thumb = img.src;
-                        }
+                }
+                // 3. Google Accounts / MyAccount DOM Attributes & Elements
+                if (!email) {
+                    const emailEl = document.querySelector("[data-email], [data-identifier], [data-profile-identifier]");
+                    if (emailEl) {
+                        email = emailEl.getAttribute("data-email") || emailEl.getAttribute("data-identifier") || emailEl.getAttribute("data-profile-identifier") || "";
                     }
-                } catch(e) {}
-                return { name: name, email: email, thumb: thumb };
-            })()
-            """
-            await p_sock.send(json.dumps({
-                "id": 9999,
-                "method": "Runtime.evaluate",
-                "params": {"expression": js, "returnByValue": True}
-            }))
-            resp_raw = await asyncio.wait_for(p_sock.recv(), timeout=1.5)
-            parsed = json.loads(resp_raw)
-            val = parsed.get("result", {}).get("result", {}).get("value", {})
-            if isinstance(val, dict) and (val.get("name") or val.get("email")):
-                return val
+                }
+                if (!name) {
+                    const nameEl = document.querySelector("[data-name], [data-profile-name]");
+                    if (nameEl) {
+                        name = nameEl.getAttribute("data-name") || nameEl.getAttribute("data-profile-name") || "";
+                    }
+                }
+                // 4. Regex fallback on document body text
+                if (!email && document.body) {
+                    const text = document.body.innerText || "";
+                    const matches = text.match(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g);
+                    if (matches) {
+                        const valid = matches.filter(e => !e.endsWith("@google.com") && !e.endsWith("@youtube.com"));
+                        if (valid.length > 0) email = valid[0];
+                    }
+                }
+                if (!thumb) {
+                    const img = document.querySelector("img[src*='googleusercontent.com']");
+                    if (img && img.src) thumb = img.src;
+                }
+            } catch(e) {}
+            return { name: name, email: email, thumb: thumb };
+        })()
+        """
+
+        best_profile = {"name": "", "email": "", "thumb": ""}
+        for tab in candidate_tabs:
+            tab_ws = tab["webSocketDebuggerUrl"].replace("localhost", "127.0.0.1")
+            try:
+                async with websockets.connect(tab_ws, ping_interval=None) as p_sock:
+                    await p_sock.send(json.dumps({
+                        "id": 9999,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": js, "returnByValue": True}
+                    }))
+                    resp_raw = await asyncio.wait_for(p_sock.recv(), timeout=1.5)
+                    parsed = json.loads(resp_raw)
+                    val = parsed.get("result", {}).get("result", {}).get("value", {})
+                    if isinstance(val, dict):
+                        if val.get("name") and not best_profile["name"]:
+                            best_profile["name"] = val["name"]
+                        if val.get("email") and not best_profile["email"]:
+                            best_profile["email"] = val["email"]
+                        if val.get("thumb") and not best_profile["thumb"]:
+                            best_profile["thumb"] = val["thumb"]
+                        if best_profile["name"] and best_profile["email"]:
+                            return best_profile
+            except Exception:
+                continue
+
+        if best_profile["name"] or best_profile["email"]:
+            return best_profile
     except Exception as e:
         log(f"query_browser_profile debug: {e}", "DEBUG")
     return None
@@ -337,9 +383,14 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         elif "google" in domain:
                             google_cookies[name] = val
 
-                    has_session = (
+                    # YouTube session requires LOGIN_INFO or YouTube-specific session credentials
+                    has_yt_session = (
                         has_login_info or 
-                        any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in yt_cookies) or 
+                        (len(yt_cookies) > 0 and any(k in ("LOGIN_INFO", "SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in yt_cookies))
+                    )
+
+                    has_session = (
+                        has_yt_session or 
                         any(k in ("SID", "__Secure-3PSID", "__Secure-1PSID", "SSID") for k in google_cookies)
                     )
 
@@ -349,7 +400,7 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         log(
                             f"Cookie scan summary: total={len(cookies)}, "
                             f"yt_cookies={len(yt_cookies)}, google_cookies={len(google_cookies)}, "
-                            f"has_sapisid={has_sapisid}, has_login_info={has_login_info}, has_session={has_session}"
+                            f"has_sapisid={has_sapisid}, has_login_info={has_login_info}, has_yt_session={has_yt_session}"
                         )
 
                     # Note when Google Accounts credentials have arrived
@@ -357,9 +408,9 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         google_signed_in_time = time.time()
                         log("Google authentication detected (SAPISID found). Awaiting YouTube Music redirect...")
 
-                    # Auto-navigate to music.youtube.com if stuck on Google Accounts page > 4.0s
-                    if google_signed_in_time and not has_login_info and (time.time() - google_signed_in_time > 4.0):
-                        log("User signed into Google but not yet at music.youtube.com. Triggering auto-navigation...", "INFO")
+                    # Auto-navigate to music.youtube.com if Google signed in but no YouTube session yet (>1.5s)
+                    if has_sapisid and not has_yt_session and google_signed_in_time and (time.time() - google_signed_in_time > 1.5):
+                        log("Google session active, navigating to music.youtube.com to complete YouTube auth...", "INFO")
                         try:
                             with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
                                 pages = json.loads(r.read().decode("utf-8"))
@@ -380,8 +431,8 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         except Exception as ne:
                             log(f"Page navigation helper error: {ne}", "WARN")
 
-                    # Crucial condition: must have both auth (SAPISID) and a session credential
-                    if has_sapisid and (has_login_info or has_session):
+                    # Crucial condition: must have auth (SAPISID) AND YouTube session
+                    if has_sapisid and has_yt_session:
                         log("Candidate credentials complete! Merging and verifying...")
                         merged = dict(google_cookies)
                         merged.update(yt_cookies)
@@ -397,7 +448,7 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         profile_hint = None
                         try:
                             profile_hint = await query_browser_profile(cdp_port)
-                            if profile_hint:
+                            if profile_hint and (profile_hint.get("name") or profile_hint.get("email")):
                                 log(f"Extracted profile hint from browser: {profile_hint.get('name')} ({profile_hint.get('email')})")
                         except Exception as pe:
                             log(f"Profile hint extraction error: {pe}", "DEBUG")
@@ -406,7 +457,16 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                         try:
                             res = ytmusic_helper.save_auth(full_cookie_str, profile_hint=profile_hint)
                             if res.get("success"):
-                                log(f"Authentication verified successfully! Account: {res.get('name', 'Google User')} ({res.get('email', '')})")
+                                acc_name = res.get("name", "Google User")
+                                acc_email = res.get("email", "")
+
+                                # Allow up to 10 seconds for browser tab to finish rendering user profile name & email
+                                if (not acc_name or acc_name == "Google User" or not acc_email) and (time.time() - start_time < 10.0):
+                                    log("Auth saved but profile name/email still resolving from browser DOM. Waiting for page render...", "INFO")
+                                    await asyncio.sleep(1.0)
+                                    continue
+
+                                log(f"Authentication verified successfully! Account: {acc_name} ({acc_email})")
                                 await asyncio.sleep(0.5)
                                 return res
                             else:

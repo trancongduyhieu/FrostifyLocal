@@ -17,6 +17,157 @@ try:
 except (ImportError, ValueError):
     import platform_compat as pc
 
+pc.configure_windows_ssl()
+
+# Monkey-patch ytmusicapi sapisid_from_cookie to be 100% immune to SimpleCookie syntax/token errors
+try:
+    import ytmusicapi.auth.browser
+
+    def safe_sapisid_from_cookie(raw_cookie: str) -> str:
+        match = re.search(r'(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)', raw_cookie)
+        if match:
+            return match.group(1).strip('"').strip()
+        try:
+            from http.cookies import SimpleCookie
+            cookie = SimpleCookie()
+            cookie.load(raw_cookie.replace('"', ''))
+            if "__Secure-3PAPISID" in cookie:
+                return cookie["__Secure-3PAPISID"].value
+            if "SAPISID" in cookie:
+                return cookie["SAPISID"].value
+        except Exception:
+            pass
+        raise KeyError("__Secure-3PAPISID")
+
+    ytmusicapi.auth.browser.sapisid_from_cookie = safe_sapisid_from_cookie
+except Exception:
+    pass
+
+def sanitize_cookie_for_ytmusic(raw_cookie: str) -> str:
+    """Sanitize and prioritize Google/YouTube authentication cookies."""
+    if not raw_cookie:
+        return ""
+    pairs = {}
+    for item in raw_cookie.split(';'):
+        item = item.strip()
+        if '=' in item:
+            k, v = item.split('=', 1)
+            k = k.strip()
+            v = v.strip().strip('"')
+            if k and v:
+                pairs[k] = v
+
+    sapisid = pairs.get('SAPISID') or pairs.get('__Secure-3PAPISID') or pairs.get('__Secure-1PAPISID')
+    if sapisid:
+        pairs['__Secure-3PAPISID'] = sapisid
+        pairs['SAPISID'] = sapisid
+
+    priority_keys = [
+        '__Secure-3PAPISID', 'SAPISID', '__Secure-3PSID', 'SID', 'HSID', 'SSID', 'APISID',
+        'LOGIN_INFO', '__Secure-1PAPISID', '__Secure-1PSID', '__Secure-3PSIDTS', '__Secure-1PSIDTS',
+        'PREF', 'SOCS', 'YSC', 'VISITOR_INFO1_LIVE', 'VISITOR_PRIVACY_METADATA'
+    ]
+
+    ordered = []
+    for pk in priority_keys:
+        if pk in pairs:
+            ordered.append(f'{pk}={pairs[pk]}')
+            del pairs[pk]
+
+    for k, v in pairs.items():
+        if re.match(r'^[a-zA-Z0-9_.-]+$', k):
+            ordered.append(f'{k}={v}')
+
+    return '; '.join(ordered)
+
+def fetch_google_profile_from_cookies(cookie_str: str) -> dict:
+    """
+    Directly query Google / YouTube endpoints using session cookies to extract
+    verified account name and email address.
+    """
+    info = {"name": "", "email": "", "thumb": ""}
+    if not cookie_str:
+        return info
+    try:
+        import requests
+        headers = {
+            "Cookie": cookie_str,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+
+        # 1. Query YouTube Account Switcher endpoint
+        try:
+            r = requests.post(
+                "https://www.youtube.com/get_account_switcher_endpoint",
+                headers=headers,
+                json={"context": {"client": {"clientName": "WEB", "clientVersion": "2.20240101.00.00"}}},
+                timeout=4.0
+            )
+            if r.status_code == 200:
+                raw_text = r.text
+                emails = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', raw_text)
+                valid_emails = [e for e in emails if not e.endswith("@google.com") and not e.endswith("@youtube.com")]
+                if valid_emails:
+                    info["email"] = valid_emails[0]
+
+                def find_key(obj, k):
+                    if isinstance(obj, dict):
+                        if k in obj: return obj[k]
+                        for v in obj.values():
+                            res = find_key(v, k)
+                            if res: return res
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            res = find_key(item, k)
+                            if res: return res
+                    return None
+
+                try:
+                    data = r.json()
+                    acc_name = find_key(data, "accountName")
+                    if isinstance(acc_name, dict):
+                        runs = acc_name.get("runs", [])
+                        if runs: info["name"] = runs[0].get("text", "").strip()
+                    elif isinstance(acc_name, str):
+                        info["name"] = acc_name.strip()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # 2. Query Google MyAccount dashboard fallback
+        if not info["name"] or not info["email"]:
+            try:
+                r = requests.get("https://myaccount.google.com/", headers=headers, timeout=4.0, allow_redirects=True)
+                if r.status_code == 200:
+                    html = r.text
+                    if not info["email"]:
+                        em_match = re.search(r'data-email=["\']([^"\']+@[^"\']+)["\']', html)
+                        if em_match:
+                            info["email"] = em_match.group(1).strip()
+                        else:
+                            emails = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', html)
+                            valid_emails = [e for e in emails if not e.endswith("@google.com") and not e.endswith("@youtube.com")]
+                            if valid_emails:
+                                info["email"] = valid_emails[0]
+
+                    if not info["name"]:
+                        name_match = re.search(r'data-name=["\']([^"\']+)["\']', html)
+                        if name_match:
+                            info["name"] = name_match.group(1).strip()
+                        else:
+                            wel_match = re.search(r'(?:Welcome|Chào mừng|Hi),\s*([^<.,!]+)', html, re.IGNORECASE)
+                            if wel_match:
+                                cand = wel_match.group(1).strip()
+                                if len(cand) < 40 and not cand.startswith("<"):
+                                    info["name"] = cand
+            except Exception:
+                pass
+    except Exception as e:
+        sys.stderr.write(f"[fetch_google_profile_from_cookies error]: {e}\n")
+    return info
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
@@ -256,6 +407,23 @@ def get_auth_status():
         if not thumb and cached_info.get("avatar"):
             thumb = cached_info.get("avatar")
 
+        # Direct profile extraction from cookies if still missing
+        if not name or name == "Google User" or not email:
+            try:
+                with open(AUTH_FILE, "r", encoding="utf-8") as f:
+                    auth_data = json.load(f)
+                cookie_str = auth_data.get("cookie", "")
+                if cookie_str:
+                    dp = fetch_google_profile_from_cookies(cookie_str)
+                    if dp.get("name") and (not name or name == "Google User"):
+                        name = dp["name"]
+                    if dp.get("email") and not email:
+                        email = dp["email"]
+                    if dp.get("thumb") and not thumb:
+                        thumb = dp["thumb"]
+            except Exception:
+                pass
+
         if not name:
             name = "Google User"
         if not email and name and name != "Google User":
@@ -277,7 +445,7 @@ def get_auth_status():
         return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
     except Exception as e:
         # Fallback 1: Return cached profile if available
-        if cached_info and cached_info.get("name"):
+        if cached_info and cached_info.get("name") and cached_info.get("name") != "Google User":
             return {
                 "logged_in": True,
                 "name": cached_info.get("name"),
@@ -285,13 +453,17 @@ def get_auth_status():
                 "email": cached_info.get("email") or ""
             }
 
-        # Fallback 2: Check if AUTH_FILE has LOGIN_INFO (temporary offline/network hiccup)
+        # Fallback 2: Direct profile lookup from AUTH_FILE cookies
         try:
             with open(AUTH_FILE, "r", encoding="utf-8") as f:
                 auth_data = json.load(f)
             cookie_data = auth_data.get("cookie", "")
             if "login_info" in cookie_data.lower() or "sapisid" in cookie_data.lower():
-                return {"logged_in": True, "name": "Google User", "thumb": "", "email": ""}
+                dp = fetch_google_profile_from_cookies(cookie_data)
+                fb_name = dp.get("name") or (cached_info.get("name") if cached_info else "") or "Google User"
+                fb_email = dp.get("email") or (cached_info.get("email") if cached_info else "") or ""
+                fb_thumb = dp.get("thumb") or (cached_info.get("avatar") if cached_info else "") or ""
+                return {"logged_in": True, "name": fb_name, "thumb": fb_thumb, "email": fb_email}
         except Exception:
             pass
 
@@ -334,6 +506,10 @@ def save_auth(raw_text, profile_hint=None):
             if cookie_str.lower().startswith("cookie:"):
                 cookie_str = cookie_str[7:].strip()
             headers["cookie"] = cookie_str
+
+        # Sanitize and prioritize crucial authentication cookies
+        if "cookie" in headers:
+            headers["cookie"] = sanitize_cookie_for_ytmusic(headers["cookie"])
 
         # Ensure SAPISID and __Secure-3PAPISID are populated for authorization
         if "cookie" in headers:
@@ -401,6 +577,16 @@ def save_auth(raw_text, profile_hint=None):
             if not account_info.get("thumb"):
                 if profile_hint.get("thumb"):
                     account_info["thumb"] = profile_hint.get("thumb")
+
+        # Direct profile extraction from cookies if still missing
+        if (not account_info.get("name") or account_info.get("name") == "Google User") or not account_info.get("email"):
+            direct_profile = fetch_google_profile_from_cookies(headers.get("cookie", ""))
+            if direct_profile.get("name") and (not account_info.get("name") or account_info.get("name") == "Google User"):
+                account_info["name"] = direct_profile["name"]
+            if direct_profile.get("email") and not account_info.get("email"):
+                account_info["email"] = direct_profile["email"]
+            if direct_profile.get("thumb") and not account_info.get("thumb"):
+                account_info["thumb"] = direct_profile["thumb"]
 
         name = account_info.get("name") or account_info.get("accountName") or "Google User"
         thumb = account_info.get("thumb") or account_info.get("accountPhotoUrl") or ""
