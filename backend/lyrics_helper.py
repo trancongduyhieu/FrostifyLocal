@@ -273,10 +273,10 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
     # -------------------------------------------------------------------------
     return db_lyrics or get_lyrics_from_local_db(title, artist, video_id)
 
-if __name__ == '__main__':
+def main():
     if len(sys.argv) < 2:
         print("[]")
-        sys.exit(0)
+        return
 
     title_arg = sys.argv[1] if len(sys.argv) > 1 else ""
     artist_arg = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].strip() != "" else None
@@ -285,3 +285,6 @@ if __name__ == '__main__':
 
     res = get_lyrics(title_arg, artist_arg, vid_arg, path_arg)
     print(json.dumps(res, ensure_ascii=False))
+
+if __name__ == '__main__':
+    main()

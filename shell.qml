@@ -2708,7 +2708,7 @@ Scope {
                 currentTab: win.currentTab
                 currentView: win.currentView
                 isSidebarVisible: win.showSidebar
-                isMaximized: win.maximized
+                isMaximized: win.visibility === 4 || win.maximized
                 accentColor: win.accentColor
                 backgroundSourceItem: glassCompositeBackdrop
 
@@ -2750,12 +2750,16 @@ Scope {
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
-                    var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-                    if (profile && profile !== "user1") {
-                        win.sendOfflineSignal();
+                    if (typeof __NutstyBridge !== "undefined") {
                         Qt.quit();
                     } else {
-                        win.visible = false;
+                        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+                        if (profile && profile !== "user1") {
+                            win.sendOfflineSignal();
+                            Qt.quit();
+                        } else {
+                            win.visible = false;
+                        }
                     }
                 }
                 onMinimizeWindowRequested: {
@@ -2766,7 +2770,13 @@ Scope {
                     }
                 }
                 onMaximizeWindowRequested: {
-                    win.maximized = !win.maximized;
+                    if (win.visibility === 4) {
+                        if (typeof win.showNormal === "function") win.showNormal();
+                        else win.maximized = false;
+                    } else {
+                        if (typeof win.showMaximized === "function") win.showMaximized();
+                        else win.maximized = true;
+                    }
                 }
                 onToggleSidebarRequested: {
                     win.showSidebar = !win.showSidebar;

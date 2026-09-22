@@ -129,7 +129,7 @@ def remove_track_from_playlist(pl_id, track_path):
     save_playlists(playlists)
     return {"success": True, "total": len(target["tracks"])}
 
-if __name__ == "__main__":
+def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
     if cmd == "list":
         print(json.dumps(load_playlists(), ensure_ascii=False))
@@ -145,3 +145,6 @@ if __name__ == "__main__":
         print(json.dumps(remove_track_from_playlist(sys.argv[2], sys.argv[3]), ensure_ascii=False))
     else:
         print(json.dumps(load_playlists(), ensure_ascii=False))
+
+if __name__ == "__main__":
+    main()

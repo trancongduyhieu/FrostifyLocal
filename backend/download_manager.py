@@ -744,7 +744,7 @@ def get_status():
             pass
     print(json.dumps({"active_count": 0, "queue_len": 0, "tasks": {}}))
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
         if cmd == "daemon":
@@ -772,3 +772,6 @@ if __name__ == "__main__":
             print("Usage: download_manager.py [daemon | add <videoId> [title] [artist] [thumb] | remove <videoId> | status]")
     else:
         run_daemon()
+
+if __name__ == "__main__":
+    main()

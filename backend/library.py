@@ -491,7 +491,7 @@ def get_grouped_albums():
     albums.sort(key=lambda a: a["title"].lower())
     return albums
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) > 1 and sys.argv[1] == "delete":
         p = sys.argv[2] if len(sys.argv) > 2 else ""
         fn = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -510,3 +510,6 @@ if __name__ == "__main__":
         print(json.dumps(get_grouped_albums(), ensure_ascii=False))
     else:
         scan_library()
+
+if __name__ == "__main__":
+    main()

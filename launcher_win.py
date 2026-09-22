@@ -38,12 +38,41 @@ class SafeLogWriter:
             except Exception:
                 pass
 
+class ThreadLocalStream:
+    def __init__(self, default_stream):
+        self._local = threading.local()
+        self._default = default_stream
+
+    def set_stream(self, stream):
+        self._local.stream = stream
+
+    def clear_stream(self):
+        if hasattr(self._local, "stream"):
+            del self._local.stream
+
+    def write(self, s):
+        stream = getattr(self._local, "stream", self._default)
+        if stream:
+            try:
+                return stream.write(s)
+            except Exception:
+                pass
+
+    def flush(self):
+        stream = getattr(self._local, "stream", self._default)
+        if stream and hasattr(stream, "flush"):
+            try:
+                return stream.flush()
+            except Exception:
+                pass
+
 log_dir = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "nutsty")
 log_file_path = os.path.join(log_dir, "launcher.log")
-if sys.stdout is None:
-    sys.stdout = SafeLogWriter(log_file_path)
-if sys.stderr is None:
-    sys.stderr = SafeLogWriter(log_file_path)
+default_out = sys.stdout if sys.stdout is not None else SafeLogWriter(log_file_path)
+default_err = sys.stderr if sys.stderr is not None else SafeLogWriter(log_file_path)
+
+sys.stdout = ThreadLocalStream(default_out)
+sys.stderr = ThreadLocalStream(default_err)
 
 # Resolve App and Resource Root across source runs and PyInstaller onedir bundles
 def resolve_app_root():
@@ -103,9 +132,12 @@ def check_cli_dispatch():
             mod = importlib.import_module(mod_name)
             if hasattr(mod, "main"):
                 mod.main()
+            else:
+                import runpy
+                runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
             sys.exit(0)
-        except SystemExit:
-            raise
+        except SystemExit as se:
+            sys.exit(se.code if isinstance(se.code, int) else 0)
         except Exception as e:
             sys.stderr.write(f"Error running {script_name}: {e}\n")
             sys.exit(1)
@@ -146,7 +178,11 @@ class NutstyBridge(QObject):
 
     @Slot(str, result=str)
     def readFile(self, path: str) -> str:
-        if not path or not os.path.exists(path):
+        if not path:
+            return ""
+        if path.startswith("/tmp"):
+            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
+        if not os.path.exists(path):
             return ""
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -156,7 +192,11 @@ class NutstyBridge(QObject):
 
     @Slot(str, result=str)
     def checkFileMtime(self, path: str) -> str:
-        if not path or not os.path.exists(path):
+        if not path:
+            return ""
+        if path.startswith("/tmp"):
+            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
+        if not os.path.exists(path):
             return ""
         try:
             return str(os.path.getmtime(path))
@@ -184,7 +224,10 @@ class NutstyBridge(QObject):
             def _in_proc_detached():
                 try:
                     import importlib
-                    mod = importlib.import_module(mod_name)
+                    if mod_name in sys.modules:
+                        mod = sys.modules[mod_name]
+                    else:
+                        mod = importlib.import_module(mod_name)
                     if hasattr(mod, "handle_cli"):
                         mod.handle_cli(script_args)
                     elif hasattr(mod, "main"):
@@ -192,6 +235,14 @@ class NutstyBridge(QObject):
                         sys.argv = [target_script] + script_args
                         try:
                             mod.main()
+                        finally:
+                            sys.argv = old_argv
+                    else:
+                        import runpy
+                        old_argv = sys.argv
+                        sys.argv = [target_script] + script_args
+                        try:
+                            runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
                         finally:
                             sys.argv = old_argv
                 except SystemExit:
@@ -216,25 +267,79 @@ class NutstyBridge(QObject):
             return
 
         clean_args = [a for a in args if not a.startswith("-")]
-        # Fast path for player_daemon status (executes in 0.1ms in-process with ZERO subprocess spawn)
+        target_script = ""
+        script_args = []
         for i, a in enumerate(clean_args):
             base_a = os.path.basename(a)
-            if base_a == "player_daemon.py":
-                sub_args = clean_args[i+1:]
-                if sub_args and sub_args[0] == "status":
-                    def _status_worker():
-                        try:
-                            import player_daemon
-                            out = player_daemon.get_status_json()
-                            err = ""
-                            code = 0
-                        except Exception as e:
-                            out = ""
-                            err = str(e)
-                            code = 1
-                        QTimer.singleShot(0, lambda: callback.call([out, err, code]))
-                    threading.Thread(target=_status_worker, daemon=True).start()
-                    return
+            if base_a in BACKEND_MAP:
+                target_script = base_a
+                script_args = clean_args[i+1:]
+                break
+
+        # Fast path for player_daemon status (executes in 0.1ms in-process with direct JSON getter)
+        if target_script == "player_daemon.py" and script_args and script_args[0] == "status":
+            def _status_worker():
+                try:
+                    import player_daemon
+                    out = player_daemon.get_status_json()
+                    err = ""
+                    code = 0
+                except Exception as e:
+                    out = ""
+                    err = str(e)
+                    code = 1
+                QTimer.singleShot(0, lambda: callback.call([out, err, code]))
+            threading.Thread(target=_status_worker, daemon=True).start()
+            return
+
+        # Fast unified in-process execution for all backend scripts in BACKEND_MAP
+        if target_script:
+            mod_name = BACKEND_MAP[target_script]
+            def _in_proc_run():
+                import io, importlib
+                out_buf = io.StringIO()
+                err_buf = io.StringIO()
+                code = 0
+
+                # Set thread-local output streams so concurrent calls don't interfere
+                if hasattr(sys.stdout, "set_stream"):
+                    sys.stdout.set_stream(out_buf)
+                if hasattr(sys.stderr, "set_stream"):
+                    sys.stderr.set_stream(err_buf)
+
+                old_argv = sys.argv
+                sys.argv = [target_script] + script_args
+                try:
+                    if mod_name in sys.modules:
+                        mod = sys.modules[mod_name]
+                    else:
+                        mod = importlib.import_module(mod_name)
+
+                    if hasattr(mod, "handle_cli"):
+                        mod.handle_cli(script_args)
+                    elif hasattr(mod, "main"):
+                        mod.main()
+                    else:
+                        import runpy
+                        runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                except SystemExit as se:
+                    code = se.code if isinstance(se.code, int) else 0
+                except Exception as e:
+                    err_buf.write(str(e))
+                    code = 1
+                finally:
+                    sys.argv = old_argv
+                    if hasattr(sys.stdout, "clear_stream"):
+                        sys.stdout.clear_stream()
+                    if hasattr(sys.stderr, "clear_stream"):
+                        sys.stderr.clear_stream()
+
+                out = out_buf.getvalue()
+                err = err_buf.getvalue()
+                QTimer.singleShot(0, lambda: callback.call([out, err, code]))
+
+            threading.Thread(target=_in_proc_run, daemon=True).start()
+            return
 
         cmd = list(args)
         if cmd[0] == "python3" or cmd[0] == "python":
