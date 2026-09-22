@@ -599,6 +599,9 @@ Scope {
                     win.authAccountName = s.name || "";
                     win.authAccountThumb = s.thumb || "";
                     win.authAccountEmail = s.email || "";
+                    if (win.isAuthLoggedIn && win.authAccountName) {
+                        win.fetchCurrentUserProfile();
+                    }
                 } catch(e) {}
             }
         }
@@ -615,6 +618,7 @@ Scope {
                         settingsModal.statusMessage = "Connected as " + (res.name || "Google User") + "!";
                         win.checkAuthStatus();
                         win.loadHomeFeed();
+                        win.fetchCurrentUserProfile();
                     } else {
                         settingsModal.statusMessage = "Error: " + (res.error || "Failed to parse credentials");
                     }
@@ -798,12 +802,12 @@ Scope {
         var myEmail = win.authAccountEmail;
         if (!myEmail) {
             var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myEmail = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
+            myEmail = (profile === "user2") ? "hiutrn@gmail.com" : "";
         }
         var myName = win.authAccountName;
         if (!myName) {
             var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myName = (profileN === "user2") ? "Hiếu Trần" : (profileN === "user1" ? "Shiraori" : "Nutsty User");
+            myName = (profileN === "user2") ? "Hiếu Trần" : "Nutsty User";
         }
         var myAvatar = win.authAccountAvatar || "";
         if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
@@ -840,7 +844,7 @@ Scope {
         var email = win.authAccountEmail;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (!email) {
-            email = (profile === "user2") ? "hiutrn@gmail.com" : (profile === "user1" ? "@shiraori618" : "");
+            email = (profile === "user2") ? "hiutrn@gmail.com" : "";
         }
         if (!email) return;
 
@@ -888,20 +892,16 @@ Scope {
     }
 
     function getCurrentUserName() {
-        if (win.currentUserName) return win.currentUserName;
         if (win.authAccountName) return win.authAccountName;
+        if (win.currentUserName) return win.currentUserName;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") return "Hiếu Trần";
-        if (profile === "user1") return "Shiraori";
         return I18n.tr("Khách", "Guest");
     }
 
     function getCurrentUserAvatar() {
         if (win.authAccountThumb) return win.authAccountThumb;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-        if (profile === "user1") {
-            return "https://yt3.ggpht.com/yti/ANjgQV87mKpSJkLdeIPde7wHxvnE5VCdypuOrjkni974j7oLkaJ2=s108-c-k-c0x00ffffff-no-rj";
-        }
         if (profile === "user2") {
             return "https://yt3.ggpht.com/yti/ANjgQV-gmgVqqr67jTVBtevq6YMeZh0jpxYB0_EOiLb7uSg=s108-c-k-c0x00ffffff-no-rj";
         }
@@ -916,7 +916,8 @@ Scope {
     function fetchCurrentUserProfile() {
         var email = win.getCurrentUserEmail();
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/me?user_email=" + encodeURIComponent(email) + "&profile=" + encodeURIComponent(profile);
+        var preferredName = win.authAccountName || "";
+        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/me?user_email=" + encodeURIComponent(email) + "&profile=" + encodeURIComponent(profile) + "&name=" + encodeURIComponent(preferredName);
         var xhr = new XMLHttpRequest();
         xhr.open("GET", apiUrl, true);
         xhr.onreadystatechange = function() {
@@ -1970,7 +1971,7 @@ Scope {
         var myName = win.authAccountName;
         if (!myName) {
             var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myName = (profileN === "user2") ? "Hiếu Trần" : (profileN === "user1" ? "Shiraori" : I18n.tr("Tôi", "Me"));
+            myName = (profileN === "user2") ? "Hiếu Trần" : I18n.tr("Tôi", "Me");
         }
         var myAvatar = win.authAccountAvatar || "";
         if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
@@ -2708,7 +2709,7 @@ Scope {
                 currentTab: win.currentTab
                 currentView: win.currentView
                 isSidebarVisible: win.showSidebar
-                isMaximized: win.visibility === 4 || win.maximized
+                isMaximized: Boolean(win.visibility === 4 || win.maximized)
                 accentColor: win.accentColor
                 backgroundSourceItem: glassCompositeBackdrop
 

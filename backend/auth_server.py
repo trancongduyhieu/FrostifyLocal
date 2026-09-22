@@ -467,7 +467,7 @@ class CloudRelayClient:
             with urllib.request.urlopen(req, data=body, timeout=5.0, context=ctx) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as e:
-            if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            if "CERTIFICATE_VERIFY_FAILED" in str(e) or "SSL" in type(e).__name__:
                 try:
                     unverified_ctx = ssl._create_unverified_context()
                     req_retry = urllib.request.Request(url, method=method)
@@ -475,8 +475,9 @@ class CloudRelayClient:
                     req_retry.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NutstyClient/1.0")
                     with urllib.request.urlopen(req_retry, data=body, timeout=5.0, context=unverified_ctx) as resp:
                         return json.loads(resp.read().decode("utf-8"))
-                except Exception:
-                    pass
+                except Exception as e2:
+                    sys.stderr.write(f"[CloudRelayClient request failed]: {e2}\n")
+                    return None
             sys.stderr.write(f"[CloudRelayClient request failed]: {e}\n")
             return None
 
@@ -707,8 +708,6 @@ def save_cloud_identity(data, profile_suffix=""):
 
 def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar=None):
     ident = load_cloud_identity(profile_suffix)
-    if ident and ident.get("user_id") and ident.get("secret_key"):
-        return ident
 
     xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     d = os.path.join(xdg, "noctalia")
@@ -727,11 +726,42 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
         except Exception:
             pass
 
+    # If identity exists, verify if username needs synchronization with Google account
+    if ident and ident.get("user_id") and ident.get("secret_key"):
+        # Auto-update if user logged in with a real name (e.g. "Hieu Tran") and identity still has a placeholder or old name
+        if user_name and user_name not in ("Nutsty User", "Shiraori", "Khách", "Guest") and ident.get("username") != user_name:
+            try:
+                up_res = GLOBAL_RELAY_CLIENT.update_profile(
+                    user_id=ident["user_id"],
+                    secret_key=ident["secret_key"],
+                    new_username=user_name,
+                    avatar_url=avatar_url or ident.get("avatar_url")
+                )
+                if up_res and up_res.get("success") and up_res.get("user"):
+                    u = up_res["user"]
+                    ident["username"] = u["username"]
+                    ident["tag"] = u["tag"]
+                    ident["discriminator"] = u["discriminator"]
+                    if u.get("avatar_url"):
+                        ident["avatar_url"] = u["avatar_url"]
+                    save_cloud_identity(ident, profile_suffix)
+                else:
+                    ident["username"] = user_name
+                    ident["tag"] = f"{user_name}#{ident.get('discriminator', '0001')}"
+                    if avatar_url:
+                        ident["avatar_url"] = avatar_url
+                    save_cloud_identity(ident, profile_suffix)
+            except Exception:
+                ident["username"] = user_name
+                ident["tag"] = f"{user_name}#{ident.get('discriminator', '0001')}"
+                if avatar_url:
+                    ident["avatar_url"] = avatar_url
+                save_cloud_identity(ident, profile_suffix)
+        return ident
+
     if not user_name:
         if profile_suffix == "_user2":
             user_name = "Hiếu Trần"
-        elif profile_suffix in ("_user1", "user1"):
-            user_name = "Shiraori"
         else:
             user_name = "Nutsty User"
 
@@ -1357,8 +1387,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         elif path == "/api/users/me":
             profile = query.get("profile", [""])[0].strip()
             user_email = query.get("user_email", [""])[0].strip()
+            preferred_name = query.get("name", [""])[0].strip()
             suffix = resolve_profile_suffix(profile, user_email)
-            ident = ensure_cloud_identity(suffix)
+            ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None)
             self._send_json({
                 "success": True,
                 "profile": {
