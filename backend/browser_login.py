@@ -170,9 +170,9 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
         async with websockets.connect(ws_url, ping_interval=None) as ws:
             log("WebSocket connection to Browser Target established successfully.")
             while time.time() - start_time < max_timeout:
-                if proc.poll() is not None:
-                    log("Browser window was closed by user.", "WARN")
-                    return {"success": False, "error": "Login window was closed by user."}
+                if proc and proc.poll() is not None and proc.poll() != 0:
+                    log(f"Browser process crashed with code {proc.poll()}.", "WARN")
+                    return {"success": False, "error": f"Browser process crashed with code {proc.poll()}."}
 
                 cookies = []
                 msg_id += 1
@@ -396,7 +396,7 @@ def start_login():
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-mode",
-        "--disable-features=Translate,OptimizationHints,MediaRouter",
+        "--disable-features=msEdgeStartupBoost,Translate,OptimizationHints,MediaRouter",
         "--window-size=680,780"
     ]
 
@@ -427,10 +427,13 @@ def start_login():
     for attempt in range(40):
         time.sleep(0.5)
         if proc.poll() is not None:
-            log(f"Browser process exited prematurely with code {proc.poll()}.", "WARN")
-            err = {"success": False, "error": "Login window was closed."}
-            print(json.dumps(err, ensure_ascii=False))
-            return err
+            if proc.poll() != 0:
+                log(f"Browser process crashed with code {proc.poll()}.", "WARN")
+                err = {"success": False, "error": f"Browser process crashed with code {proc.poll()}."}
+                print(json.dumps(err, ensure_ascii=False))
+                return err
+            elif attempt == 0:
+                log("Browser launcher delegated to background process (code 0). Continuing CDP port discovery...")
 
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1.0) as r:
