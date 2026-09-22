@@ -282,6 +282,70 @@ def fade_out_and_pause(duration=5.0):
     # Restore original volume safely so next session starts normal
     send_mpv_cmd(["set_property", "volume", current_vol])
 
+def get_status_dict():
+    is_loading = False
+    target_vid = ""
+    target_path = ""
+    if os.path.exists(PLAYBACK_STATE_FILE):
+        try:
+            with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
+                st = json.load(f)
+                if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
+                    is_loading = True
+                    target_vid = st.get("target_vid", "")
+                    target_path = st.get("path", "")
+        except Exception:
+            pass
+
+    props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
+    batch = get_mpv_properties_batch(props)
+
+    pause = batch.get("pause")
+    time_pos = batch.get("time-pos") or 0.0
+    duration = batch.get("duration") or 0.0
+    filename = batch.get("filename") or ""
+    path = batch.get("path") or ""
+    vol = batch.get("volume") if batch.get("volume") is not None else 100
+    idle = batch.get("idle-active")
+
+    is_target_active = True
+    if target_vid:
+        is_target_active = (target_vid in path) or (target_vid in filename)
+    elif target_path:
+        is_target_active = (path == target_path) or (filename and target_path.endswith(filename))
+
+    if is_loading and is_target_active and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
+        is_loading = False
+        try:
+            with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"state": "playing", "path": path, "target_vid": target_vid, "timestamp": time.time()}, f)
+        except Exception:
+            pass
+
+    has_file = bool((path or filename) and not idle and is_target_active) and (not is_loading or (time_pos is not None and time_pos > 0))
+
+    return {
+        "is_playing": (pause is False) and has_file,
+        "is_paused": (pause is True) and bool((path or filename) and not idle and is_target_active),
+        "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
+        "duration": round(duration, 1) if (has_file and is_target_active) else 0.0,
+        "filename": (filename or path) if (has_file and is_target_active) else "",
+        "volume": vol,
+        "is_loading": is_loading
+    }
+
+def get_status_json():
+    return json.dumps(get_status_dict())
+
+def handle_cli(args):
+    """Entry point for in-process execution without spawning a new Python subprocess."""
+    old_argv = sys.argv
+    sys.argv = ["player_daemon.py"] + list(args)
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: player_daemon.py [play <path> [title] [artist] [art_url] | pause | resume | toggle | seek <sec> | stop | status]")
@@ -489,59 +553,7 @@ def main():
             ytmusic_helper.resolve_stream_url(vid)
 
     elif action == "status":
-        is_loading = False
-        target_vid = ""
-        target_path = ""
-        if os.path.exists(PLAYBACK_STATE_FILE):
-            try:
-                with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
-                    st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
-                        is_loading = True
-                        target_vid = st.get("target_vid", "")
-                        target_path = st.get("path", "")
-            except Exception:
-                pass
-
-        props = ["pause", "time-pos", "duration", "filename", "path", "volume", "idle-active"]
-        batch = get_mpv_properties_batch(props)
-
-        pause = batch.get("pause")
-        time_pos = batch.get("time-pos") or 0.0
-        duration = batch.get("duration") or 0.0
-        filename = batch.get("filename") or ""
-        path = batch.get("path") or ""
-        vol = batch.get("volume") if batch.get("volume") is not None else 100
-        idle = batch.get("idle-active")
-
-        # Crucial check: verify if MPV has actually switched to the target track
-        is_target_active = True
-        if target_vid:
-            is_target_active = (target_vid in path) or (target_vid in filename)
-        elif target_path:
-            is_target_active = (path == target_path) or (filename and target_path.endswith(filename))
-
-        # Auto-clear is_loading state once the TARGET audio has actually started playing in MPV
-        if is_loading and is_target_active and ((time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)):
-            is_loading = False
-            try:
-                with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
-                    json.dump({"state": "playing", "path": path, "target_vid": target_vid, "timestamp": time.time()}, f)
-            except Exception:
-                pass
-
-        has_file = bool((path or filename) and not idle and is_target_active) and (not is_loading or (time_pos is not None and time_pos > 0))
-
-        status = {
-            "is_playing": (pause is False) and has_file,
-            "is_paused": (pause is True) and bool((path or filename) and not idle and is_target_active),
-            "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
-            "duration": round(duration, 1) if (has_file and is_target_active) else 0.0,
-            "filename": (filename or path) if (has_file and is_target_active) else "",
-            "volume": vol,
-            "is_loading": is_loading
-        }
-        print(json.dumps(status))
+        print(get_status_json())
 
 
     elif action == "audio_specs":

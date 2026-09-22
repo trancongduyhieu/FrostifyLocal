@@ -1295,7 +1295,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: 600
+        interval: win.isCoListeningActive ? 800 : 3500
         repeat: true
         running: true
         triggeredOnStart: true
