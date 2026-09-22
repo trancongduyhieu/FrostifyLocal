@@ -70,7 +70,6 @@ def get_music_dir() -> str:
 
 if IS_WINDOWS:
     import ctypes
-    from ctypes import wintypes
 
     kernel32 = ctypes.windll.kernel32
     GENERIC_READ = 0x80000000
@@ -97,7 +96,7 @@ if IS_WINDOWS:
                 raise OSError(f"Failed to open named pipe {pipe_name}, win32 error: {err}")
 
         def sendall(self, data: bytes):
-            bytes_written = wintypes.DWORD()
+            bytes_written = ctypes.c_ulong()
             res = kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(bytes_written), None)
             if not res:
                 err = ctypes.GetLastError()
@@ -105,7 +104,7 @@ if IS_WINDOWS:
 
         def recv(self, bufsize: int = 4096) -> bytes:
             buf = ctypes.create_string_buffer(bufsize)
-            bytes_read = wintypes.DWORD()
+            bytes_read = ctypes.c_ulong()
             res = kernel32.ReadFile(self.handle, buf, bufsize, ctypes.byref(bytes_read), None)
             if not res:
                 err = ctypes.GetLastError()

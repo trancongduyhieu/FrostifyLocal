@@ -36,6 +36,7 @@ hidden_imports = [
     'threading',
     'subprocess',
     'ctypes',
+    'ctypes.wintypes',
     'mutagen',
     'ytmusicapi',
     'syncedlyrics',
