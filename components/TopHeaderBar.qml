@@ -262,7 +262,22 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if (typeof win !== "undefined" && win && typeof win.startSystemMove === "function") {
+                        win.startSystemMove();
+                    }
+                }
+                onDoubleClicked: {
+                    headerRoot.maximizeWindowRequested();
+                }
+            }
+        }
 
         // Window Maximize / Restore Button [ ◻ ]
         Rectangle {

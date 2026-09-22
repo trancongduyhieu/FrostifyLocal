@@ -116,14 +116,14 @@ check_cli_dispatch()
 # Detect Qt bindings (PySide6 or PyQt6)
 try:
     from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread
-    from PySide6.QtGui import QGuiApplication, QIcon
+    from PySide6.QtGui import QGuiApplication, QIcon, QWindow
     from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
     from PySide6.QtQuick import QQuickWindow
     IS_PYSIDE = True
 except ImportError:
     try:
         from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread
-        from PyQt6.QtGui import QGuiApplication, QIcon
+        from PyQt6.QtGui import QGuiApplication, QIcon, QWindow
         from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
         from PyQt6.QtQuick import QQuickWindow
         IS_PYSIDE = False
@@ -300,6 +300,25 @@ def main():
         except Exception:
             pass
         sys.exit(1)
+
+    # In Qt Quick, when root object in QML is a Scope (Item),
+    # child Window instances (like FloatingWindow) are NOT automatically shown by QQmlApplicationEngine.
+    # Explicitly show all top-level windows and child QWindows/QQuickWindows.
+    for obj in engine.rootObjects():
+        if isinstance(obj, (QWindow, QQuickWindow)):
+            obj.show()
+            obj.raise_()
+            obj.requestActivate()
+        if hasattr(obj, "findChildren"):
+            for child_win in obj.findChildren(QWindow):
+                child_win.show()
+                child_win.raise_()
+                child_win.requestActivate()
+
+    for top_win in app.topLevelWindows():
+        top_win.show()
+        top_win.raise_()
+        top_win.requestActivate()
 
     sys.exit(app.exec())
 

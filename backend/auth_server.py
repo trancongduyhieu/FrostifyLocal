@@ -424,10 +424,28 @@ class CloudRelayClient:
         req.add_header("Content-Type", "application/json")
         req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0")
         body = json.dumps(data).encode("utf-8") if data is not None else None
+        import ssl
+        ctx = None
         try:
-            with urllib.request.urlopen(req, data=body, timeout=5.0) as resp:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            try:
+                ctx = ssl.create_default_context()
+            except Exception:
+                ctx = None
+
+        try:
+            with urllib.request.urlopen(req, data=body, timeout=5.0, context=ctx) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as e:
+            if "CERTIFICATE_VERIFY_FAILED" in str(e):
+                try:
+                    unverified_ctx = ssl._create_unverified_context()
+                    with urllib.request.urlopen(req, data=body, timeout=5.0, context=unverified_ctx) as resp:
+                        return json.loads(resp.read().decode("utf-8"))
+                except Exception:
+                    pass
             sys.stderr.write(f"[CloudRelayClient request failed]: {e}\n")
             return None
 
