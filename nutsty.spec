@@ -15,6 +15,12 @@ added_datas = [
 
 # Do not bundle local developer's library.json into Windows portable release
 
+try:
+    from PyInstaller.utils.hooks import collect_data_files
+    added_datas += collect_data_files('ytmusicapi')
+except Exception:
+    pass
+
 hidden_imports = [
     'PySide6.QtCore',
     'PySide6.QtGui',

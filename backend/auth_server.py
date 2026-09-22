@@ -1172,16 +1172,24 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-    def _send_json(self, data, status_code=200):
-        payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    def handle_one_request(self):
         try:
+            super().handle_one_request()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+            self.close_connection = True
+
+    def _send_json(self, data, status_code=200):
+        try:
+            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(status_code)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
+        except Exception:
             pass
 
     def do_OPTIONS(self):
@@ -1197,64 +1205,34 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/status":
             st = ytmusic_helper.get_auth_status()
-            payload = json.dumps(st, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(st, 200)
         elif path == "/api/mood":
             params = query.get("params", [""])[0]
             title = query.get("title", [""])[0]
-            data = ytmusic_helper.get_mood_feed(params, title)
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            try:
+                data = ytmusic_helper.get_mood_feed(params, title)
+            except Exception as e:
+                data = {"sections": [], "quick_picks": [], "featured_playlists": []}
+            self._send_json(data, 200)
         elif path == "/api/home":
-            data = ytmusic_helper.get_personalized_home()
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            try:
+                data = ytmusic_helper.get_personalized_home()
+            except Exception as e:
+                data = {"moods": [], "sections": [], "quick_picks": [], "featured_playlists": []}
+            self._send_json(data, 200)
         elif path == "/api/suggestions":
             q = query.get("q", [""])[0]
             data = ytmusic_helper.get_search_suggestions(q)
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(data, 200)
         elif path == "/api/filter_search":
             q = query.get("q", [""])[0]
             flt = query.get("filter", ["songs"])[0]
             data = ytmusic_helper.filter_search(q, flt)
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(data, 200)
         elif path == "/api/playlist":
             pl_id = query.get("id", [""])[0]
             data = ytmusic_helper.get_playlist_tracks(pl_id)
-            payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(data, 200)
         elif path == "/api/artist_shuffle":
             name = query.get("name", [""])[0]
             browse_id = query.get("browseId", [""])[0]

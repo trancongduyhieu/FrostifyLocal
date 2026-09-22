@@ -19,6 +19,18 @@ except (ImportError, ValueError):
 
 pc.configure_windows_ssl()
 
+# Monkey-patch gettext.translation to prevent FileNotFoundError: [Errno 2] No translation file found for domain: 'base'
+import gettext
+if not getattr(gettext, "_nutsty_patched", False):
+    _orig_translation = gettext.translation
+    def _safe_translation(domain, localedir=None, languages=None, class_=None, fallback=False, codeset=None):
+        try:
+            return _orig_translation(domain, localedir=localedir, languages=languages, class_=class_, fallback=fallback)
+        except (FileNotFoundError, OSError):
+            return gettext.NullTranslations()
+    gettext.translation = _safe_translation
+    gettext._nutsty_patched = True
+
 # Monkey-patch ytmusicapi sapisid_from_cookie to be 100% immune to SimpleCookie syntax/token errors
 def safe_sapisid_from_cookie(raw_cookie: str) -> str:
     match = re.search(r'(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)', raw_cookie)

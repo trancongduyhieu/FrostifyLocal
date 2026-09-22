@@ -265,3 +265,22 @@ def configure_windows_ssl():
             pass
     except Exception:
         pass
+
+def patch_gettext_translation():
+    """Ensure gettext.translation does not crash if locale files are missing (common in PyInstaller bundles)."""
+    try:
+        import gettext
+        if getattr(gettext, "_nutsty_patched", False):
+            return
+        orig_translation = gettext.translation
+        def _safe_translation(domain, localedir=None, languages=None, class_=None, fallback=False, codeset=None):
+            try:
+                return orig_translation(domain, localedir=localedir, languages=languages, class_=class_, fallback=fallback)
+            except (FileNotFoundError, OSError):
+                return gettext.NullTranslations()
+        gettext.translation = _safe_translation
+        gettext._nutsty_patched = True
+    except Exception:
+        pass
+
+patch_gettext_translation()
