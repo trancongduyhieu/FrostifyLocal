@@ -421,11 +421,24 @@ Scope {
                     console.log("homeProc parse error:", e);
                 } finally {
                     win.isLoadingHome = false;
+                    homeLoadingSafetyTimer.stop();
                 }
             }
         }
         onExited: {
             win.isLoadingHome = false;
+            homeLoadingSafetyTimer.stop();
+        }
+    }
+
+    Timer {
+        id: homeLoadingSafetyTimer
+        interval: 15000
+        repeat: false
+        onTriggered: {
+            if (win.isLoadingHome) {
+                win.isLoadingHome = false;
+            }
         }
     }
 
@@ -1375,6 +1388,7 @@ Scope {
 
     function loadHomeFeed() {
         win.isLoadingHome = true;
+        homeLoadingSafetyTimer.restart();
         homeProc.running = false;
         homeProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "home"];
         homeProc.running = true;
@@ -2742,6 +2756,13 @@ Scope {
                         Qt.quit();
                     } else {
                         win.visible = false;
+                    }
+                }
+                onMinimizeWindowRequested: {
+                    if (typeof win.showMinimized === "function") {
+                        win.showMinimized();
+                    } else {
+                        win.visibility = 3;
                     }
                 }
                 onMaximizeWindowRequested: {

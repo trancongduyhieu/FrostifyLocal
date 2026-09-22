@@ -37,6 +37,7 @@ Rectangle {
     signal forwardRequested()
     signal downloadPopoverRequested()
     signal toggleSidebarRequested()
+    signal minimizeWindowRequested()
     signal maximizeWindowRequested()
     signal closeWindowRequested()
     signal homeClicked()
@@ -276,6 +277,31 @@ Rectangle {
                 onDoubleClicked: {
                     headerRoot.maximizeWindowRequested();
                 }
+            }
+        }
+
+        // Window Minimize Button [ ─ ]
+        Rectangle {
+            id: minBtn
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
+            radius: 16
+            color: minMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/window-minimize-symbolic.svg"
+                iconSize: 14
+                color: "#ffffff"
+            }
+
+            MouseArea {
+                id: minMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: headerRoot.minimizeWindowRequested()
             }
         }
 
