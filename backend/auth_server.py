@@ -1273,17 +1273,67 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
 
             if GLOBAL_RELAY_CLIENT.is_external():
                 res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
+                if res and res.get("unauthorized"):
+                    caller_ident = ensure_cloud_identity(suffix, force_recreate=True)
+                    res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
                 if res and res.get("success"):
                     notes_arr = res.get("notes") or []
+                    seen_ids = set()
+                    seen_tags = set()
                     for n_item in notes_arr:
-                        if isinstance(n_item, dict) and n_item.get("tag"):
-                            n_item["user_email"] = n_item["tag"]
+                        if isinstance(n_item, dict):
+                            if n_item.get("tag"):
+                                n_item["user_email"] = n_item["tag"]
+                                seen_tags.add(str(n_item["tag"]).strip().lower())
+                            if n_item.get("user_id"):
+                                seen_ids.add(str(n_item["user_id"]).strip().lower())
+                            if not n_item.get("user_name") and n_item.get("username"):
+                                n_item["user_name"] = n_item["username"]
+                            n_item["is_friend"] = True
+
+                    # Ensure all accepted friends from get_friends() are present in notes_arr
+                    try:
+                        fr_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
+                        for f in (fr_res.get("friends") or []):
+                            f_id = str(f.get("id") or "").strip().lower()
+                            f_tag = str(f.get("tag") or "").strip().lower()
+                            if (f_id and f_id in seen_ids) or (f_tag and f_tag in seen_tags):
+                                for n_item in notes_arr:
+                                    if (f_id and str(n_item.get("user_id") or "").strip().lower() == f_id) or \
+                                       (f_tag and str(n_item.get("tag") or "").strip().lower() == f_tag):
+                                        if not n_item.get("avatar_url") and f.get("avatar_url"):
+                                            n_item["avatar_url"] = f.get("avatar_url")
+                                        if not n_item.get("user_name") and f.get("username"):
+                                            n_item["user_name"] = f.get("username")
+                                        if not n_item.get("now_playing") and f.get("now_playing") and f.get("is_online"):
+                                            n_item["now_playing"] = f.get("now_playing")
+                            else:
+                                notes_arr.append({
+                                    "user_id": f.get("id", ""),
+                                    "user_email": f.get("tag", ""),
+                                    "user_name": f.get("username", ""),
+                                    "avatar_url": f.get("avatar_url", ""),
+                                    "tag": f.get("tag", ""),
+                                    "note_text": "",
+                                    "track": None,
+                                    "created_at": 0,
+                                    "is_friend": True,
+                                    "is_online": bool(f.get("is_online", False)),
+                                    "last_active_at": f.get("last_active_at", 0),
+                                    "now_playing": f.get("now_playing", "") if f.get("is_online") else ""
+                                })
+                                if f_id:
+                                    seen_ids.add(f_id)
+                                if f_tag:
+                                    seen_tags.add(f_tag)
+                    except Exception:
+                        pass
+
                     my_n = res.get("my_note")
                     if isinstance(my_n, dict) and my_n.get("tag"):
                         my_n["user_email"] = my_n["tag"]
-                    _cloud_notes_cache["ts"] = time.time()
-                    _cloud_notes_cache["data"] = notes_arr
-                    _cloud_notes_cache["my_note"] = my_n
+                    res["notes"] = notes_arr
+                    res["count"] = len(notes_arr)
                     self._send_json(res, 200)
                     return
 

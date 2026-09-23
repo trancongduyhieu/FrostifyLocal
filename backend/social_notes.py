@@ -20,8 +20,8 @@ except (ImportError, ValueError):
 
 pc.configure_windows_ssl()
 
-# Default Cloudflare Worker URL for global social sync
-DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "https://nutsty-global-relay.nutsty-global-relay.workers.dev")
+# Default local/cloud relay URL for social sync
+DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
 COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"
 
 def get_profile_suffix() -> str:
@@ -30,15 +30,19 @@ def get_profile_suffix() -> str:
     return f"_{profile}" if profile else ""
 
 def get_config_dir() -> Path:
-    """Xác định thư mục cấu hình chuẩn theo HĐH."""
+    """Xác định thư mục cấu hình chuẩn đồng nhất với auth_server.py và shell.qml (~/.config/noctalia)."""
+    xdg_config = os.getenv("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    noctalia_dir = Path(xdg_config) / "noctalia"
+    if noctalia_dir.exists() or sys.platform != "win32":
+        noctalia_dir.mkdir(parents=True, exist_ok=True)
+        return noctalia_dir
     if sys.platform == "win32":
         app_data = os.getenv("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        cfg_dir = Path(app_data) / "Nutsty"
-    else:
-        xdg_config = os.getenv("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-        cfg_dir = Path(xdg_config) / "noctalia"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    return cfg_dir
+        win_dir = Path(app_data) / "Nutsty"
+        if (win_dir / "nutsty_cloud_identity.json").exists():
+            return win_dir
+    noctalia_dir.mkdir(parents=True, exist_ok=True)
+    return noctalia_dir
 
 def get_friends_file() -> Path:
     suffix = get_profile_suffix()
