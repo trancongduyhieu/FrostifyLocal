@@ -2538,16 +2538,50 @@ Scope {
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
     }
 
+    // Concentric Window Corner Mask: R_outer = 24px (R_inner = 16px + 8px margin)
+    Item {
+        id: windowCornerMask
+        anchors.fill: parent
+        visible: false
+        layer.enabled: !(win.maximized || win.fullscreen)
+        layer.smooth: true
+
+        Rectangle {
+            anchors.fill: parent
+            radius: (win.maximized || win.fullscreen) ? 0 : 24
+            color: "#ffffff"
+        }
+    }
+
     // Master Container with Nutsty Calm Deep Acrylic Aesthetic
     Rectangle {
         id: masterContainer
         anchors.fill: parent
-        radius: (win.maximized || win.fullscreen) ? 0 : 16
+        radius: (win.maximized || win.fullscreen) ? 0 : 24
         color: "transparent"
         border.color: "transparent"
         border.width: 0
         clip: true
         focus: true
+        layer.enabled: !(win.maximized || win.fullscreen)
+        layer.smooth: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: windowCornerMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+
+        // Outer 1px Concentric Hairline Border (R_outer = 24px)
+        Rectangle {
+            id: windowOuterHairlineBorder
+            anchors.fill: parent
+            radius: (win.maximized || win.fullscreen) ? 0 : 24
+            color: "transparent"
+            border.width: (win.maximized || win.fullscreen) ? 0 : 1
+            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.16)
+            z: 9999
+        }
 
         // =====================================================================
         // Dynamic Backdrop Atmosphere & Foundation:

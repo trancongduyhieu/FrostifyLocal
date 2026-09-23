@@ -560,18 +560,63 @@ def start_daemons():
     threading.Thread(target=_palette_runner, daemon=True).start()
     threading.Thread(target=_library_runner, daemon=True).start()
 
+def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
+    """Create a crisp Dark Glass + Equalizer wave icon for Nutsty taskbar & Windows System Tray."""
+    try:
+        from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush
+        from PySide6.QtCore import Qt, QRectF
+        pix = QPixmap(64, 64)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Outer Dark Glass Rounded Square (R=16)
+        bg_rect = QRectF(2, 2, 60, 60)
+        painter.setPen(QPen(QColor(222, 176, 108, 210), 2.5))
+        painter.setBrush(QBrush(QColor(16, 18, 24, 248)))
+        painter.drawRoundedRect(bg_rect, 16, 16)
+
+        # 3 Warm Gold Equalizer Bars (Nutsty signature soundwave)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(222, 176, 108, 255)))
+        painter.drawRoundedRect(QRectF(16, 24, 6, 18), 3, 3)
+        painter.drawRoundedRect(QRectF(29, 15, 6, 34), 3, 3)
+        painter.drawRoundedRect(QRectF(42, 21, 6, 24), 3, 3)
+        painter.end()
+
+        if icon_save_path and not os.path.exists(icon_save_path):
+            try:
+                os.makedirs(os.path.dirname(icon_save_path), exist_ok=True)
+                pix.save(icon_save_path, "PNG")
+            except Exception:
+                pass
+        return QIcon(pix)
+    except Exception:
+        return QIcon()
+
+
 def main():
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
-    
-    app = QGuiApplication(sys.argv)
+
+    try:
+        from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+        from PySide6.QtGui import QCursor, QAction
+        app = QApplication(sys.argv)
+        has_widgets = True
+    except Exception:
+        app = QGuiApplication(sys.argv)
+        has_widgets = False
+
+    app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Nutsty")
     app.setOrganizationName("Nutsty")
 
     icon_path = os.path.join(APP_ROOT, "assets", "icons", "nutsty.png")
-    if not os.path.exists(icon_path):
-        icon_path = os.path.join(APP_ROOT, "assets", "icons", "application-x-executable.svg")
-    if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+    app_icon = _create_nutsty_app_icon(icon_path)
+    if os.path.exists(icon_path) and app_icon.isNull():
+        app_icon = QIcon(icon_path)
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     register_qml_types()
     start_daemons()
@@ -618,24 +663,109 @@ def main():
             pass
         sys.exit(1)
 
-    # In Qt Quick, when root object in QML is a Scope (Item),
-    # child Window instances (like FloatingWindow) are NOT automatically shown by QQmlApplicationEngine.
-    # Explicitly show all top-level windows and child QWindows/QQuickWindows.
+    main_win_ref = [None]
     for obj in engine.rootObjects():
         if isinstance(obj, (QWindow, QQuickWindow)):
+            if main_win_ref[0] is None and obj.width() >= 500:
+                main_win_ref[0] = obj
             obj.show()
             obj.raise_()
             obj.requestActivate()
         if hasattr(obj, "findChildren"):
             for child_win in obj.findChildren(QWindow):
+                if main_win_ref[0] is None and child_win.width() >= 500:
+                    main_win_ref[0] = child_win
                 child_win.show()
                 child_win.raise_()
                 child_win.requestActivate()
 
     for top_win in app.topLevelWindows():
+        if main_win_ref[0] is None and top_win.width() >= 500:
+            main_win_ref[0] = top_win
         top_win.show()
         top_win.raise_()
         top_win.requestActivate()
+
+    # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
+    tray_icon = None
+    if has_widgets and QSystemTrayIcon.isSystemTrayAvailable():
+        tray_icon = QSystemTrayIcon(app_icon, app)
+        tray_icon.setToolTip("Nutsty Music Player")
+
+        tray_menu = QMenu()
+        tray_menu.setStyleSheet("""
+            QMenu {
+                background-color: #101218;
+                color: #ffffff;
+                border: 1px solid rgba(222, 176, 108, 0.38);
+                border-radius: 10px;
+                padding: 6px;
+                font-family: 'Segoe UI', 'Inter', sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QMenu::item {
+                padding: 8px 18px;
+                border-radius: 6px;
+                margin: 2px 2px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(222, 176, 108, 0.22);
+                color: #ffffff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: rgba(255, 255, 255, 0.10);
+                margin: 4px 8px;
+            }
+        """)
+
+        def _open_full_window():
+            target_w = main_win_ref[0]
+            if not target_w:
+                for tw in app.topLevelWindows():
+                    if tw.width() >= 500:
+                        target_w = tw
+                        main_win_ref[0] = tw
+                        break
+            if target_w:
+                target_w.setProperty("visible", True)
+                bridge.restoreWindow(target_w)
+
+        def _quit_nutsty_completely():
+            try:
+                if tray_icon:
+                    tray_icon.hide()
+            except Exception:
+                pass
+            try:
+                import player_daemon
+                player_daemon.handle_cli(["stop"])
+            except Exception:
+                pass
+            os._exit(0)
+
+        act_open = QAction("Mở cửa sổ chính (Open Full)", tray_menu)
+        act_open.triggered.connect(_open_full_window)
+        tray_menu.addAction(act_open)
+
+        tray_menu.addSeparator()
+
+        act_quit = QAction("Tắt ứng dụng (Quit)", tray_menu)
+        act_quit.triggered.connect(_quit_nutsty_completely)
+        tray_menu.addAction(act_quit)
+
+        tray_icon.setContextMenu(tray_menu)
+
+        def _on_tray_activated(reason):
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                _open_full_window()
+            elif reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.Context):
+                tray_menu.popup(QCursor.pos())
+                tray_menu.activateWindow()
+
+        tray_icon.activated.connect(_on_tray_activated)
+        tray_icon.show()
 
     sys.exit(app.exec())
 

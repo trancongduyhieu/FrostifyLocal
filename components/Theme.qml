@@ -28,8 +28,8 @@ QtObject {
     // Typography Family
     readonly property string fontFamily: "Inter, SF Pro Display, -apple-system, sans-serif"
 
-    // Spacing and Radii
-    readonly property int radiusApp: 12
+    // Spacing and Radii (Concentric: R_inner = R_outer - Padding)
+    readonly property int radiusApp: 24
     readonly property int radiusCard: 8
     readonly property int radiusPill: 16
     readonly property int radiusSm: 4

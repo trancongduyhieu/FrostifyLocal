@@ -6,12 +6,12 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 
 ## 1. Tổng Quan Dự Án (Project Overview)
 
-**Nutsty** là trình phát nhạc cục bộ và máy tính để bàn (Desktop Music & Streaming Player) được tối ưu hóa chuyên sâu cho môi trường Linux Wayland (Niri compositor), kết hợp giữa:
-- **Giao diện người dùng hiện đại**: Viết bằng **Quickshell (Qt 6 / QML)** với khả năng tăng tốc GPU phần cứng và hỗ trợ native Wayland layer-shell.
-- **Backend phát nhạc độ trễ thấp**: Trình điều khiển **Python IPC daemon** (`backend/player_daemon.py`) giao tiếp trực tiếp qua Unix Domain Socket (`/tmp/nutsty_mpv.sock`) với một tiến trình `mpv` chuyên biệt (hỗ trợ gapless playback, hardware decoding, flac/m4a/opus/mp3/ytdl streams).
-- **Desktop Lyrics ma thuật phong cách Gacha/Anime**: Hiển thị lyric nổi trực tiếp lên hình nền desktop với font chữ cổ điển *Instrument Serif*, hiệu ứng pop chữ gacha và đổ bóng điện ảnh thích ứng màu sắc hình nền.
-- **Bộ máy màu sắc thích ứng Chromatic Salience (OKLAB / OKLCH)**: Trích xuất màu điểm nhấn nghệ thuật từ hình nền hiện tại và cập nhật theo thời gian thực vào `~/.config/noctalia/nutsty_palette.json`.
-- **Mạng xã hội & Đồng bộ Edge toàn cầu**: Kiến trúc **Cloudflare Workers + Cloudflare D1 (Serverless Distributed SQLite)** định tuyến toàn bộ tìm kiếm bạn bè, kết bạn, trạng thái nghe trực tiếp và ghi chú 24h Music Capsule qua HTTPS toàn cầu (`https://nutsty-global-relay.nutsty-global-relay.workers.dev`).
+**Nutsty** là trình phát nhạc cục bộ và máy tính để bàn đa nền tảng (Dual-Platform Desktop Music & Streaming Player) được tối ưu hóa song song cho cả **Linux Wayland (Niri compositor / CachyOS)** và **Windows (`launcher_win.py` / Win32 + System Tray)**:
+- **Giao diện người dùng hiện đại**: Viết bằng **Quickshell (Qt 6 / QML)** với tăng tốc GPU phần cứng, hỗ trợ native Wayland layer-shell trên Linux và PySide6 QML + `QSystemTrayIcon` trên Windows.
+- **Backend phát nhạc độ trễ thấp**: Trình điều khiển **Python IPC daemon** (`backend/player_daemon.py`) giao tiếp qua Unix Domain Socket (`/tmp/nutsty_mpv.sock` trên Linux) hoặc Named Pipe (`\\.\pipe\nutsty_mpv` trên Windows) với `mpv` (gapless playback, hardware decoding, flac/m4a/opus/mp3/ytdl streams).
+- **Desktop Lyrics & Widget 216x216**: Hiển thị lyric nổi *Instrument Serif* trên desktop và widget mini vuông (`DesktopMusicWidget.qml`) kèm System Tray icon trên Windows.
+- **Bộ máy màu sắc thích ứng Chromatic Salience (OKLAB / OKLCH)**: Trích xuất màu điểm nhấn từ hình nền và cập nhật theo thời gian thực vào `nutsty_palette.json`.
+- **Mạng xã hội & Đồng bộ Edge toàn cầu**: Kiến trúc **Cloudflare Workers + Cloudflare D1** định tuyến kết bạn, trạng thái nghe cùng (`Listen Along`) xuyên nền tảng (`Linux <-> Windows`) và ghi chú 24h qua HTTPS.
 
 ---
 
@@ -46,6 +46,9 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 > 10. **QUY TRÌNH ĐÚC KẾT KỸ NĂNG & CODE MẪU XUẤT SẮC (`04-code-recipes-and-patterns.md`)**:
 >     - Khi người dùng yêu cầu lưu lại một kỹ năng, pattern hoặc đoạn code mẫu mà AI đã thực hiện tốt: AI **BẮT BUỘC** tự động đúc kết thành 1 thẻ Pattern chuẩn (Tên Pattern, Bài toán giải quyết, Khối code mẫu hoàn chỉnh ~15–25 dòng không hardcode, và Lưu ý quan trọng) rồi ghi vào `.agents/rules/04-code-recipes-and-patterns.md`.
 >     - Ngân sách dòng linh hoạt cho file này là $\le$ 200 dòng (< 18 KB) để đảm bảo code mẫu không bị cắt xén logic cốt lõi.
+> 11. **ĐỒNG BỘ & TỐI ƯU ĐA NỀN TẢNG SONG SONG (DUAL-PLATFORM PARITY: LINUX NIRI/CACHYOS & WINDOWS)**:
+>     - Khi viết hoặc sửa bất kỳ tính năng nào (UI, bo góc đồng tâm $R_{\text{trong}} = R_{\text{ngoài}} - \text{Khoảng cách}$, tải nhạc, phát nhạc local/online, Nghe Cùng), AI **BẮT BUỘC** phải tối ưu và đảm bảo hoạt động hoàn hảo trên cả **Linux Wayland (Niri / CachyOS)** lẫn **Windows (`launcher_win.py` + `compat/Quickshell`)**.
+>     - Trên Windows: Cửa sổ chính (`masterContainer`) bắt buộc bọc `MultiEffect` mask bo tròn đồng tâm ($R_{\text{ngoài}} = 24\text{px}$, viền hairline 1px), tích hợp icon khay hệ thống (`QSystemTrayIcon`) gồm 2 lựa chọn **"Mở cửa sổ chính (Open Full)"** và **"Tắt ứng dụng (Quit)"**, và hỗ trợ tải nhạc trực tiếp không phụ thuộc `ffmpeg`.
 
 ---
 
@@ -53,9 +56,10 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 
 ```
 /home/apple/Applications/FrostifyLocal/
-├── run.sh                          # Script khởi chạy 1-chạm (scan nhạc + quickshell)
+├── run.sh / start.bat              # Script khởi chạy 1-chạm trên Linux (run.sh) & Windows (start.bat)
+├── launcher_win.py                 # Entry point PySide6 + System Tray + Win32 bridge trên Windows
 ├── shell.qml                       # Entry point QML chính (FloatingWindow Nutsty + DesktopLyricsWidget)
-├── library.json                    # Dữ liệu cache bài hát, metadata và album
+├── compat/Quickshell/              # Lớp tương thích Quickshell QML cho Windows (FloatingWindow, Process)
 ├── assets/                         # Font Instrument Serif, SVG icons, dữ liệu tĩnh
 ├── scripts/
 │   └── run_dual_profile_test.sh    # Launcher test 2 profile song song (user1 & user2)
