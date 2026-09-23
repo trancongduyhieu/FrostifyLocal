@@ -20,8 +20,8 @@ except (ImportError, ValueError):
 
 pc.configure_windows_ssl()
 
-# Default Cloudflare Worker URL (Defaults to local daemon 127.0.0.1:17890, or Cloudflare Worker via NUTSTY_WORKER_URL)
-DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
+# Default Cloudflare Worker URL for global social sync
+DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "https://nutsty-global-relay.nutsty-global-relay.workers.dev")
 COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"
 
 def get_profile_suffix() -> str:

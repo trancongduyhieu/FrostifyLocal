@@ -255,7 +255,7 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
 
         for q in queries:
             try:
-                lrc = syncedlyrics.search(q, providers=["lrclib", "netease", "musixmatch"])
+                lrc = syncedlyrics.search(q, providers=["netease", "lrclib"])
                 if lrc:
                     parsed = parse_lrc(lrc)
                     if parsed:
@@ -272,7 +272,29 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None):
         sys.stderr.write("[syncedlyrics not available, skipping online search]\n")
 
     # -------------------------------------------------------------------------
-    # TẦNG 3: Dự phòng cuối cùng (Local SQLite Database)
+    # TẦNG 3: Dự phòng YouTube Music InnerTube Lyrics
+    # -------------------------------------------------------------------------
+    if video_id:
+        try:
+            import ytmusic_helper
+            yt_lyrics = ytmusic_helper.get_youtube_lyrics(video_id)
+            if yt_lyrics:
+                lines = [l.strip() for l in yt_lyrics.split("\n") if l.strip()]
+                if lines:
+                    formatted = []
+                    for idx, line in enumerate(lines):
+                        formatted.append({
+                            "time": idx * 3.5,
+                            "text": line,
+                            "hasWords": False,
+                            "words": []
+                        })
+                    return formatted
+        except Exception as ye:
+            sys.stderr.write(f"[ytmusic lyrics fallback error]: {ye}\n")
+
+    # -------------------------------------------------------------------------
+    # TẦNG 4: Dự phòng cuối cùng (Local SQLite Database)
     # -------------------------------------------------------------------------
     return db_lyrics or get_lyrics_from_local_db(title, artist, video_id)
 

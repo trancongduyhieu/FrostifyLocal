@@ -539,7 +539,7 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.register(username, avatar_url, client_secret, user_id, preferred_discriminator)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def update_profile(self, user_id, secret_key, new_username=None, new_discriminator=None, avatar_url=None):
         if self.is_external():
@@ -552,14 +552,14 @@ class CloudRelayClient:
             })
             if res:
                 return res
-        return self.local_engine.update_profile(user_id, secret_key, new_username, new_discriminator, avatar_url)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def search(self, q, caller_user_id=None):
         if self.is_external():
             res = self._http_request("GET", "/api/users/search", params={"q": q, "user_id": caller_user_id or ""})
             if res and "results" in res:
                 return res
-        return self.local_engine.search(q, caller_user_id)
+        return {"success": False, "results": []}
 
     def friend_request(self, from_user_id, secret_key, target_user_id):
         if self.is_external():
@@ -570,7 +570,7 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.friend_request(from_user_id, secret_key, target_user_id)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def friend_respond(self, user_id, secret_key, from_user_id, action):
         if self.is_external():
@@ -582,7 +582,7 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.friend_respond(user_id, secret_key, from_user_id, action)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def friend_remove(self, user_id, secret_key, target_user_id):
         if self.is_external():
@@ -593,21 +593,21 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.friend_remove(user_id, secret_key, target_user_id)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def get_friends(self, user_id, secret_key):
         if self.is_external():
             res = self._http_request("GET", "/api/friends", params={"user_id": user_id, "secret_key": secret_key})
             if res and res.get("success"):
                 return res
-        return self.local_engine.get_friends(user_id, secret_key)
+        return {"success": False, "friends": [], "incoming_requests": []}
 
     def get_events(self, user_id, secret_key):
         if self.is_external():
             res = self._http_request("GET", "/api/events", params={"user_id": user_id, "secret_key": secret_key})
             if res and res.get("success"):
                 return res
-        return self.local_engine.get_events(user_id, secret_key)
+        return {"success": False, "events": []}
 
     def update_presence(self, user_id, secret_key, now_playing):
         if self.is_external():
@@ -618,7 +618,7 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.update_presence(user_id, secret_key, now_playing)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def set_offline(self, user_id, secret_key):
         if self.is_external():
@@ -628,7 +628,7 @@ class CloudRelayClient:
             })
             if res and res.get("success"):
                 return res
-        return self.local_engine.set_offline(user_id, secret_key)
+        return {"success": False, "error": "Cloud relay unreachable"}
 
     def publish_note(self, user_id, secret_key, note_text, track=None, now_playing=None):
         if self.is_external():
@@ -1989,11 +1989,11 @@ def run_server():
     server_address = (HOST, PORT)
     try:
         httpd = ThreadingHTTPServer(server_address, AuthWebhookHandler)
-        print(f"Nutsty Auth Server listening on http://{HOST}:{PORT}")
+        print(f"Nutsty Local IPC Bridge ready (127.0.0.1:{PORT}) | Global Social: {GLOBAL_RELAY_CLIENT.relay_url}")
         httpd.serve_forever()
     except OSError as e:
         if "Address already in use" in str(e):
-            print(f"Nutsty Auth Server port {PORT} already active.")
+            print(f"Nutsty Local IPC Bridge (port {PORT}) already active.")
         else:
             sys.stderr.write(f"Auth server error: {e}\n")
 

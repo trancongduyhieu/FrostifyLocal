@@ -113,7 +113,7 @@ Item {
         }
 
         root.isSearching = true;
-        var apiUrl = (typeof win !== "undefined" && win.notesApiUrl) ? win.notesApiUrl : "http://127.0.0.1:17890";
+        var apiUrl = (typeof win !== "undefined" && win.notesApiUrl) ? win.notesApiUrl : "https://nutsty-global-relay.nutsty-global-relay.workers.dev";
         var url = apiUrl + "/api/users/search?q=" + encodeURIComponent(q) + "&user_email=" + encodeURIComponent(root.currentUserEmail);
 
         var xhr = new XMLHttpRequest();

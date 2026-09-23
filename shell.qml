@@ -85,6 +85,7 @@ Scope {
     property real lastTrackSwitchTimestamp: 0.0
     property string toastMessage: ""
     property bool toastVisible: false
+    property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
@@ -1424,7 +1425,7 @@ Scope {
         homeLoadingSafetyTimer.restart();
 
         // Dual-load: fast asynchronous HTTP /api/home with fallback to homeProc
-        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/home";
+        var apiUrl = (win.localApiUrl || "http://127.0.0.1:17890") + "/api/home";
         var xhr = new XMLHttpRequest();
         xhr.open("GET", apiUrl, true);
         xhr.onreadystatechange = function() {
@@ -1470,7 +1471,7 @@ Scope {
         }
         win.isLoadingHome = true;
 
-        var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/mood?params=" + encodeURIComponent(params) + "&title=" + encodeURIComponent(title);
+        var apiUrl = (win.localApiUrl || "http://127.0.0.1:17890") + "/api/mood?params=" + encodeURIComponent(params) + "&title=" + encodeURIComponent(title);
         var xhr = new XMLHttpRequest();
         xhr.open("GET", apiUrl, true);
         xhr.onreadystatechange = function() {

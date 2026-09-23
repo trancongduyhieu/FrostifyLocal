@@ -16,7 +16,7 @@ added_datas = [
 # Do not bundle local developer's library.json into Windows portable release
 
 try:
-    from PyInstaller.utils.hooks import collect_data_files
+    from PyInstaller.utils.hooks import collect_data_files, collect_submodules
     added_datas += collect_data_files('ytmusicapi')
 except Exception:
     pass
@@ -88,6 +88,12 @@ hidden_imports = [
     'certifi',
     'urllib3',
 ]
+
+try:
+    hidden_imports += collect_submodules('ytmusicapi')
+    hidden_imports += collect_submodules('syncedlyrics')
+except Exception:
+    pass
 
 try:
     import certifi

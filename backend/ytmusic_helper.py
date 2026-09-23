@@ -1332,73 +1332,138 @@ def _parse_duration_seconds(dur_str):
         return 0
     return 0
 
+def _safe_parse_watch_playlist(contents):
+    """Safely parse watch playlist contents with ytmusicapi or inline fallback."""
+    try:
+        from ytmusicapi.parsers.watch import parse_watch_playlist
+        parsed = parse_watch_playlist(contents)
+        if parsed:
+            return parsed
+    except Exception:
+        pass
+
+    tracks = []
+    for item in contents:
+        data = None
+        if "playlistPanelVideoWrapperRenderer" in item:
+            data = item["playlistPanelVideoWrapperRenderer"].get("primaryRenderer", {}).get("playlistPanelVideoRenderer")
+        elif "playlistPanelVideoRenderer" in item:
+            data = item["playlistPanelVideoRenderer"]
+        if not data or "unplayableText" in data:
+            continue
+
+        vid = data.get("videoId", "")
+        title_runs = data.get("title", {}).get("runs", [])
+        title = "".join(r.get("text", "") for r in title_runs).strip()
+        length = data.get("lengthText", {}).get("runs", [{}])[0].get("text", "")
+        thumbs = data.get("thumbnail", {}).get("thumbnails", [])
+        thumb = thumbs[-1].get("url", "") if thumbs else ""
+
+        artist = ""
+        byline_runs = data.get("longBylineText", {}).get("runs", []) or data.get("shortBylineText", {}).get("runs", [])
+        if byline_runs:
+            artist = "".join(r.get("text", "") for r in byline_runs).strip()
+
+        if vid and title:
+            tracks.append({
+                "videoId": vid,
+                "title": title,
+                "name": title,
+                "length": length,
+                "duration": length,
+                "thumbnail": thumb,
+                "thumbnails": thumbs,
+                "artist": artist,
+                "artists": [{"name": artist}] if artist else []
+            })
+    return tracks
+
 def get_watch_playlist_chips(video_id):
     if video_id.startswith("ytdl://"):
         video_id = video_id.replace("ytdl://", "")
 
-    yt = get_ytmusic_client()
+    clients = [get_ytmusic_client()]
     try:
-        res = yt._send_request('next', {'videoId': video_id, 'playlistId': f'RDAMVM{video_id}'})
-        tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
-        if not tabs:
-            return []
-        queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
-        chips_raw = queue.get('subHeaderChipCloud', {}).get('chipCloudRenderer', {}).get('chips', [])
+        from ytmusicapi import YTMusic
+        clients.append(YTMusic(requests_session=create_resilient_session()))
+    except Exception:
+        pass
 
-        chips = []
-        for c in chips_raw:
-            cr = c.get('chipCloudChipRenderer', {})
-            title = ''.join(r.get('text', '') for r in cr.get('text', {}).get('runs', [])).strip()
-            ep = cr.get('navigationEndpoint', {}).get('queueUpdateCommand', {}).get('fetchContentsCommand', {}).get('watchEndpoint', {})
-            playlist_id = ep.get('playlistId', '')
-            params = ep.get('params', '')
-            is_selected = cr.get('isSelected', False)
-            if title:
-                chips.append({
-                    "title": title,
-                    "playlistId": playlist_id,
-                    "params": params,
-                    "selected": is_selected
-                })
-        return chips
-    except Exception as e:
-        sys.stderr.write(f"[get_watch_playlist_chips error for {video_id}]: {e}\n")
-        return []
+    for yt in clients:
+        try:
+            res = yt._send_request('next', {'videoId': video_id, 'playlistId': f'RDAMVM{video_id}'})
+            tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
+            if not tabs:
+                continue
+            queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
+            chips_raw = queue.get('subHeaderChipCloud', {}).get('chipCloudRenderer', {}).get('chips', [])
+
+            chips = []
+            for c in chips_raw:
+                cr = c.get('chipCloudChipRenderer', {})
+                title = ''.join(r.get('text', '') for r in cr.get('text', {}).get('runs', [])).strip()
+                ep = cr.get('navigationEndpoint', {}).get('queueUpdateCommand', {}).get('fetchContentsCommand', {}).get('watchEndpoint', {})
+                playlist_id = ep.get('playlistId', '')
+                params = ep.get('params', '')
+                is_selected = cr.get('isSelected', False)
+                if title:
+                    chips.append({
+                        "title": title,
+                        "playlistId": playlist_id,
+                        "params": params,
+                        "selected": is_selected
+                    })
+            if chips:
+                return chips
+        except Exception as e:
+            sys.stderr.write(f"[get_watch_playlist_chips error for {video_id}]: {e}\n")
+            continue
+    return []
 
 def get_filtered_radio_queue(video_id, playlist_id, params=None):
     if video_id.startswith("ytdl://"):
         video_id = video_id.replace("ytdl://", "")
 
-    yt = get_ytmusic_client()
+    clients = [get_ytmusic_client()]
     try:
-        from ytmusicapi.parsers.watch import parse_watch_playlist
-        body = {'videoId': video_id, 'playlistId': playlist_id}
-        if params:
-            body['params'] = params
-        res = yt._send_request('next', body)
-        tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
-        if not tabs:
-            return []
-        queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
-        contents = queue.get('content', {}).get('playlistPanelRenderer', {}).get('contents', [])
-        parsed = parse_watch_playlist(contents)
+        from ytmusicapi import YTMusic
+        clients.append(YTMusic(requests_session=create_resilient_session()))
+    except Exception:
+        pass
 
-        tracks = []
-        for p in parsed:
-            if "length" in p and "duration" not in p:
-                p["duration"] = p["length"]
-            if "thumbnail" in p and "thumbnails" not in p:
-                p["thumbnails"] = p["thumbnail"]
-            norm = normalize_track(p)
-            if norm:
-                if (not norm.get("durationMs") or norm.get("durationMs") == 0) and norm.get("duration") and norm.get("duration") != "--:--":
-                    norm["durationMs"] = _parse_duration_seconds(norm["duration"]) * 1000
-                tracks.append(norm)
-        cache_online_tracks(tracks)
-        return tracks
-    except Exception as e:
-        sys.stderr.write(f"[get_filtered_radio_queue error for {video_id}, {playlist_id}]: {e}\n")
-        return []
+    for yt in clients:
+        try:
+            body = {'videoId': video_id, 'playlistId': playlist_id}
+            if params:
+                body['params'] = params
+            res = yt._send_request('next', body)
+            tabs = res.get('contents', {}).get('singleColumnMusicWatchNextResultsRenderer', {}).get('tabbedRenderer', {}).get('watchNextTabbedResultsRenderer', {}).get('tabs', [])
+            if not tabs:
+                continue
+            queue = tabs[0].get('tabRenderer', {}).get('content', {}).get('musicQueueRenderer', {})
+            contents = queue.get('content', {}).get('playlistPanelRenderer', {}).get('contents', [])
+            parsed = _safe_parse_watch_playlist(contents)
+            if not parsed:
+                continue
+
+            tracks = []
+            for p in parsed:
+                if "length" in p and "duration" not in p:
+                    p["duration"] = p["length"]
+                if "thumbnail" in p and "thumbnails" not in p:
+                    p["thumbnails"] = p["thumbnail"]
+                norm = normalize_track(p)
+                if norm:
+                    if (not norm.get("durationMs") or norm.get("durationMs") == 0) and norm.get("duration") and norm.get("duration") != "--:--":
+                        norm["durationMs"] = _parse_duration_seconds(norm["duration"]) * 1000
+                    tracks.append(norm)
+            if tracks:
+                cache_online_tracks(tracks)
+                return tracks
+        except Exception as e:
+            sys.stderr.write(f"[get_filtered_radio_queue error for {video_id}, {playlist_id}]: {e}\n")
+            continue
+    return []
 
 
 def _process_mood_items(items, shelf_title, quick_picks, featured_playlists, max_qp=30, max_fp=60):
@@ -3021,68 +3086,105 @@ def get_song_related_content(video_id, title="", artist=""):
         if cached and (time.time() - cached.get("timestamp", 0) < 86400):
             return cached
 
-    yt = get_ytmusic_client()
+    clients = [get_ytmusic_client()]
     try:
-        wp = yt.get_watch_playlist(clean_vid, limit=1)
-        rel_id = wp.get("related")
-        if not rel_id:
-            return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
+        from ytmusicapi import YTMusic
+        clients.append(YTMusic(requests_session=create_resilient_session()))
+    except Exception:
+        pass
 
-        rel_sections = yt.get_song_related(rel_id)
-        you_might_like = []
-        rec_playlists = []
-        similar_artists = []
+    for yt in clients:
+        try:
+            wp = yt.get_watch_playlist(clean_vid, limit=1)
+            rel_id = wp.get("related")
+            if not rel_id:
+                continue
 
-        for sec in rel_sections:
-            sec_title = sec.get("title", "")
-            contents = sec.get("contents", [])
-            if "You might also like" in sec_title or "bạn có thể thích" in sec_title.lower():
-                for item in contents:
-                    norm = normalize_track(item)
-                    if norm:
-                        you_might_like.append(norm)
-            elif "Recommended playlists" in sec_title or "danh sách phát" in sec_title.lower():
-                for item in contents:
-                    p_id = item.get("playlistId", "")
-                    p_title = item.get("title", "")
-                    thumbs = item.get("thumbnails", [])
-                    img = thumbs[-1].get("url", "") if thumbs else ""
-                    desc = item.get("description", "")
-                    if p_id and p_title:
-                        rec_playlists.append({
-                            "playlistId": p_id,
-                            "id": p_id,
-                            "title": p_title,
-                            "image": img,
-                            "description": desc,
-                            "isOnline": True
-                        })
-            elif "Similar artists" in sec_title or "nghệ sĩ tương tự" in sec_title.lower():
-                for item in contents:
-                    a_name = item.get("title", "")
-                    a_id = item.get("browseId", "")
-                    thumbs = item.get("thumbnails", [])
-                    img = thumbs[-1].get("url", "") if thumbs else ""
-                    subs = item.get("subscribers", "")
-                    if a_name:
-                        similar_artists.append({
-                            "name": a_name,
-                            "channelId": a_id,
-                            "image": img,
-                            "subscribers": subs
-                        })
+            rel_sections = yt.get_song_related(rel_id)
+            you_might_like = []
+            rec_playlists = []
+            similar_artists = []
 
-        res = {
-            "timestamp": time.time(),
-            "videoId": clean_vid,
-            "you_might_also_like": you_might_like[:16],
-            "recommended_playlists": rec_playlists[:12],
-            "similar_artists": similar_artists[:12]
-        }
-        save_json(cache_path, res)
-        return res
-    except Exception as e:
-        sys.stderr.write(f"[get_song_related error for {clean_vid}]: {e}\n")
+            for sec in rel_sections:
+                sec_title = sec.get("title", "")
+                contents = sec.get("contents", [])
+                if "You might also like" in sec_title or "bạn có thể thích" in sec_title.lower():
+                    for item in contents:
+                        norm = normalize_track(item)
+                        if norm:
+                            you_might_like.append(norm)
+                elif "Recommended playlists" in sec_title or "danh sách phát" in sec_title.lower():
+                    for item in contents:
+                        p_id = item.get("playlistId", "")
+                        p_title = item.get("title", "")
+                        thumbs = item.get("thumbnails", [])
+                        img = thumbs[-1].get("url", "") if thumbs else ""
+                        desc = item.get("description", "")
+                        if p_id and p_title:
+                            rec_playlists.append({
+                                "playlistId": p_id,
+                                "id": p_id,
+                                "title": p_title,
+                                "image": img,
+                                "description": desc,
+                                "isOnline": True
+                            })
+                elif "Similar artists" in sec_title or "nghệ sĩ tương tự" in sec_title.lower():
+                    for item in contents:
+                        a_name = item.get("title", "")
+                        a_id = item.get("browseId", "")
+                        thumbs = item.get("thumbnails", [])
+                        img = thumbs[-1].get("url", "") if thumbs else ""
+                        subs = item.get("subscribers", "")
+                        if a_name:
+                            similar_artists.append({
+                                "name": a_name,
+                                "channelId": a_id,
+                                "image": img,
+                                "subscribers": subs
+                            })
+
+            res = {
+                "timestamp": time.time(),
+                "videoId": clean_vid,
+                "you_might_also_like": you_might_like[:16],
+                "recommended_playlists": rec_playlists[:12],
+                "similar_artists": similar_artists[:12]
+            }
+            save_json(cache_path, res)
+            return res
+        except Exception as e:
+            sys.stderr.write(f"[get_song_related error for {clean_vid}]: {e}\n")
+            continue
+
+    return {"you_might_also_like": [], "recommended_playlists": [], "similar_artists": []}
+
+def get_youtube_lyrics(video_id):
+    """Fallback: Fetch plain lyrics directly from YouTube Music InnerTube API."""
+    if not video_id:
+        return None
+    if video_id.startswith("ytdl://"):
+        video_id = video_id.replace("ytdl://", "")
+
+    clients = [get_ytmusic_client()]
+    try:
+        from ytmusicapi import YTMusic
+        clients.append(YTMusic(requests_session=create_resilient_session()))
+    except Exception:
+        pass
+
+    for yt in clients:
+        try:
+            wp = yt.get_watch_playlist(video_id, limit=1)
+            lyrics_id = wp.get("lyrics")
+            if lyrics_id:
+                lyr_data = yt.get_lyrics(lyrics_id)
+                lyrics_text = lyr_data.get("lyrics", "")
+                if lyrics_text and lyrics_text.strip():
+                    return lyrics_text.strip()
+        except Exception:
+            continue
+    return None
 # ==============================================================================
 # APPLE MUSIC ANIMATED ALBUM ARTWORK EXTRACTION (Item 25)
 # ==============================================================================

@@ -648,7 +648,7 @@ export default {
       }
 
       // 9. UPDATE PRESENCE (Now Playing)
-      if (path === "/api/users/presence" && request.method === "POST") {
+      if ((path === "/api/users/presence" || path === "/api/now_playing") && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
         const { user_id, secret_key, now_playing } = body;
 
