@@ -19,6 +19,7 @@ Item {
     property bool isOpen: false
     property bool closingGuard: false
     property var listeners: [] // Array of { email, name, avatar }
+    property bool allowControl: true
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
     property real targetX: 0
@@ -26,6 +27,7 @@ Item {
 
     signal stopAllRequested()
     signal kickRequested(string email, string name)
+    signal toggleAllowControlRequested(bool allowed)
 
     Timer {
         id: closeTimer
@@ -72,8 +74,8 @@ Item {
     // Popover Card with Keo 502 Optical LiquidGlass (SimpMusic / PlayerBar Spec)
     Item {
         id: cardWrapper
-        width: 250
-        height: Math.min(320, col.implicitHeight + 24)
+        width: 276
+        height: Math.min(360, col.implicitHeight + 24)
 
         // Clamping within window
         x: Math.max(16, Math.min(root.targetX - width / 2, root.width - width - 16))
@@ -146,7 +148,7 @@ Item {
                 anchors.leftMargin: 12
                 anchors.right: parent.right
                 anchors.rightMargin: 12
-                spacing: 12
+                spacing: 10
                 z: 10
 
                 // Header Row: Title + Count (Không dùng chấm xanh)
@@ -171,7 +173,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 12
+                            radius: 8
                             color: closeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
@@ -190,6 +192,87 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.closePopover()
+                        }
+                    }
+                }
+
+                // Shared Control Permission Row (Allow Co-Listeners to Pause / Seek / Switch Track)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
+                    radius: 8
+                    color: permMouse.containsMouse
+                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                           : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.width: 1
+                    border.color: root.allowControl
+                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                  : Qt.rgba(1, 1, 1, 0.12)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 8
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("Cho phép điều khiển chung", "Allow shared control")
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("Tạm dừng, tua & đổi bài hát", "Pause, seek & change tracks")
+                                color: "#d4d4d8"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 9
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: 32
+                            Layout.preferredHeight: 18
+                            radius: 6
+                            color: root.allowControl
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
+                                   : Qt.rgba(1, 1, 1, 0.14)
+                            border.width: 1
+                            border.color: root.allowControl
+                                          ? Qt.rgba(1, 1, 1, 0.35)
+                                          : Qt.rgba(1, 1, 1, 0.18)
+                            Behavior on color { ColorAnimation { duration: 140 } }
+
+                            Rectangle {
+                                width: 12
+                                height: 12
+                                radius: 4
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: root.allowControl ? 17 : 3
+                                color: "#ffffff"
+                                Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: permMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.toggleAllowControlRequested(!root.allowControl);
                         }
                     }
                 }

@@ -1146,9 +1146,21 @@ Scope {
                                 win.myLatestNote = parsed.my_note;
                             }
 
+                            // Periodic 10s join heartbeat from Guest -> Host so Host always detects active co-listeners even after restart
+                            if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0)) {
+                                var nowHb = Date.now();
+                                if (nowHb - win.lastJoinHeartbeatTimestamp > 10000) {
+                                    win.lastJoinHeartbeatTimestamp = nowHb;
+                                    var hbTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+                                    if (hbTarget) {
+                                        win.sendSocialEventFast("join", hbTarget, { heartbeat: true });
+                                    }
+                                }
+                            }
+
                             // Auto-follow and real-time co-listening synchronization (Guest following Host ONLY)
                             if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0) && Array.isArray(parsed.notes)) {
-                                if ((Date.now() - win.lastTrackSwitchTimestamp < 4500) || (Date.now() - win.lastLocalActionTimestamp < 4500)) {
+                                if ((Date.now() - win.lastTrackSwitchTimestamp < 5000) || (Date.now() - win.lastLocalActionTimestamp < 5000)) {
                                     return;
                                 }
                                 var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
@@ -1214,14 +1226,95 @@ Scope {
             }
         };
         xhr.send();
+    }
 
-        // Fetch social events fast (instant peer actions: pause, play, seek, leave)
-        if (email) {
-            var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email) + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
-            var evXhr = new XMLHttpRequest();
-            evXhr.open("GET", evUrl, true);
-            evXhr.onreadystatechange = function() {
-                if (evXhr.readyState === XMLHttpRequest.DONE && evXhr.status === 200) {
+    property bool isPollingSocialEventsFast: false
+    property double lastJoinHeartbeatTimestamp: 0
+    property bool allowCoListenerControl: true
+    property bool guestCanControlHost: true
+
+    function setAllowCoListenerControl(allowed) {
+        win.allowCoListenerControl = Boolean(allowed);
+        if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+            for (var i = 0; i < win.activeCoListeners.length; i++) {
+                win.sendSocialEventFast("permission_update", win.activeCoListeners[i], { allow_control: win.allowCoListenerControl });
+            }
+        }
+        win.showToast(win.allowCoListenerControl
+            ? I18n.tr("Đã bật quyền điều khiển chung (Pause, Tua, Đổi bài)", "Enabled shared control (Pause, Seek, Change track)")
+            : I18n.tr("Đã khóa quyền điều khiển chung (Chỉ Host điều khiển)", "Disabled shared control (Host only)"));
+    }
+
+    function ensureCoListenerRegistered(ev, showJoinToast) {
+        if (!ev) return false;
+        // Do not register our own Host as our co-listener if we are currently listening along as a Guest
+        if (win.listeningAlongFriend) {
+            var hostTagLow = String(win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email || "").trim().toLowerCase();
+            var fromTagLow = String(ev.from_email || "").trim().toLowerCase();
+            if (hostTagLow && fromTagLow && hostTagLow === fromTagLow && ev.event !== "join") {
+                return false;
+            }
+        }
+
+        var rawEmail = String(ev.from_email || ev.from_id || "").trim();
+        var jEmail = rawEmail.toLowerCase();
+        if (!jEmail) return false;
+
+        // When someone joins us, we are the Host (clear any stale Guest reference)
+        if (ev.event === "join") {
+            win.listeningAlongFriend = null;
+            win.pendingListenAlongSeekPosition = 0.0;
+        }
+
+        var existing = win.activeCoListeners ? win.activeCoListeners.slice(0) : [];
+        var isNewListener = (existing.findIndex(function(e) { return String(e || "").toLowerCase() === jEmail; }) === -1);
+        if (isNewListener) {
+            existing.push(rawEmail);
+            win.activeCoListeners = existing;
+        }
+        var jName = ev.from_name || rawEmail;
+        var jAvatar = ev.from_avatar || "";
+        if (!jAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+            var matchNote = win.friendsNotes.find(function(n) {
+                return (n.user_email && n.user_email.toLowerCase() === jEmail) ||
+                       (n.tag && n.tag.toLowerCase() === jEmail) ||
+                       (n.user_name && n.user_name === jName);
+            });
+            if (matchNote) {
+                jAvatar = matchNote.avatar_url || "";
+                if ((!ev.from_name || ev.from_name === "User") && matchNote.user_name) jName = matchNote.user_name;
+            }
+        }
+        var curDetails = win.activeCoListenersDetails ? win.activeCoListenersDetails.slice(0) : [];
+        var existIdx = curDetails.findIndex(function(d) { return String(d.email || "").toLowerCase() === jEmail; });
+        if (existIdx === -1) {
+            curDetails.push({ email: rawEmail, name: jName, avatar: jAvatar });
+        } else {
+            curDetails[existIdx] = { email: rawEmail, name: jName, avatar: jAvatar };
+        }
+        win.activeCoListenersDetails = curDetails;
+
+        if (isNewListener && showJoinToast) {
+            win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
+            win.sendSocialEventFast("permission_update", rawEmail, { allow_control: win.allowCoListenerControl });
+        }
+        return isNewListener;
+    }
+
+    function pollSocialEventsFast() {
+        if (win.isPollingSocialEventsFast) return;
+        var email = win.getCurrentUserEmail();
+        if (!email) return;
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        win.isPollingSocialEventsFast = true;
+
+        var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email) + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
+        var evXhr = new XMLHttpRequest();
+        evXhr.open("GET", evUrl, true);
+        evXhr.onreadystatechange = function() {
+            if (evXhr.readyState === XMLHttpRequest.DONE) {
+                win.isPollingSocialEventsFast = false;
+                if (evXhr.status === 200) {
                     try {
                         var evData = JSON.parse(evXhr.responseText);
                         var events = (evData && Array.isArray(evData.events)) ? evData.events : [];
@@ -1229,51 +1322,27 @@ Scope {
                             var ev = events[i];
                             if (!ev) continue;
                             if (ev.event === "join") {
-                                var jEmail = (ev.from_email || "").trim().toLowerCase();
-                                if (jEmail) {
-                                    // Strict Single-Host Authority: When someone joins YOU, YOU are the Host (never a Guest!)
-                                    win.listeningAlongFriend = null;
-                                    win.pendingListenAlongSeekPosition = 0.0;
+                                var isNew = win.ensureCoListenerRegistered(ev, true);
+                                var isHb = (ev.data && ev.data.heartbeat === true);
+                                if (isNew || !isHb) {
                                     win.lastLocalActionTimestamp = Date.now();
-
-                                    var existing = win.activeCoListeners ? win.activeCoListeners.slice(0) : [];
-                                    var isNewListener = (existing.indexOf(jEmail) === -1);
-                                    if (isNewListener) {
-                                        existing.push(jEmail);
-                                        win.activeCoListeners = existing;
-                                    }
-                                    var jName = ev.from_name || jEmail;
-                                    var jAvatar = ev.from_avatar || "";
-                                    if (!jAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
-                                        var matchNote = win.friendsNotes.find(function(n) {
-                                            return (n.user_email && n.user_email.toLowerCase() === jEmail) ||
-                                                   (n.tag && n.tag.toLowerCase() === jEmail) ||
-                                                   (n.user_name && n.user_name === jName);
-                                        });
-                                        if (matchNote) {
-                                            jAvatar = matchNote.avatar_url || "";
-                                            if ((!ev.from_name || ev.from_name === "User") && matchNote.user_name) jName = matchNote.user_name;
-                                        }
-                                    }
-                                    var curDetails = win.activeCoListenersDetails ? win.activeCoListenersDetails.slice(0) : [];
-                                    var existIdx = curDetails.findIndex(function(d) { return d.email === jEmail; });
-                                    if (existIdx === -1) {
-                                        curDetails.push({ email: jEmail, name: jName, avatar: jAvatar });
-                                    } else {
-                                        curDetails[existIdx] = { email: jEmail, name: jName, avatar: jAvatar };
-                                    }
-                                    win.activeCoListenersDetails = curDetails;
-
-                                    if (isNewListener) {
-                                        win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
-                                    }
                                     win.syncNowPlaying(true);
-                                    if (win.currentTrack) {
-                                        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", ev.from_email || jEmail);
-                                        win.sendSocialEventFast("seek", ev.from_email || jEmail, { position: win.currentTime });
-                                        hostFollowupSyncTimer.targetListenerEmail = ev.from_email || jEmail;
+                                    var targetSender = ev.from_email || ev.from_id || "";
+                                    if (win.currentTrack && targetSender) {
+                                        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetSender);
+                                        win.sendSocialEventFast("seek", targetSender, { position: win.currentTime });
+                                        win.sendSocialEventFast("permission_update", targetSender, { allow_control: win.allowCoListenerControl });
+                                        hostFollowupSyncTimer.targetListenerEmail = targetSender;
                                         hostFollowupSyncTimer.restart();
                                     }
+                                }
+                            } else if (ev.event === "permission_update") {
+                                if (ev.data && ev.data.allow_control !== undefined) {
+                                    win.guestCanControlHost = Boolean(ev.data.allow_control);
+                                    var hNamePerm = ev.from_name || I18n.tr("Host", "Host");
+                                    win.showToast(win.guestCanControlHost
+                                        ? I18n.tr(hNamePerm + " đã bật quyền điều khiển chung", hNamePerm + " enabled shared control")
+                                        : I18n.tr(hNamePerm + " đã khóa quyền điều khiển chung", hNamePerm + " disabled shared control"));
                                 }
                             } else if (ev.event === "leave" || ev.event === "kick") {
                                 var lEmail = (ev.from_email || "").trim().toLowerCase();
@@ -1299,6 +1368,8 @@ Scope {
                                     win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                                 }
                             } else if (ev.event === "pause") {
+                                win.ensureCoListenerRegistered(ev, true);
+                                if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
                                 win.lastLocalActionTimestamp = Date.now();
                                 if (win.isPlaying) {
                                     win.isSyncingFromFriend = true;
@@ -1311,6 +1382,8 @@ Scope {
                                 var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                 win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                             } else if (ev.event === "play" || ev.event === "resume") {
+                                win.ensureCoListenerRegistered(ev, true);
+                                if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
                                 win.lastLocalActionTimestamp = Date.now();
                                 if (!win.isPlaying && win.currentTrack) {
                                     win.isSyncingFromFriend = true;
@@ -1322,6 +1395,8 @@ Scope {
                                 var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                 win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
                             } else if (ev.event === "seek") {
+                                win.ensureCoListenerRegistered(ev, true);
+                                if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
                                 var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
                                 if (sPos >= 0) {
                                     win.lastLocalActionTimestamp = Date.now();
@@ -1333,14 +1408,16 @@ Scope {
                                         listenAlongSeekSafetyTimer.targetPos = sPos;
                                         listenAlongSeekSafetyTimer.restart();
                                     }
+                                    win.syncNowPlaying(true);
                                     win.isSyncingFromFriend = false;
                                     var skName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                     var timeStr = win.formatPlaybackTime(sPos);
                                     win.showToast(I18n.tr(skName + " đã tua đến " + timeStr, skName + " seeked to " + timeStr));
                                 }
                             } else if (ev.event === "track_change") {
-                                // CHỈ NGƯỜI NGHE mới nhận lệnh chuyển bài từ Host (Host là người duy nhất điều khiển bài hát)
-                                if (ev.data && ev.data.track && win.listeningAlongFriend) {
+                                win.ensureCoListenerRegistered(ev, true);
+                                var canAcceptTrackChange = (win.listeningAlongFriend !== null) || win.allowCoListenerControl;
+                                if (ev.data && ev.data.track && canAcceptTrackChange) {
                                     var newTrk = ev.data.track;
                                     var newVid = newTrk.videoId || newTrk.id || "";
                                     if (newVid.startsWith("yt_")) newVid = newVid.replace(/^yt_/, "");
@@ -1350,17 +1427,20 @@ Scope {
                                         win.isSyncingFromFriend = true;
                                         win.pendingListenAlongSeekPosition = 0;
                                         win.lastTrackSwitchTimestamp = Date.now();
+                                        win.lastLocalActionTimestamp = Date.now();
                                         if ((newTrk.path && newTrk.path.startsWith("ytdl://")) || newTrk.videoId) {
                                             win.playOnlineTrack(newTrk, false);
                                         } else {
                                             win.playTrack(newTrk);
                                         }
+                                        win.syncNowPlaying(true);
                                         win.isSyncingFromFriend = false;
-                                        var tcName = ev.from_name || I18n.tr("Host", "Host");
+                                        var tcName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                         win.showToast(I18n.tr(tcName + " đã chuyển bài hát", tcName + " changed track"));
                                     }
                                 }
                             } else if (ev.event === "track_suggest") {
+                                win.ensureCoListenerRegistered(ev, true);
                                 if (ev.data && ev.data.track) {
                                     var sFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                     var sAvatar = ev.from_avatar || "";
@@ -1374,6 +1454,7 @@ Scope {
                                     suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
                                 }
                             } else if (ev.event === "chat_message") {
+                                win.ensureCoListenerRegistered(ev, true);
                                 var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                 var cAvatar = ev.from_avatar || "";
                                 var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
@@ -1403,14 +1484,25 @@ Scope {
                         }
                     } catch(e) {}
                 }
-            };
-            evXhr.send();
+            }
+        };
+        evXhr.send();
+    }
+
+    Timer {
+        id: socialEventsFastTimer
+        interval: 850
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: {
+            win.pollSocialEventsFast();
         }
     }
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 800 : 3500
+        interval: win.isCoListeningActive ? 900 : 3000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1652,7 +1744,7 @@ Scope {
 
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
             var hostObj = win.listeningAlongFriend;
             var hostTrack = hostObj.now_playing || hostObj.track;
             var hostVid = hostTrack ? (hostTrack.videoId || hostTrack.id || "") : "";
@@ -1660,16 +1752,15 @@ Scope {
             var myVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
             if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
 
-            // Nếu người nghe chọn bài khác với bài Host đang phát: Chặn lại hoàn toàn, không đụng tới Host!
             if ((hostVid && myVid && hostVid !== myVid) || (win.currentTrack && !win.isSameTrack(win.currentTrack, trk))) {
-                var hName = hostObj.user_name || I18n.tr("Host", "Host");
-                win.showToast(I18n.tr("Đang nghe cùng " + hName + " (Host điều khiển bài hát)", "Listening along with " + hName + " (Host controls tracks)"));
+                win.suggestTrackToHost(trk);
                 return;
             }
         }
         if (!win.isSyncingFromFriend) {
             win.pendingListenAlongSeekPosition = 0.0;
             win.lastTrackSwitchTimestamp = Date.now();
+            win.lastLocalActionTimestamp = Date.now();
         }
         var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         if (rVid && rVid.startsWith("yt_")) {
@@ -1760,9 +1851,17 @@ Scope {
         var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
         win.syncNowPlaying(true);
-        if (!win.isSyncingFromFriend && win.activeCoListeners && win.activeCoListeners.length > 0) {
-            for (var cli = 0; cli < win.activeCoListeners.length; cli++) {
-                win.sendSocialEventFast("track_change", win.activeCoListeners[cli], { track: trk });
+        if (!win.isSyncingFromFriend) {
+            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+                for (var cli = 0; cli < win.activeCoListeners.length; cli++) {
+                    win.sendSocialEventFast("track_change", win.activeCoListeners[cli], { track: trk });
+                }
+            }
+            if (win.listeningAlongFriend && win.guestCanControlHost) {
+                var hostTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+                if (hostTarget) {
+                    win.sendSocialEventFast("track_change", hostTarget, { track: trk });
+                }
             }
         }
 
@@ -2139,10 +2238,13 @@ Scope {
         }
         win.isNowPlayingOpen = true;
         if (!wasAlreadyListening) {
+            win.guestCanControlHost = true;
             var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
             win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
-            if (friend.user_email) {
-                win.sendSocialEventFast("join", friend.user_email);
+            var joinTarget = friend.tag || friend.user_id || friend.user_email || "";
+            if (joinTarget) {
+                win.lastJoinHeartbeatTimestamp = Date.now();
+                win.sendSocialEventFast("join", joinTarget);
             }
         }
     }
@@ -2150,7 +2252,7 @@ Scope {
     function exitListeningAlong() {
         if (!win.listeningAlongFriend) return;
         var friend = win.listeningAlongFriend;
-        var friendEmail = friend.user_email || "";
+        var friendEmail = friend.tag || friend.user_id || friend.user_email || "";
         var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
         win.listeningAlongFriend = null;
         win.showToast(I18n.tr("Đã rời chế độ nghe cùng với " + friendName, "Left listen along with " + friendName));
@@ -2189,8 +2291,9 @@ Scope {
     }
 
     function suggestTrackToHost(trk) {
-        if (!win.listeningAlongFriend || !win.listeningAlongFriend.user_email) return;
-        var hostEmail = win.listeningAlongFriend.user_email;
+        if (!win.listeningAlongFriend) return;
+        var hostEmail = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+        if (!hostEmail) return;
         var hostName = win.listeningAlongFriend.user_name || I18n.tr("Host", "Host");
         win.sendSocialEventFast("track_suggest", hostEmail, { track: trk });
         win.showToast(I18n.tr("Đã gửi đề xuất bài hát cho " + hostName, "Suggested track to " + hostName));
@@ -2207,7 +2310,7 @@ Scope {
 
         // 1. Gửi cho Host (nếu mình là Listener)
         if (win.listeningAlongFriend) {
-            var targetHost = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email || "";
+            var targetHost = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
             if (targetHost) {
                 win.sendSocialEventFast("chat_message", targetHost, { text: cleanText });
             }
@@ -3745,8 +3848,10 @@ Scope {
             id: coListenersPopover
             accentColor: win.accentColor
             backgroundSourceItem: glassCompositeBackdrop
+            allowControl: win.allowCoListenerControl
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
+            onToggleAllowControlRequested: allowed => win.setAllowCoListenerControl(allowed)
         }
 
         FriendRequestsPopover {
@@ -4153,15 +4258,14 @@ Scope {
 
     function playTrack(trk) {
         if (!trk) return;
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
-            var hostObj2 = win.listeningAlongFriend;
-            var hName2 = hostObj2.user_name || I18n.tr("Host", "Host");
-            win.showToast(I18n.tr("Đang nghe cùng " + hName2 + " (Host điều khiển bài hát)", "Listening along with " + hName2 + " (Host controls tracks)"));
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.suggestTrackToHost(trk);
             return;
         }
         if (!win.isSyncingFromFriend) {
             win.pendingListenAlongSeekPosition = 0.0;
             win.lastTrackSwitchTimestamp = Date.now();
+            win.lastLocalActionTimestamp = Date.now();
         }
         if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
             return;
@@ -4188,9 +4292,17 @@ Scope {
         var tImage = trk.image || "";
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage]);
         win.syncNowPlaying(true);
-        if (!win.isSyncingFromFriend && win.activeCoListeners && win.activeCoListeners.length > 0) {
-            for (var cli2 = 0; cli2 < win.activeCoListeners.length; cli2++) {
-                win.sendSocialEventFast("track_change", win.activeCoListeners[cli2], { track: trk });
+        if (!win.isSyncingFromFriend) {
+            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
+                for (var cli2 = 0; cli2 < win.activeCoListeners.length; cli2++) {
+                    win.sendSocialEventFast("track_change", win.activeCoListeners[cli2], { track: trk });
+                }
+            }
+            if (win.listeningAlongFriend && win.guestCanControlHost) {
+                var hostTarget2 = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+                if (hostTarget2) {
+                    win.sendSocialEventFast("track_change", hostTarget2, { track: trk });
+                }
             }
         }
         pollTimer.restart();
@@ -4198,6 +4310,10 @@ Scope {
 
     function togglePlay() {
         if (!win.currentTrack) return;
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.showToast(I18n.tr("Host đã khóa quyền điều khiển chung", "Host disabled shared control"));
+            return;
+        }
         var targetPath = win.currentTrack.path || "";
         var isOnline = (targetPath && targetPath.startsWith("ytdl://")) || win.currentTrack.videoId;
 
@@ -4232,8 +4348,11 @@ Scope {
 
         if (!win.isSyncingFromFriend) {
             var evType = win.isPlaying ? "play" : "pause";
-            if (win.listeningAlongFriend && (win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email)) {
-                win.sendSocialEventFast(evType, win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email);
+            if (win.listeningAlongFriend && win.guestCanControlHost) {
+                var hostPlayTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+                if (hostPlayTarget) {
+                    win.sendSocialEventFast(evType, hostPlayTarget);
+                }
             }
             if (win.activeCoListeners && win.activeCoListeners.length > 0) {
                 for (var li = 0; li < win.activeCoListeners.length; li++) {
@@ -4246,10 +4365,8 @@ Scope {
     }
 
     function playNext() {
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
-            var hObj = win.listeningAlongFriend;
-            var hN = hObj.user_name || I18n.tr("Host", "Host");
-            win.showToast(I18n.tr("Chỉ Host mới có quyền chuyển bài hát", "Only the Host can skip tracks"));
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
             return;
         }
         if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
@@ -4288,10 +4405,8 @@ Scope {
     }
 
     function playPrev() {
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
-            var hObj3 = win.listeningAlongFriend;
-            var hN3 = hObj3.user_name || I18n.tr("Host", "Host");
-            win.showToast(I18n.tr("Chỉ Host mới có quyền chuyển bài hát", "Only the Host can skip tracks"));
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
             return;
         }
         if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
@@ -4318,11 +4433,21 @@ Scope {
     }
 
     function seekAudio(sec) {
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.showToast(I18n.tr("Host đã khóa quyền tua bài hát", "Host disabled seeking"));
+            return;
+        }
+        win.lastLocalActionTimestamp = Date.now();
         win.currentTime = sec;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
         win.syncNowPlaying(true);
         if (!win.isSyncingFromFriend) {
-            // Chỉ Host mới gửi lệnh seek tới activeCoListeners. Listener tuyệt đối không tua Host!
+            if (win.listeningAlongFriend && win.guestCanControlHost) {
+                var hostSeekTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+                if (hostSeekTarget) {
+                    win.sendSocialEventFast("seek", hostSeekTarget, { position: sec });
+                }
+            }
             if (win.activeCoListeners && win.activeCoListeners.length > 0) {
                 for (var si = 0; si < win.activeCoListeners.length; si++) {
                     win.sendSocialEventFast("seek", win.activeCoListeners[si], { position: sec });

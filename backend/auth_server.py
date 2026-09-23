@@ -1274,6 +1274,16 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             if GLOBAL_RELAY_CLIENT.is_external():
                 res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
                 if res and res.get("success"):
+                    notes_arr = res.get("notes") or []
+                    for n_item in notes_arr:
+                        if isinstance(n_item, dict) and n_item.get("tag"):
+                            n_item["user_email"] = n_item["tag"]
+                    my_n = res.get("my_note")
+                    if isinstance(my_n, dict) and my_n.get("tag"):
+                        my_n["user_email"] = my_n["tag"]
+                    _cloud_notes_cache["ts"] = time.time()
+                    _cloud_notes_cache["data"] = notes_arr
+                    _cloud_notes_cache["my_note"] = my_n
                     self._send_json(res, 200)
                     return
 
