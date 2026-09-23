@@ -1567,7 +1567,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "data": inner_data
                 })
 
-            user_aliases = get_user_all_identifiers(user_email)
+            user_aliases = set(get_user_all_identifiers(user_email))
             if caller_ident.get("tag"):
                 user_aliases.add(caller_ident["tag"].strip().lower())
             if caller_ident.get("user_id"):
