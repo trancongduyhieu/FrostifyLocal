@@ -4,7 +4,7 @@ import QtQuick.Window
 Window {
     id: root
     default property alias contentData: root.data
-    flags: Qt.FramelessWindowHint | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus | Qt.Tool
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool
     color: "transparent"
     visible: true
 
@@ -18,4 +18,37 @@ Window {
     property var exclusionMode: null
 
     property PanelAnchors anchors: PanelAnchors {}
+
+    function updateMask() {
+        if (typeof __NutstyBridge === "undefined") return;
+        if (!mask || !mask.item) {
+            __NutstyBridge.clearWindowMask(root);
+        } else {
+            var it = mask.item;
+            if (!it.visible || it.width <= 0 || it.height <= 0) {
+                __NutstyBridge.setWindowMaskRect(root, -100, -100, 1, 1);
+            } else {
+                var pt = (typeof it.mapToItem === "function") ? it.mapToItem(null, 0, 0) : Qt.point(it.x, it.y);
+                __NutstyBridge.setWindowMaskRect(root, Math.round(pt.x), Math.round(pt.y), Math.round(it.width), Math.round(it.height));
+            }
+        }
+    }
+
+    onMaskChanged: updateMask()
+
+    Connections {
+        target: (mask && mask.item) ? mask.item : null
+        function onXChanged() { if (mask && mask.item) root.updateMask(); }
+        function onYChanged() { if (mask && mask.item) root.updateMask(); }
+        function onWidthChanged() { if (mask && mask.item) root.updateMask(); }
+        function onHeightChanged() { if (mask && mask.item) root.updateMask(); }
+        function onVisibleChanged() { if (mask && mask.item) root.updateMask(); }
+    }
+
+    Component.onCompleted: {
+        root.show();
+        root.raise();
+        updateMask();
+        Qt.callLater(updateMask);
+    }
 }

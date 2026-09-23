@@ -11,8 +11,10 @@ Nutsty Download Manager (Multi-Thread Architecture)
 
 import os
 import sys
+import glob
 import json
 import time
+import shutil
 import socket
 import select
 import threading
@@ -107,14 +109,7 @@ class DownloadManager:
         self.lock = threading.Lock()
         self.queue = []  # list of dict: {videoId, title, artist, thumbnail}
         self.tasks = {}  # videoId -> dict of info & state
-        if os.path.exists(STATUS_FILE):
-            try:
-                with open(STATUS_FILE, "r", encoding="utf-8") as f:
-                    _data = json.load(f)
-                if "tasks" in _data and isinstance(_data["tasks"], dict):
-                    self.tasks = _data["tasks"]
-            except Exception:
-                pass
+        self.cancelled_ids = set()
         self.active_downloads = set()
         self.current_task = None
         self.batch_total = 0
@@ -123,6 +118,45 @@ class DownloadManager:
         self.last_song_title = ""
         self.running = True
         self.clients = set()
+
+        if os.path.exists(STATUS_FILE):
+            try:
+                with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                    _data = json.load(f)
+                if "tasks" in _data and isinstance(_data["tasks"], dict):
+                    dl_dir = get_download_dir()
+                    cleaned_tasks = {}
+                    for vid, t in _data["tasks"].items():
+                        if not isinstance(t, dict):
+                            continue
+                        st = t.get("state", 0)
+                        p = t.get("path", "")
+                        if st == STATE_DOWNLOADED and p and os.path.exists(p):
+                            cleaned_tasks[vid] = t
+                        elif st in (STATE_PREPARING, STATE_DOWNLOADING):
+                            # Check if file actually finished downloading on disk before crash/lock
+                            title_str = t.get("title") or ""
+                            safe_t = "".join(c if c not in '<>:"/\\|?*' else "_" for c in title_str).strip()
+                            found_path = ""
+                            if p and os.path.exists(p):
+                                found_path = p
+                            elif safe_t and os.path.exists(dl_dir):
+                                for fn in os.listdir(dl_dir):
+                                    if fn.lower().startswith(safe_t[:30].lower()) and not fn.endswith(".part"):
+                                        cand = os.path.join(dl_dir, fn)
+                                        if os.path.getsize(cand) > 30000:
+                                            found_path = cand
+                                            break
+                            if found_path:
+                                t["state"] = STATE_DOWNLOADED
+                                t["progress"] = 100.0
+                                t["path"] = found_path
+                                cleaned_tasks[vid] = t
+                            # Otherwise discard stale zombie downloading tasks so they never freeze at 0%/66%
+                    self.tasks = cleaned_tasks
+            except Exception:
+                pass
+        self._save_status()
 
         self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.worker_thread.start()
@@ -160,13 +194,33 @@ class DownloadManager:
                     "batch_total": self.batch_total,
                     "batch_completed": self.batch_completed,
                     "batch_failed": self.batch_failed,
-                    "tasks": self.tasks,
-                    "queue": self.queue
+                    "tasks": dict(self.tasks),
+                    "queue": list(self.queue)
                 }
-            tmp = STATUS_FILE + ".tmp"
+            raw_json = json.dumps(payload, ensure_ascii=False, indent=2)
+            os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
+            tmp = f"{STATUS_FILE}.{threading.get_ident()}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, STATUS_FILE)
+                f.write(raw_json)
+            replaced = False
+            for _ in range(5):
+                try:
+                    os.replace(tmp, STATUS_FILE)
+                    replaced = True
+                    break
+                except Exception:
+                    time.sleep(0.015)
+            if not replaced:
+                try:
+                    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+                        f.write(raw_json)
+                except Exception:
+                    pass
+                try:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -175,8 +229,9 @@ class DownloadManager:
             return False
 
         with self.lock:
-            # If already downloaded or in queue/downloading, skip or re-queue
-            if video_id in self.tasks and self.tasks[video_id]["state"] == STATE_DOWNLOADING:
+            self.cancelled_ids.discard(video_id)
+            # Only skip if actively downloading in worker thread or already waiting in self.queue
+            if video_id in self.active_downloads or any(q.get("videoId") == video_id for q in self.queue):
                 return False
 
             task = {
@@ -186,8 +241,8 @@ class DownloadManager:
                 "thumbnail": thumbnail or "",
                 "quality": quality or get_current_download_quality(),
                 "state": STATE_PREPARING,
-                "progress": 0.0,
-                "speed": "--",
+                "progress": 2.0,
+                "speed": "Connecting...",
                 "eta": "--",
                 "path": "",
                 "error": ""
@@ -218,10 +273,14 @@ class DownloadManager:
         return True
 
     def cancel(self, video_id):
+        if not video_id:
+            return
         with self.lock:
-            self.queue = [t for t in self.queue if t["videoId"] != video_id]
-            if video_id in self.tasks:
-                self.tasks[video_id]["state"] = STATE_NOT_DOWNLOADED
+            self.cancelled_ids.add(video_id)
+            self.queue = [t for t in self.queue if t.get("videoId") != video_id]
+            self.active_downloads.discard(video_id)
+            self.tasks.pop(video_id, None)
+        self._save_status()
         self.emit_event({
             "event": "task_cancelled",
             "videoId": video_id,
@@ -230,24 +289,28 @@ class DownloadManager:
         })
 
     def remove(self, video_id):
+        if not video_id:
+            return
         with self.lock:
-            self.queue = [t for t in self.queue if t["videoId"] != video_id]
-            if video_id in self.tasks:
-                del self.tasks[video_id]
+            self.cancelled_ids.add(video_id)
+            self.queue = [t for t in self.queue if t.get("videoId") != video_id]
+            self.active_downloads.discard(video_id)
+            self.tasks.pop(video_id, None)
+        self._save_status()
         self.emit_event({
             "event": "task_removed",
             "videoId": video_id,
             "queue_len": len(self.queue),
             "active_count": len(self.active_downloads) + len(self.queue)
         })
-        self._save_status()
 
     def clear_completed(self):
         with self.lock:
             self.tasks = {
                 vid: t for vid, t in self.tasks.items()
-                if t.get("state") in (STATE_PREPARING, STATE_DOWNLOADING)
+                if t.get("state") in (STATE_PREPARING, STATE_DOWNLOADING) and (vid in self.active_downloads or any(q.get("videoId") == vid for q in self.queue))
             }
+        self._save_status()
         self.emit_event({
             "event": "completed_cleared",
             "tasks": self.tasks,
@@ -259,11 +322,17 @@ class DownloadManager:
         while self.running:
             task = None
             with self.lock:
-                if self.queue:
-                    task = self.queue.pop(0)
-                    self.active_downloads.add(task["videoId"])
-                    self.current_task = task
-                    task["state"] = STATE_DOWNLOADING
+                while self.queue:
+                    cand = self.queue.pop(0)
+                    cid = cand.get("videoId")
+                    if cid and cid not in self.cancelled_ids:
+                        task = cand
+                        self.active_downloads.add(cid)
+                        self.current_task = task
+                        task["state"] = STATE_DOWNLOADING
+                        task["progress"] = max(5.0, float(task.get("progress") or 0.0))
+                        task["speed"] = "Starting..."
+                        break
 
             if not task:
                 time.sleep(0.2)
@@ -275,14 +344,20 @@ class DownloadManager:
                 "videoId": video_id,
                 "title": task["title"],
                 "artist": task["artist"],
+                "progress": task["progress"],
                 "active_count": len(self.active_downloads) + len(self.queue)
             })
 
             success = self._execute_download(task)
 
             with self.lock:
+                was_cancelled = video_id in self.cancelled_ids
                 self.active_downloads.discard(video_id)
                 self.current_task = None
+                if was_cancelled:
+                    self.tasks.pop(video_id, None)
+                    self._save_status()
+                    continue
                 if success:
                     self.batch_completed += 1
                 else:
@@ -366,6 +441,8 @@ class DownloadManager:
         last_progress_time = [0.0]
 
         def progress_hook(d):
+            if video_id in self.cancelled_ids:
+                raise RuntimeError("Cancelled by user")
             status = d.get("status")
             if status == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
@@ -382,6 +459,8 @@ class DownloadManager:
                 if now - last_progress_time[0] >= 0.2:
                     last_progress_time[0] = now
                     with self.lock:
+                        if video_id in self.cancelled_ids:
+                            raise RuntimeError("Cancelled by user")
                         task["progress"] = round(pct, 1)
                         task["speed"] = speed_str
                         task["eta"] = eta_str
@@ -400,13 +479,86 @@ class DownloadManager:
         target_codec = cfg["codec"]
         target_quality_val = cfg["quality"]
 
+        has_ffmpeg = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+        if not has_ffmpeg:
+            target_format = "141/140/251/250/18/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best"
+
+        # Tier 0: Fast Direct Stream Download via ytmusic_helper (0ms cache hit if currently playing!)
+        if not has_ffmpeg:
+            try:
+                backend_dir = os.path.dirname(os.path.abspath(__file__))
+                if backend_dir not in sys.path:
+                    sys.path.insert(0, backend_dir)
+                import ytmusic_helper
+                import re
+                import urllib.request
+
+                resolved = ytmusic_helper.resolve_stream_url(video_id, target_quality)
+                if resolved and resolved.get("stream_url"):
+                    s_url = resolved["stream_url"]
+                    s_ua = resolved.get("user_agent") or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    s_codec = str(resolved.get("codec") or "").lower()
+                    s_itag = str(resolved.get("itag") or "")
+                    ext = ".webm" if ("opus" in s_codec or s_itag in ("250", "251", "774")) else ".m4a"
+
+                    raw_title = task.get("title") or video_id
+                    safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", raw_title).strip().strip(".")
+                    if not safe_title:
+                        safe_title = video_id
+                    out_file = os.path.join(dl_dir, f"{safe_title[:140]}{ext}")
+                    part_file = out_file + ".part"
+
+                    headers = {"User-Agent": s_ua, "Accept": "*/*"}
+                    req = urllib.request.Request(s_url, headers=headers)
+                    t_start = time.time()
+                    downloaded = 0
+                    with urllib.request.urlopen(req, timeout=20) as resp:
+                        total = int(resp.headers.get("Content-Length") or 0)
+                        with open(part_file, "wb") as out_f:
+                            while True:
+                                chunk = resp.read(262144)
+                                if not chunk:
+                                    break
+                                out_f.write(chunk)
+                                downloaded += len(chunk)
+                                elapsed = max(0.001, time.time() - t_start)
+                                speed = downloaded / elapsed
+                                eta = int((total - downloaded) / speed) if (total > downloaded and speed > 0) else 0
+                                progress_hook({
+                                    "status": "downloading",
+                                    "downloaded_bytes": downloaded,
+                                    "total_bytes": total,
+                                    "speed": speed,
+                                    "eta": eta,
+                                })
+
+                    if os.path.exists(part_file) and os.path.getsize(part_file) > 30000:
+                        os.replace(part_file, out_file)
+                        self._embed_metadata_mutagen(
+                            out_file,
+                            task.get("title", ""),
+                            task.get("artist", ""),
+                            task.get("thumbnail", "") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+                        )
+                        with self.lock:
+                            task["state"] = STATE_DOWNLOADED
+                            task["progress"] = 100.0
+                            task["path"] = out_file
+                        self._fetch_lyrics_for_file(out_file, task["title"], task["artist"], video_id)
+                        self._trigger_library_rescan(out_file, task.get("title", ""), task.get("artist", ""), video_id, task.get("thumbnail", ""))
+                        return True
+            except Exception as e:
+                sys.stderr.write(f"[DownloadManager Tier 0 fallback]: {e}\n")
+
+        safe_outtmpl = os.path.join(dl_dir, "%(title).150B.%(ext)s")
         base_opts = {
             "format": target_format,
-            "outtmpl": os.path.join(dl_dir, "%(title)s.%(ext)s"),
+            "outtmpl": safe_outtmpl,
+            "windowsfilenames": True,
             "remote_components": ["ejs:github"],
-            "extractor_args": {"youtube": {"player_client": ["ios", "android", "mweb", "web"]}},
-            "writethumbnail": True,
-            "embedthumbnail": True,
+            "extractor_args": {"youtube": {"player_client": ["web_embedded", "mweb", "android", "ios"]}},
+            "writethumbnail": has_ffmpeg,
+            "embedthumbnail": has_ffmpeg,
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -415,13 +567,13 @@ class DownloadManager:
                 },
                 {"key": "FFmpegMetadata"},
                 {"key": "EmbedThumbnail"},
-            ],
+            ] if has_ffmpeg else [],
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [progress_hook],
         }
 
-        attempts = []
+        attempts = [base_opts]
         cookie_file = self._get_exported_cookie_file()
         if cookie_file:
             auth_opts = dict(base_opts)
@@ -429,10 +581,8 @@ class DownloadManager:
             auth_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
             attempts.append(auth_opts)
 
-        attempts.append(base_opts)
-
         # Tier 3: Browser cookie extraction fallback
-        for browser in ["firefox", "chrome", "chromium", "brave"]:
+        for browser in ["firefox", "chrome", "chromium", "brave", "edge"]:
             b_opts = dict(base_opts)
             b_opts["cookiesfrombrowser"] = (browser,)
             b_opts["extractor_args"] = {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
@@ -443,19 +593,28 @@ class DownloadManager:
             try:
                 with yt_dlp.YoutubeDL(current_opts) as ydl:
                     info = ydl.extract_info(target_url, download=True)
-                    title = info.get("title", task["title"])
+                    title = info.get("title") or task["title"]
                     task["title"] = title
                     # Find output filename
                     expected_fn = ydl.prepare_filename(info)
                     base, _ = os.path.splitext(expected_fn)
                     downloaded_file = None
-                    for ext in [f".{target_codec}", ".m4a", ".opus", ".mp3", ".webm", ".flac", ".ogg"]:
-                        candidate = base + ext
-                        if os.path.exists(candidate):
-                            downloaded_file = candidate
-                            break
-                    if not downloaded_file and os.path.exists(expected_fn):
+                    if os.path.exists(expected_fn):
                         downloaded_file = expected_fn
+                    if not downloaded_file:
+                        for ext in [f".{target_codec}", ".m4a", ".opus", ".mp3", ".webm", ".flac", ".ogg"]:
+                            candidate = base + ext
+                            if os.path.exists(candidate):
+                                downloaded_file = candidate
+                                break
+
+                if downloaded_file and not has_ffmpeg:
+                    self._embed_metadata_mutagen(
+                        downloaded_file,
+                        task.get("title", ""),
+                        task.get("artist", ""),
+                        task.get("thumbnail", "") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+                    )
 
                 with self.lock:
                     task["state"] = STATE_DOWNLOADED
@@ -472,9 +631,6 @@ class DownloadManager:
 
             except Exception as e:
                 last_err = e
-                err_str = str(e).lower()
-                if "sign in" not in err_str and "bot" not in err_str and "429" not in err_str and "challenge" not in err_str:
-                    break
                 continue
 
         # Defensive fallback: if audio file was successfully written despite a thumbnail or tag error
@@ -492,6 +648,13 @@ class DownloadManager:
             if candidate_files:
                 candidate_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
                 downloaded_file = candidate_files[0]
+                if not has_ffmpeg:
+                    self._embed_metadata_mutagen(
+                        downloaded_file,
+                        task.get("title", ""),
+                        task.get("artist", ""),
+                        task.get("thumbnail", "") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+                    )
                 with self.lock:
                     task["state"] = STATE_DOWNLOADED
                     task["progress"] = 100.0
@@ -505,6 +668,34 @@ class DownloadManager:
             task["error"] = str(last_err)
         return False
 
+    def _embed_metadata_mutagen(self, audio_path, title, artist, thumb_url):
+        """Pure-Python metadata & cover art embedder when FFmpeg is unavailable"""
+        try:
+            if not audio_path or not os.path.exists(audio_path):
+                return
+            ext = os.path.splitext(audio_path)[1].lower()
+            if ext == ".m4a":
+                from mutagen.mp4 import MP4, MP4Cover
+                import urllib.request
+                audio = MP4(audio_path)
+                if title:
+                    audio["\xa9nam"] = [title]
+                if artist:
+                    audio["\xa9ART"] = [artist]
+                if thumb_url and thumb_url.startswith("http"):
+                    try:
+                        req = urllib.request.Request(thumb_url, headers={"User-Agent": "Mozilla/5.0"})
+                        with urllib.request.urlopen(req, timeout=6) as resp:
+                            img_bytes = resp.read()
+                        if img_bytes:
+                            fmt = MP4Cover.FORMAT_PNG if thumb_url.lower().endswith(".png") else MP4Cover.FORMAT_JPEG
+                            audio["covr"] = [MP4Cover(img_bytes, imageformat=fmt)]
+                    except Exception:
+                        pass
+                audio.save()
+        except Exception:
+            pass
+
     def _fetch_lyrics_for_file(self, audio_path, title, artist, video_id):
         try:
             base, _ = os.path.splitext(audio_path)
@@ -512,15 +703,33 @@ class DownloadManager:
             if os.path.exists(target_lrc):
                 return
 
-            lyrics_helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyrics_helper.py")
-            if os.path.exists(lyrics_helper):
-                # Search lyrics and parse
-                cmd = ["python3", lyrics_helper, title, artist or "", video_id or ""]
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            backend_dir = os.path.dirname(os.path.abspath(__file__))
+            if backend_dir not in sys.path:
+                sys.path.insert(0, backend_dir)
+            try:
+                import lyrics_helper
+                lines = lyrics_helper.get_lyrics(title, artist or "", video_id or "")
+                if lines and isinstance(lines, list):
+                    lrc_lines = []
+                    for item in lines:
+                        t = float(item.get("time", 0.0))
+                        txt = item.get("text", "")
+                        mins = int(t // 60)
+                        secs = t % 60
+                        lrc_lines.append(f"[{mins:02d}:{secs:05.2f}]{txt}")
+                    with open(target_lrc, "w", encoding="utf-8") as f:
+                        f.write("\n".join(lrc_lines))
+                    return
+            except Exception:
+                pass
+
+            lyrics_script = os.path.join(backend_dir, "lyrics_helper.py")
+            if os.path.exists(lyrics_script):
+                cmd = [sys.executable, lyrics_script, title, artist or "", video_id or ""]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=10, **pc.get_daemon_popen_kwargs())
                 if res.returncode == 0 and res.stdout.strip():
                     lines = json.loads(res.stdout)
                     if lines and isinstance(lines, list):
-                        # Convert back to LRC format
                         lrc_lines = []
                         for item in lines:
                             t = float(item.get("time", 0.0))
@@ -549,9 +758,11 @@ class DownloadManager:
         # 2. Asynchronous full scan in background thread if single track add was not possible
         def do_rescan():
             try:
-                lib_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.py")
-                if os.path.exists(lib_script):
-                    subprocess.run(["python3", lib_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+                backend_dir = os.path.dirname(os.path.abspath(__file__))
+                if backend_dir not in sys.path:
+                    sys.path.insert(0, backend_dir)
+                import library
+                library.scan_library()
             except Exception:
                 pass
         threading.Thread(target=do_rescan, daemon=True).start()
@@ -560,12 +771,8 @@ def run_daemon():
     """Run resident download daemon listening on Unix domain socket & printing stdout events"""
     if not HAS_AF_UNIX:
         manager = get_in_proc_manager()
+        manager._save_status()
         manager.emit_event({"event": "daemon_ready", "socket": "in_proc"})
-        try:
-            while True:
-                time.sleep(1.0)
-        except (KeyboardInterrupt, SystemExit):
-            pass
         return
 
     if os.path.exists(SOCKET_PATH):
@@ -793,34 +1000,70 @@ def get_status():
             pass
     print(json.dumps({"active_count": 0, "queue_len": 0, "tasks": {}}))
 
-def main():
-    if len(sys.argv) > 1:
-        cmd = sys.argv[1]
-        if cmd == "daemon":
-            run_daemon()
-        elif cmd in ("add", "enqueue"):
-            vid = sys.argv[2] if len(sys.argv) > 2 else ""
-            t = sys.argv[3] if len(sys.argv) > 3 else "Track"
-            a = sys.argv[4] if len(sys.argv) > 4 else "Artist"
-            thumb = sys.argv[5] if len(sys.argv) > 5 else ""
-            qual = sys.argv[6] if len(sys.argv) > 6 else ""
-            client_enqueue(vid, t, a, thumb, qual)
-        elif cmd in ("remove", "delete"):
-            vid = sys.argv[2] if len(sys.argv) > 2 else ""
-            client_remove(vid)
-        elif cmd in ("clear", "clear_completed"):
-            client_clear_completed()
-        elif cmd == "status":
-            get_status()
-        elif cmd == "test_download":
-            vid = sys.argv[2] if len(sys.argv) > 2 else "dQw4w9WgXcQ"
-            mgr = DownloadManager()
-            mgr.enqueue(vid, "Test Track", "Test Artist")
-            time.sleep(5)
-        else:
-            print("Usage: download_manager.py [daemon | add <videoId> [title] [artist] [thumb] | remove <videoId> | status]")
-    else:
+def client_cancel(video_id):
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if "tasks" in data and video_id in data["tasks"]:
+                del data["tasks"][video_id]
+            if "queue" in data and isinstance(data["queue"], list):
+                data["queue"] = [q for q in data["queue"] if q.get("videoId") != video_id]
+            with open(STATUS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+    if not HAS_AF_UNIX:
+        if _in_proc_manager:
+            _in_proc_manager.cancel(video_id)
+        print(json.dumps({"success": True, "action": "cancel", "videoId": video_id}))
+        return True
+    if os.path.exists(SOCKET_PATH):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(SOCKET_PATH)
+            payload = {"action": "cancel", "videoId": video_id}
+            s.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+            s.close()
+            print(json.dumps({"success": True, "action": "cancel", "videoId": video_id}))
+            return True
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            return False
+    return True
+
+def handle_cli(args):
+    """Thread-safe CLI entrypoint for in-process Windows execution without holding sys_argv_lock"""
+    if not args:
         run_daemon()
+        return
+    cmd = args[0]
+    if cmd == "daemon":
+        run_daemon()
+    elif cmd in ("add", "enqueue"):
+        vid = args[1] if len(args) > 1 else ""
+        t = args[2] if len(args) > 2 else "Track"
+        a = args[3] if len(args) > 3 else "Artist"
+        thumb = args[4] if len(args) > 4 else ""
+        qual = args[5] if len(args) > 5 else ""
+        client_enqueue(vid, t, a, thumb, qual)
+    elif cmd == "cancel":
+        vid = args[1] if len(args) > 1 else ""
+        client_cancel(vid)
+    elif cmd in ("remove", "delete"):
+        vid = args[1] if len(args) > 1 else ""
+        client_remove(vid)
+    elif cmd in ("clear", "clear_completed"):
+        client_clear_completed()
+    elif cmd == "status":
+        get_status()
+    elif cmd == "test_download":
+        vid = args[1] if len(args) > 1 else "dQw4w9WgXcQ"
+        mgr = get_in_proc_manager()
+        mgr.enqueue(vid, "Test Track", "Test Artist")
+
+def main():
+    handle_cli(sys.argv[1:])
 
 if __name__ == "__main__":
     main()

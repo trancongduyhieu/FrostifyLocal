@@ -6,9 +6,27 @@ echo        Nutsty Desktop Music Player (Windows)
 echo ====================================================
 echo.
 
-where python >nul 2>nul
+:: Detect working Python executable or fallback to standard install paths
+python -c "import sys; exit(0)" >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] Python is not found in PATH!
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%"
+    ) else if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
+    ) else if exist "%LOCALAPPDATA%\Programs\Python\Python310\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python310;%LOCALAPPDATA%\Programs\Python\Python310\Scripts;%PATH%"
+    ) else if exist "%ProgramFiles%\Python311\python.exe" (
+        set "PATH=%ProgramFiles%\Python311;%ProgramFiles%\Python311\Scripts;%PATH%"
+    ) else (
+        for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do (
+            set "PATH=%%b;%PATH%"
+        )
+    )
+)
+
+python -c "import sys; exit(0)" >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] Python 3.10+ is not found or not working!
     echo Please install Python 3.10+ from https://www.python.org/
     echo Make sure to check "Add Python to PATH" during installation.
     pause

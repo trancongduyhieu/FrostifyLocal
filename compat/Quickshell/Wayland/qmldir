@@ -1,3 +1,2 @@
 module Quickshell.Wayland
-singleton WlrLayershell 1.0 WlrLayershell.qml
 singleton WlrLayer 1.0 WlrLayer.qml

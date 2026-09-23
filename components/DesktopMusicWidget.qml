@@ -37,8 +37,8 @@ PanelWindow {
         right: true
     }
 
-    // Dynamic input mask: Passes through desktop clicks when idle; full grab when dragging
-    mask: (dragArea.pressed || dragArea.drag.active) ? null : cardRegion
+    // Dynamic input mask: Only un-mask during active drag movement so single/double clicks are never cancelled by Win32 SetWindowRgn
+    mask: dragArea.drag.active ? null : cardRegion
 
     Region {
         id: cardRegion
@@ -111,8 +111,8 @@ PanelWindow {
     // =========================================================================
     Item {
         id: widgetContainer
-        x: root.widgetX
-        y: root.widgetY
+        x: Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - width - 12))
+        y: Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - height - 52))
         width: 216
         height: 216
 
@@ -120,12 +120,12 @@ PanelWindow {
             target: root
             function onWidgetXChanged() {
                 if (!dragArea.drag.active) {
-                    widgetContainer.x = root.widgetX;
+                    widgetContainer.x = Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - widgetContainer.width - 12));
                 }
             }
             function onWidgetYChanged() {
                 if (!dragArea.drag.active) {
-                    widgetContainer.y = root.widgetY;
+                    widgetContainer.y = Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - widgetContainer.height - 52));
                 }
             }
         }
@@ -159,17 +159,28 @@ PanelWindow {
                 color: "#18181c"
             }
 
-            // Album Artwork (PreserveAspectCrop to fill entire squircle card)
-            Image {
-                id: albumCoverImg
+            // Album Artwork (Zoomed 1.34x inside clipped wrapper to strip YouTube 4:3 letterbox black bars)
+            Item {
                 anchors.fill: parent
-                source: (root.currentTrack && (root.currentTrack.image || root.currentTrack.artUrl))
-                        ? (root.currentTrack.image || root.currentTrack.artUrl)
-                        : ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                smooth: true
-                visible: status === Image.Ready
+                clip: true
+                Image {
+                    id: albumCoverImg
+                    anchors.centerIn: parent
+                    width: parent.width * 1.34
+                    height: parent.height * 1.34
+                    source: {
+                        var raw = (root.currentTrack && (root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover))
+                                  ? String(root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover) : "";
+                        if (!raw) return "";
+                        if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("file://") || raw.startsWith("qrc:")) return raw;
+                        var clean = raw.replace(/\\/g, "/");
+                        return /^[A-Za-z]:/.test(clean) ? ("file:///" + clean) : ("file://" + clean);
+                    }
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    smooth: true
+                    visible: status === Image.Ready
+                }
             }
 
             // MIO Matte Gradient Scrim (Light at top for artwork clarity, dark at bottom for controls)
@@ -222,6 +233,7 @@ PanelWindow {
         // =====================================================================
         Item {
             id: soundwaveButton
+            z: 10
             anchors.top: parent.top
             anchors.topMargin: 14
             anchors.left: parent.left

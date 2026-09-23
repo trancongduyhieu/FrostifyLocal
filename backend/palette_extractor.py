@@ -35,6 +35,31 @@ def get_current_wallpaper() -> Path:
         if candidate.exists():
             return candidate
 
+    # 1b. Windows native wallpaper detection
+    if sys.platform == "win32" or pc.IS_WINDOWS:
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(512)
+            if ctypes.windll.user32.SystemParametersInfoW(0x0073, 512, buf, 0) and buf.value:
+                p = Path(buf.value)
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop")
+            val, _ = winreg.QueryValueEx(key, "Wallpaper")
+            if val and Path(val).exists():
+                return Path(val)
+        except Exception:
+            pass
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            tw = Path(appdata) / "Microsoft" / "Windows" / "Themes" / "TranscodedWallpaper"
+            if tw.exists():
+                return tw
+
     home = Path.home()
 
     # 2. Check theme_hook.log for most recent wallpaper change
@@ -286,8 +311,9 @@ def main():
     mean_lum, bright_ratio, is_light = analyze_crop(img, (0.14, 0.69, 0.52, 0.77))
     palette_info = extract_adaptive_palette(img, is_light)
 
+    wp_str = str(wp_path).replace("\\", "/")
     result = {
-        "wallpaper": str(wp_path),
+        "wallpaper": wp_str,
         "meanLuminance": mean_lum,
         "brightRatio": bright_ratio,
         "isLightArea": palette_info["isLightArea"],
@@ -302,6 +328,12 @@ def main():
     out_file = Path(pc.get_config_dir()) / "nutsty_palette.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    # Always ensure ~/.config/noctalia/nutsty_palette.json is updated on all platforms for QML FileView
+    noctalia_out = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
+    noctalia_out.parent.mkdir(parents=True, exist_ok=True)
+    noctalia_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
     if not pc.IS_WINDOWS:
         legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"
         legacy_out.write_text(json.dumps(result, indent=2), encoding="utf-8")

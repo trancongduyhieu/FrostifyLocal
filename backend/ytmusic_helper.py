@@ -2631,7 +2631,18 @@ def resolve_stream_url(video_id, quality=None):
 
         attempts = []
 
-        # Attempt 1: Authenticated session with user cookies (mweb/web/web_embedded/tv)
+        # Attempt 1: Fast web_embedded / mweb / android direct solver (immune to stale cookie reload errors)
+        attempts.append({
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "check_formats": False,
+            "noplaylist": True,
+            "remote_components": ["ejs:github"],
+            "extractor_args": {"youtube": {"player_client": ["web_embedded", "mweb", "android"]}}
+        })
+
+        # Attempt 2: Authenticated session with user cookies (fallback for age-restricted tracks)
         if cookie_file and os.path.exists(cookie_file):
             attempts.append({
                 "quiet": True,
@@ -2643,17 +2654,6 @@ def resolve_stream_url(video_id, quality=None):
                 "remote_components": ["ejs:github"],
                 "extractor_args": {"youtube": {"player_client": ["mweb", "web", "web_embedded", "tv"]}}
             })
-
-        # Attempt 2: Unauthenticated web_embedded / mweb / android fallback
-        attempts.append({
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "check_formats": False,
-            "noplaylist": True,
-            "remote_components": ["ejs:github"],
-            "extractor_args": {"youtube": {"player_client": ["web_embedded", "mweb", "android"]}}
-        })
 
         # Attempt 3: Browser cookie extraction fallback on desktop
         for browser in ["firefox", "chrome", "chromium", "brave", "edge"]:

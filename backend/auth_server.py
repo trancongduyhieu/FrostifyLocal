@@ -1486,17 +1486,32 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             relay_evts = GLOBAL_RELAY_CLIENT.get_events(caller_ident["user_id"], caller_ident["secret_key"])
             events = []
             for revt in relay_evts.get("events", []):
+                raw_pl = revt.get("payload")
+                if isinstance(raw_pl, str):
+                    try:
+                        raw_pl = json.loads(raw_pl)
+                    except Exception:
+                        raw_pl = {}
+                elif not isinstance(raw_pl, dict):
+                    raw_pl = {}
+
+                inner_data = raw_pl.get("data") if "data" in raw_pl else raw_pl
                 events.append({
-                    "id": revt["id"],
-                    "event": revt["event_type"],
-                    "from_email": revt.get("payload", {}).get("tag", revt["from_user_id"]),
-                    "from_name": revt.get("payload", {}).get("username", "User"),
-                    "from_avatar": revt.get("payload", {}).get("avatar_url", ""),
+                    "id": revt.get("id", ""),
+                    "event": revt.get("event_type", ""),
+                    "from_id": raw_pl.get("from_id") or revt.get("from_user_id", ""),
+                    "from_email": (raw_pl.get("from_tag") or raw_pl.get("tag") or revt.get("from_user_id", "")).strip(),
+                    "from_name": (raw_pl.get("from_name") or raw_pl.get("username") or "User").strip(),
+                    "from_avatar": (raw_pl.get("from_avatar") or raw_pl.get("avatar_url") or "").strip(),
                     "timestamp": revt.get("created_at", time.time() * 1000) / 1000.0,
-                    "data": revt.get("payload", {})
+                    "data": inner_data
                 })
 
             user_aliases = get_user_all_identifiers(user_email)
+            if caller_ident.get("tag"):
+                user_aliases.add(caller_ident["tag"].strip().lower())
+            if caller_ident.get("user_id"):
+                user_aliases.add(caller_ident["user_id"].strip().lower())
             local_evts = load_events_vault()
             my_local = [e for e in local_evts if e.get("to_email", "").strip().lower() in user_aliases]
             rem_local = [e for e in local_evts if e.get("to_email", "").strip().lower() not in user_aliases]
@@ -1771,24 +1786,55 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             suffix = resolve_profile_suffix(profile, from_email)
             caller_ident = ensure_cloud_identity(suffix)
 
-            if not to_email:
-                self._send_json({"success": False, "error": "Missing to_email"}, 400)
+            to_user_id = req_data.get("to_user_id", "").strip()
+            if not to_email and not to_user_id:
+                self._send_json({"success": False, "error": "Missing to_email or to_user_id"}, 400)
                 return
 
             if GLOBAL_RELAY_CLIENT.is_external():
+                resolved_uid = to_user_id if to_user_id.startswith("usr_") else None
+                resolved_tag = to_email if "#" in to_email else None
+                target_lower = (to_email or to_user_id or "").lower()
+
+                # Fast 0ms lookup from in-memory _cloud_notes_cache first
+                if not resolved_uid and target_lower:
+                    for fn in (_cloud_notes_cache.get("data") or []):
+                        fn_uid = (fn.get("user_id") or "").strip()
+                        fn_tag = (fn.get("tag") or "").strip()
+                        fn_email = (fn.get("user_email") or "").strip()
+                        fn_name = (fn.get("user_name") or "").strip()
+                        if target_lower in (fn_uid.lower(), fn_tag.lower(), fn_email.lower(), fn_name.lower()):
+                            if fn_uid:
+                                resolved_uid = fn_uid
+                            if fn_tag:
+                                resolved_tag = fn_tag
+                            break
+
+                # Fallback to friends API if not in cache
+                if not resolved_uid and target_lower:
+                    try:
+                        f_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
+                        for fr in (f_res or {}).get("friends", []):
+                            fr_tag = (fr.get("tag") or "").strip()
+                            fr_name = (fr.get("username") or "").strip()
+                            fr_id = (fr.get("id") or "").strip()
+                            if fr_id.lower() == target_lower or fr_tag.lower() == target_lower or fr_name.lower() == target_lower:
+                                resolved_uid = fr_id
+                                resolved_tag = fr_tag
+                                break
+                    except Exception:
+                        pass
+
                 cloud_res = GLOBAL_RELAY_CLIENT.send_note_event(
                     caller_ident["user_id"],
                     caller_ident["secret_key"],
-                    to_tag=to_email if "#" in to_email else None,
-                    to_user_id=to_email if "#" not in to_email else None,
+                    to_tag=resolved_tag,
+                    to_user_id=resolved_uid or (to_email if not resolved_tag else None),
                     event=ev_type,
                     data=req_data.get("data")
                 )
                 if cloud_res and cloud_res.get("success"):
                     self._send_json(cloud_res, 200)
-                    return
-                else:
-                    self._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
                     return
 
             events = load_events_vault()

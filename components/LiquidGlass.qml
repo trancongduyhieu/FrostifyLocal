@@ -46,8 +46,6 @@ Item {
         return root.mapToItem(backgroundSourceItem, 0, 0);
     }
 
-    onGlobalOffsetChanged: console.log("[LiquidGlass] globalOffset updated to:", globalOffset.x, globalOffset.y)
-
     // Capture the background item as a GPU texture with linear filtering
     ShaderEffectSource {
         id: bgSource

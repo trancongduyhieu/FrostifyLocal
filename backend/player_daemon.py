@@ -199,7 +199,54 @@ def get_mpv_property(prop):
     res = send_mpv_cmd(["get_property", prop])
     return res.get("data")
 
-def resolve_media_path(file_path):
+def find_local_downloaded_file(vid="", title="", artist=""):
+    """Check download_state.json and library.json for an already downloaded local audio file (0ms latency)."""
+    if vid and vid.startswith("yt_"):
+        vid = vid[3:]
+    # 1. Check download_state.json
+    state_candidates = [
+        os.path.expanduser("~/.config/noctalia/download_state.json"),
+        os.path.join(pc.get_config_dir(), "download_state.json")
+    ]
+    for st_path in state_candidates:
+        if os.path.exists(st_path):
+            try:
+                with open(st_path, "r", encoding="utf-8") as f:
+                    st_data = json.load(f)
+                tasks = st_data.get("tasks", {}) if isinstance(st_data, dict) else {}
+                if vid and vid in tasks:
+                    t_info = tasks[vid]
+                    p = t_info.get("path", "")
+                    if t_info.get("status") == "completed" and p and os.path.exists(p):
+                        return p
+            except Exception:
+                pass
+
+    # 2. Check library.json
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    lib_json = os.path.join(app_dir, "library.json")
+    if os.path.exists(lib_json):
+        try:
+            with open(lib_json, "r", encoding="utf-8") as f:
+                tracks = json.load(f)
+            t_title_clean = (title or "").strip().lower()
+            t_artist_clean = (artist or "").strip().lower()
+            for t in tracks:
+                p = t.get("path", "")
+                if not p or not os.path.exists(p):
+                    continue
+                if vid and (t.get("videoId") == vid or vid in str(t.get("image", ""))):
+                    return p
+                lib_title = str(t.get("title") or t.get("name") or "").strip().lower()
+                lib_artist = str(t.get("artist") or "").strip().lower()
+                if t_title_clean and lib_title == t_title_clean:
+                    if not t_artist_clean or not lib_artist or (t_artist_clean in lib_artist) or (lib_artist in t_artist_clean):
+                        return p
+        except Exception:
+            pass
+    return None
+
+def resolve_media_path(file_path, title="", artist=""):
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
@@ -209,6 +256,11 @@ def resolve_media_path(file_path):
             vid = file_path.replace("ytdl://", "")
             if "watch?v=" in vid:
                 vid = vid.split("watch?v=")[1].split("&")[0]
+
+            # 0. Priority #1: Check if track is already downloaded locally on disk!
+            local_file = find_local_downloaded_file(vid, title, artist)
+            if local_file and os.path.exists(local_file):
+                return local_file
 
             streaming_quality = get_current_streaming_quality()
 
@@ -431,18 +483,46 @@ def execute_command(args):
         art_arg = args[4] if len(args) > 4 else ""
 
         is_online = file_path.startswith("ytdl://") or "youtube.com" in file_path or "youtu.be" in file_path
-        initial_state = "loading" if is_online else "playing"
         target_vid = file_path.replace("ytdl://", "") if is_online else ""
+        if "watch?v=" in target_vid:
+            target_vid = target_vid.split("watch?v=")[1].split("&")[0]
+
+        # Priority #1: Check if online track is ALREADY downloaded locally on disk
+        if is_online:
+            local_match = find_local_downloaded_file(target_vid, title_arg, artist_arg)
+            if local_match and os.path.exists(local_match):
+                file_path = local_match
+                is_online = False
+
+        req_ts = time.time()
+        initial_state = "loading" if is_online else "playing"
         state_file = PLAYBACK_STATE_FILE
-        state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": time.time()}
+        state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": req_ts}
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_payload, f)
         except Exception:
             pass
 
+        # CRITICAL FIX: Stop MPV immediately BEFORE resolving online stream URL!
+        # Prevents previous song ("Tìm Em") from continuing to play in the background
+        # while yt-dlp is decoding the new song ("Tràn Bộ Nhớ") for 2-4 seconds.
+        if is_online:
+            send_mpv_cmd(["stop"])
+
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
-        stream_target = resolve_media_path(file_path)
+        stream_target = resolve_media_path(file_path, title_arg, artist_arg) if is_online else file_path
+
+        # Guard against stale concurrent play requests if user clicked another song while resolving
+        if is_online and os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    latest_st = json.load(f)
+                if latest_st.get("timestamp", 0) > req_ts + 0.005:
+                    print("Aborted stale play request for:", file_path)
+                    return
+            except Exception:
+                pass
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
@@ -456,7 +536,7 @@ def execute_command(args):
         if not is_online:
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "playing", "path": file_path, "timestamp": time.time()}, f)
+                    json.dump({"state": "playing", "path": file_path, "target_vid": target_vid, "timestamp": time.time()}, f)
             except Exception:
                 pass
         print("Playing:", file_path)
@@ -484,13 +564,15 @@ def execute_command(args):
                 pass
 
         if len(tracks) > idx and (tracks[idx].startswith("ytdl://") or "youtube.com" in tracks[idx]):
+            req_ts = time.time()
             state_file = PLAYBACK_STATE_FILE
             try:
                 with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump({"state": "loading", "path": tracks[idx], "timestamp": time.time()}, f)
+                    json.dump({"state": "loading", "path": tracks[idx], "timestamp": req_ts}, f)
             except Exception:
                 pass
 
+            send_mpv_cmd(["stop"])
             stream_target = resolve_media_path(tracks[idx])
             send_mpv_cmd(["loadfile", stream_target, "replace"])
             send_mpv_cmd(["set_property", "pause", False])

@@ -140,6 +140,6 @@ void main() {
     // Không bao giờ bị đục xám hay đen ngầu, nhìn thấu các card bên dưới
     float baseAlpha = clamp(max(u_tint.a, 0.40), 0.40, 0.52);
     float glassAlpha = mask * mix(baseAlpha, 0.56, u_flowActive * 0.25);
-    fragColor = vec4(finalColor * glassAlpha, glassAlpha) * qt_Opacity;
+    fragColor = vec4(finalColor * glassAlpha, mask) * qt_Opacity;
 }
 

@@ -881,7 +881,7 @@ export default {
 
         let targetId = to_user_id;
         if (!targetId && to_tag) {
-          const t = await db.prepare("SELECT id FROM nutsty_users WHERE tag = ?").bind(to_tag).first();
+          const t = await db.prepare("SELECT id FROM nutsty_users WHERE LOWER(tag) = LOWER(?)").bind(to_tag).first();
           if (t) targetId = t.id;
         }
 

@@ -155,15 +155,15 @@ check_cli_dispatch()
 
 # Detect Qt bindings (PySide6 or PyQt6)
 try:
-    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread
-    from PySide6.QtGui import QGuiApplication, QIcon, QWindow
+    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect
+    from PySide6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
     from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
     from PySide6.QtQuick import QQuickWindow
     IS_PYSIDE = True
 except ImportError:
     try:
-        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread
-        from PyQt6.QtGui import QGuiApplication, QIcon, QWindow
+        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect
+        from PyQt6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
         from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
         from PyQt6.QtQuick import QQuickWindow
         IS_PYSIDE = False
@@ -173,19 +173,29 @@ except ImportError:
         sys.exit(1)
 
 class NutstyBridge(QObject):
-    processFinished = Signal(object, str, str, int)
+    processFinished = Signal(int, str, str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._callbacks = {}
+        self._cb_id = 0
+        self._cb_lock = threading.Lock()
         self.processFinished.connect(self._onProcessFinished)
 
-    @Slot(object, str, str, int)
-    def _onProcessFinished(self, callback, out, err, code):
-        try:
-            if callback:
-                callback.call([str(out or ""), str(err or ""), int(code or 0)])
-        except Exception as e:
-            sys.stderr.write(f"Process callback execution error: {e}\n")
+    @Slot(int, str, str, int)
+    def _onProcessFinished(self, cb_id, out, err, code):
+        cb = None
+        with self._cb_lock:
+            cb = self._callbacks.pop(cb_id, None)
+        if cb:
+            try:
+                if IS_PYSIDE:
+                    from PySide6.QtQml import QJSValue
+                    cb.call([QJSValue(str(out or "")), QJSValue(str(err or "")), QJSValue(int(code or 0))])
+                else:
+                    cb.call([str(out or ""), str(err or ""), int(code or 0)])
+            except Exception as e:
+                sys.stderr.write(f"Process callback execution error: {e}\n")
 
     @Slot(str, result=str)
     def getEnv(self, key: str) -> str:
@@ -243,6 +253,56 @@ class NutstyBridge(QObject):
             sys.stderr.write(f"getClipboardText failed: {e}\n")
         return ""
 
+    @Slot(QObject, int, int, int, int)
+    def setWindowMaskRect(self, win_obj, x: int, y: int, w: int, h: int):
+        try:
+            if win_obj and hasattr(win_obj, "setMask"):
+                if w <= 0 or h <= 0:
+                    win_obj.setMask(QRegion(QRect(-100, -100, 1, 1)))
+                else:
+                    win_obj.setMask(QRegion(QRect(int(x), int(y), int(w), int(h))))
+        except Exception as e:
+            sys.stderr.write(f"setWindowMaskRect error: {e}\n")
+
+    @Slot(QObject)
+    def clearWindowMask(self, win_obj):
+        try:
+            if win_obj and hasattr(win_obj, "setMask"):
+                win_obj.setMask(QRegion())
+        except Exception as e:
+            sys.stderr.write(f"clearWindowMask error: {e}\n")
+
+    @Slot(QObject)
+    def restoreWindow(self, win_obj):
+        try:
+            if not win_obj:
+                return
+            if hasattr(win_obj, "setVisible"):
+                win_obj.setVisible(True)
+            if hasattr(win_obj, "showNormal"):
+                win_obj.showNormal()
+            if hasattr(win_obj, "show"):
+                win_obj.show()
+            if hasattr(win_obj, "raise_"):
+                win_obj.raise_()
+            elif hasattr(win_obj, "raise"):
+                getattr(win_obj, "raise")()
+            if hasattr(win_obj, "requestActivate"):
+                win_obj.requestActivate()
+            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
+                import ctypes
+                hwnd = int(win_obj.winId())
+                if hwnd:
+                    user32 = ctypes.windll.user32
+                    SW_RESTORE = 9
+                    SW_SHOW = 5
+                    user32.ShowWindow(hwnd, SW_RESTORE)
+                    user32.ShowWindow(hwnd, SW_SHOW)
+                    user32.BringWindowToTop(hwnd)
+                    user32.SetForegroundWindow(hwnd)
+        except Exception as e:
+            sys.stderr.write(f"restoreWindow error: {e}\n")
+
     @Slot(list)
     def execDetached(self, args: list):
         if not args:
@@ -250,6 +310,16 @@ class NutstyBridge(QObject):
 
         if args[0] == "wl-copy":
             self.copyToClipboard(args[1] if len(args) > 1 else "")
+            return
+
+        if args[0] == "xdg-open" and len(args) > 1:
+            try:
+                target_path = os.path.normpath(args[1])
+                os.makedirs(target_path, exist_ok=True)
+                if hasattr(os, "startfile"):
+                    os.startfile(target_path)
+            except Exception as e:
+                sys.stderr.write(f"xdg-open failed: {e}\n")
             return
 
         # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
@@ -311,9 +381,14 @@ class NutstyBridge(QObject):
         if not args:
             return
 
+        with self._cb_lock:
+            self._cb_id += 1
+            cb_id = self._cb_id
+            self._callbacks[cb_id] = callback
+
         if args[0] == "wl-copy":
             self.copyToClipboard(args[1] if len(args) > 1 else "")
-            self.processFinished.emit(callback, "", "", 0)
+            self.processFinished.emit(cb_id, "", "", 0)
             return
 
         target_script = ""
@@ -337,7 +412,7 @@ class NutstyBridge(QObject):
                     out = ""
                     err = str(e)
                     code = 1
-                self.processFinished.emit(callback, out, err, code)
+                self.processFinished.emit(cb_id, out, err, code)
             threading.Thread(target=_status_worker, daemon=True).start()
             return
 
@@ -400,7 +475,7 @@ class NutstyBridge(QObject):
                         default_err.flush()
                     except Exception:
                         pass
-                self.processFinished.emit(callback, out, err, code)
+                self.processFinished.emit(cb_id, out, err, code)
 
             threading.Thread(target=_in_proc_run, daemon=True).start()
             return
@@ -420,7 +495,7 @@ class NutstyBridge(QObject):
                 err = str(e)
                 code = 1
             
-            self.processFinished.emit(callback, out, err, code)
+            self.processFinished.emit(cb_id, out, err, code)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -454,7 +529,7 @@ def register_qml_types():
         qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell", attachedProperties=WlrLayershellAttached)
 
 def start_daemons():
-    """Start resident backend daemons (auth_server HTTP daemon)."""
+    """Start resident backend daemons (auth_server HTTP daemon, palette_extractor)."""
     def _auth_runner():
         try:
             import auth_server
@@ -465,8 +540,25 @@ def start_daemons():
         except Exception as e:
             sys.stderr.write(f"auth_server daemon thread error: {e}\n")
 
-    t = threading.Thread(target=_auth_runner, daemon=True)
-    t.start()
+    def _palette_runner():
+        try:
+            import palette_extractor
+            if hasattr(palette_extractor, "main"):
+                palette_extractor.main()
+        except Exception as e:
+            sys.stderr.write(f"palette_extractor daemon thread error: {e}\n")
+
+    def _library_runner():
+        try:
+            import library
+            if hasattr(library, "main"):
+                library.main()
+        except Exception as e:
+            sys.stderr.write(f"library scanner daemon thread error: {e}\n")
+
+    threading.Thread(target=_auth_runner, daemon=True).start()
+    threading.Thread(target=_palette_runner, daemon=True).start()
+    threading.Thread(target=_library_runner, daemon=True).start()
 
 def main():
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"

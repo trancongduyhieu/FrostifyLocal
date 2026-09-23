@@ -525,7 +525,13 @@ def execute_command(args):
     elif cmd == "send_event":
         ev_type = args[1] if len(args) > 1 else "leave"
         to_email = args[2] if len(args) > 2 else ""
-        res = send_social_event(ev_type, to_email)
+        extra = None
+        if len(args) > 3 and args[3].strip():
+            try:
+                extra = json.loads(args[3])
+            except Exception:
+                extra = {"text": args[3]}
+        res = send_social_event(ev_type, to_email, extra)
         print(json.dumps(res, ensure_ascii=False))
     elif cmd == "delete":
         res = delete_note()

@@ -129,10 +129,17 @@ Scope {
 
     function getWallpaperKey(path) {
         if (!path || typeof path !== "string" || path.trim() === "") return "default";
-        var clean = path.trim();
+        var clean = path.trim().replace(/\\/g, "/");
         var parts = clean.split("/");
         var filename = parts[parts.length - 1];
         return filename || "default";
+    }
+
+    function formatFileUrl(path) {
+        if (!path || typeof path !== "string" || path.trim() === "") return "";
+        if (path.startsWith("file:") || path.startsWith("http:") || path.startsWith("https:") || path.startsWith("qrc:")) return path;
+        var clean = path.trim().replace(/\\/g, "/");
+        return clean.startsWith("/") ? ("file://" + clean) : ("file:///" + clean);
     }
 
     function syncLyricsPositionForWallpaper(wpPath) {
@@ -804,13 +811,30 @@ Scope {
         onTriggered: win.toastVisible = false
     }
 
+    property double lastLocalActionTimestamp: 0
+
     Timer {
         id: listenAlongSeekSafetyTimer
         property real targetPos: 0
-        interval: 1500
+        interval: 650
         repeat: false
         onTriggered: {
-            // Disabled: StatusProcess handles accurate seek once MPV has finished loading (!s.is_loading)
+            if (targetPos > 0 && !win.isLoadingAudio && Math.abs(win.currentTime - targetPos) > 3.5) {
+                win.seekLocalOnly(targetPos);
+            }
+        }
+    }
+
+    Timer {
+        id: hostFollowupSyncTimer
+        property string targetListenerEmail: ""
+        interval: 1400
+        repeat: false
+        onTriggered: {
+            if (targetListenerEmail && win.currentTrack) {
+                win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetListenerEmail);
+                win.sendSocialEventFast("seek", targetListenerEmail, { position: win.currentTime });
+            }
         }
     }
 
@@ -823,26 +847,53 @@ Scope {
 
     function sendSocialEventFast(ev_type, to_email, extra_data) {
         if (!to_email) return;
-        var myEmail = win.authAccountEmail;
-        if (!myEmail) {
-            var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myEmail = (profile === "user2") ? "hiutrn@gmail.com" : "";
-        }
-        var myName = win.authAccountName;
-        if (!myName) {
-            var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myName = (profileN === "user2") ? "Hiếu Trần" : "Nutsty User";
-        }
-        var myAvatar = win.authAccountAvatar || "";
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        var myEmail = win.getCurrentUserEmail();
+        var myName = win.getCurrentUserName();
+        var myAvatar = win.getCurrentUserAvatar() || "";
         if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
             myAvatar = win.myLatestNote.avatar_url;
         }
+
+        // Resolve exact case-preserved tag and user_id from friendsDetails / friendsNotes if available
+        var resolvedEmail = to_email;
+        var resolvedUserId = "";
+        var lowerTarget = String(to_email).trim().toLowerCase();
+        if (win.friendsDetails && Array.isArray(win.friendsDetails)) {
+            for (var fi = 0; fi < win.friendsDetails.length; fi++) {
+                var fd = win.friendsDetails[fi];
+                if (!fd) continue;
+                var fdTag = String(fd.tag || fd.email || "").trim();
+                var fdId = String(fd.user_id || fd.id || "").trim();
+                if (fdTag.toLowerCase() === lowerTarget || fdId.toLowerCase() === lowerTarget) {
+                    if (fdTag) resolvedEmail = fdTag;
+                    if (fdId) resolvedUserId = fdId;
+                    break;
+                }
+            }
+        }
+        if (!resolvedUserId && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+            for (var ni = 0; ni < win.friendsNotes.length; ni++) {
+                var fn = win.friendsNotes[ni];
+                if (!fn) continue;
+                var fnTag = String(fn.tag || fn.user_email || "").trim();
+                var fnId = String(fn.user_id || "").trim();
+                if (fnTag.toLowerCase() === lowerTarget || fnId.toLowerCase() === lowerTarget) {
+                    if (fnTag) resolvedEmail = fnTag;
+                    if (fnId) resolvedUserId = fnId;
+                    break;
+                }
+            }
+        }
+
         var payload = {
+            profile: profile,
             event: ev_type,
             from_email: myEmail,
             from_name: myName,
             from_avatar: myAvatar,
-            to_email: to_email,
+            to_email: resolvedEmail,
+            to_user_id: resolvedUserId,
             data: extra_data || null
         };
         var xhr = new XMLHttpRequest();
@@ -856,21 +907,29 @@ Scope {
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/offline";
         var payload = JSON.stringify({ profile: profile, user_email: email });
-        Quickshell.execDetached(["curl", "-s", "-X", "POST", apiUrl, "-H", "Content-Type: application/json", "-d", payload]);
         Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "offline"]);
     }
 
     function syncNowPlaying(force) {
         var now = Date.now();
         if (!force && (now - win.lastNowPlayingSyncTime < 4000)) return;
-        win.lastNowPlayingSyncTime = now;
 
-        var email = win.authAccountEmail;
+        var email = win.getCurrentUserEmail();
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-        if (!email) {
-            email = (profile === "user2") ? "hiutrn@gmail.com" : "";
-        }
         if (!email) return;
+
+        // Prevent Guest from overwriting Host's now_playing when still loading at 0:00 or when sharing account
+        if (win.listeningAlongFriend) {
+            var hostEm = String(win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").trim().toLowerCase();
+            if (hostEm && hostEm === String(email).trim().toLowerCase()) {
+                return;
+            }
+            if (win.isLoadingAudio || win.pendingListenAlongSeekPosition > 0) {
+                return;
+            }
+        }
+
+        win.lastNowPlayingSyncTime = now;
 
         var cur = win.currentTrack;
         var npData = null;
@@ -878,6 +937,7 @@ Scope {
             var vid = cur.videoId || cur.id || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
             if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
             var cov = win.getTrackCoverUrl(cur);
+            var reportPos = (win.pendingListenAlongSeekPosition > 0) ? win.pendingListenAlongSeekPosition : (win.currentTime || 0);
             npData = {
                 id: vid,
                 videoId: vid,
@@ -887,7 +947,7 @@ Scope {
                 cover: cov,
                 image: cov,
                 accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
-                position: win.currentTime || 0,
+                position: reportPos,
                 duration: win.totalDuration || cur.duration || 0,
                 is_playing: win.isPlaying,
                 timestamp: Date.now() / 1000.0
@@ -900,8 +960,8 @@ Scope {
         xhr.send(JSON.stringify({
             profile: profile,
             user_email: email,
-            user_name: win.authAccountName || "",
-            avatar_url: win.authAccountThumb || "",
+            user_name: win.getCurrentUserName() || "",
+            avatar_url: win.getCurrentUserAvatar() || "",
             now_playing: npData
         }));
     }
@@ -1086,15 +1146,16 @@ Scope {
                                 win.myLatestNote = parsed.my_note;
                             }
 
-                            // Auto-follow and real-time co-listening synchronization (Play/Pause/Seek)
-                            if (win.listeningAlongFriend && Array.isArray(parsed.notes)) {
-                                if (Date.now() - win.lastTrackSwitchTimestamp < 4000) {
+                            // Auto-follow and real-time co-listening synchronization (Guest following Host ONLY)
+                            if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0) && Array.isArray(parsed.notes)) {
+                                if ((Date.now() - win.lastTrackSwitchTimestamp < 4500) || (Date.now() - win.lastLocalActionTimestamp < 4500)) {
                                     return;
                                 }
-                                var targetEmail = (win.listeningAlongFriend.user_email || "").toLowerCase();
+                                var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
                                 var targetName = win.listeningAlongFriend.user_name;
                                 var updated = parsed.notes.find(function(f) {
-                                    return (targetEmail && f.user_email && f.user_email.toLowerCase() === targetEmail) ||
+                                    var fEm = (f.user_email || f.tag || "").toLowerCase();
+                                    return (targetEmail && fEm === targetEmail) ||
                                            (targetName && f.user_name === targetName);
                                 });
                                 if (updated && updated.now_playing) {
@@ -1114,7 +1175,7 @@ Scope {
                                         // Same track: Reconcile Play/Pause and Seek Drift!
                                         win.isSyncingFromFriend = true;
 
-                                        // 1. Play / Pause State Machine Sync
+                                        // 1. Play / Pause State Machine Sync (Only if not within grace window)
                                         if (np.is_playing === false && win.isPlaying === true) {
                                             win.isPlaying = false;
                                             win.isLoadingAudio = false;
@@ -1135,11 +1196,10 @@ Scope {
                                             }
                                         }
                                         if (win.isLoadingAudio) {
-                                            // Đang nạp stream: Chỉ lưu vị trí chờ nạp xong, không tua MPV để tránh reset nạp lại từ đầu!
                                             win.pendingListenAlongSeekPosition = expectedPos;
                                         } else {
                                             var drift = Math.abs(win.currentTime - expectedPos);
-                                            if (drift > 2.5 && expectedPos >= 0) {
+                                            if (drift > 3.5 && expectedPos >= 0) {
                                                 win.seekLocalOnly(expectedPos);
                                             }
                                         }
@@ -1157,7 +1217,7 @@ Scope {
 
         // Fetch social events fast (instant peer actions: pause, play, seek, leave)
         if (email) {
-            var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email);
+            var evUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes/events?user_email=" + encodeURIComponent(email) + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
             var evXhr = new XMLHttpRequest();
             evXhr.open("GET", evUrl, true);
             evXhr.onreadystatechange = function() {
@@ -1171,6 +1231,11 @@ Scope {
                             if (ev.event === "join") {
                                 var jEmail = (ev.from_email || "").trim().toLowerCase();
                                 if (jEmail) {
+                                    // Strict Single-Host Authority: When someone joins YOU, YOU are the Host (never a Guest!)
+                                    win.listeningAlongFriend = null;
+                                    win.pendingListenAlongSeekPosition = 0.0;
+                                    win.lastLocalActionTimestamp = Date.now();
+
                                     var existing = win.activeCoListeners ? win.activeCoListeners.slice(0) : [];
                                     var isNewListener = (existing.indexOf(jEmail) === -1);
                                     if (isNewListener) {
@@ -1182,11 +1247,12 @@ Scope {
                                     if (!jAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
                                         var matchNote = win.friendsNotes.find(function(n) {
                                             return (n.user_email && n.user_email.toLowerCase() === jEmail) ||
+                                                   (n.tag && n.tag.toLowerCase() === jEmail) ||
                                                    (n.user_name && n.user_name === jName);
                                         });
                                         if (matchNote) {
                                             jAvatar = matchNote.avatar_url || "";
-                                            if (!ev.from_name && matchNote.user_name) jName = matchNote.user_name;
+                                            if ((!ev.from_name || ev.from_name === "User") && matchNote.user_name) jName = matchNote.user_name;
                                         }
                                     }
                                     var curDetails = win.activeCoListenersDetails ? win.activeCoListenersDetails.slice(0) : [];
@@ -1198,14 +1264,15 @@ Scope {
                                     }
                                     win.activeCoListenersDetails = curDetails;
 
-                                    // Chỉ hiện Toast thông báo khi người nghe mới tham gia lần đầu
                                     if (isNewListener) {
                                         win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
                                     }
                                     win.syncNowPlaying(true);
                                     if (win.currentTrack) {
-                                        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", jEmail);
-                                        win.sendSocialEventFast("seek", jEmail, { position: win.currentTime });
+                                        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", ev.from_email || jEmail);
+                                        win.sendSocialEventFast("seek", ev.from_email || jEmail, { position: win.currentTime });
+                                        hostFollowupSyncTimer.targetListenerEmail = ev.from_email || jEmail;
+                                        hostFollowupSyncTimer.restart();
                                     }
                                 }
                             } else if (ev.event === "leave" || ev.event === "kick") {
@@ -1232,20 +1299,24 @@ Scope {
                                     win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                                 }
                             } else if (ev.event === "pause") {
+                                win.lastLocalActionTimestamp = Date.now();
                                 if (win.isPlaying) {
                                     win.isSyncingFromFriend = true;
                                     win.isPlaying = false;
                                     win.isLoadingAudio = false;
                                     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                                    win.syncNowPlaying(true);
                                     win.isSyncingFromFriend = false;
                                 }
                                 var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                 win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                             } else if (ev.event === "play" || ev.event === "resume") {
+                                win.lastLocalActionTimestamp = Date.now();
                                 if (!win.isPlaying && win.currentTrack) {
                                     win.isSyncingFromFriend = true;
                                     win.isPlaying = true;
                                     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
+                                    win.syncNowPlaying(true);
                                     win.isSyncingFromFriend = false;
                                 }
                                 var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
@@ -1253,11 +1324,14 @@ Scope {
                             } else if (ev.event === "seek") {
                                 var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
                                 if (sPos >= 0) {
+                                    win.lastLocalActionTimestamp = Date.now();
                                     win.isSyncingFromFriend = true;
                                     if (win.isLoadingAudio) {
                                         win.pendingListenAlongSeekPosition = sPos;
                                     } else {
                                         win.seekLocalOnly(sPos);
+                                        listenAlongSeekSafetyTimer.targetPos = sPos;
+                                        listenAlongSeekSafetyTimer.restart();
                                     }
                                     win.isSyncingFromFriend = false;
                                     var skName = ev.from_name || I18n.tr("Bạn bè", "Friend");
@@ -1524,6 +1598,58 @@ Scope {
         return false;
     }
 
+    function isLocalPathExisting(p) {
+        if (!p || typeof p !== "string" || p.startsWith("ytdl://") || p.startsWith("http://") || p.startsWith("https://")) return false;
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.checkFileMtime === "function") {
+            return __NutstyBridge.checkFileMtime(p) !== "";
+        }
+        return true;
+    }
+
+    function findLocalDownloadedTrack(trk) {
+        if (!trk) return null;
+        var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (rVid && String(rVid).startsWith("yt_")) rVid = String(rVid).replace(/^yt_/, "");
+
+        if (trk.path && win.isLocalPathExisting(trk.path)) {
+            return trk;
+        }
+
+        var dlRef = (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager : ((typeof DownloadManager !== "undefined") ? DownloadManager : null);
+        if (rVid && dlRef && dlRef.downloadTasks) {
+            var dTask = dlRef.downloadTasks[rVid];
+            if (dTask && (dTask.state === 3 || dTask.status === "completed") && dTask.path && win.isLocalPathExisting(dTask.path)) {
+                return {
+                    path: dTask.path,
+                    videoId: rVid,
+                    title: dTask.title || trk.title || trk.name || "",
+                    name: dTask.title || trk.title || trk.name || "",
+                    artist: dTask.artist || trk.artist || "",
+                    image: trk.image || trk.cover || dTask.thumbnail || ""
+                };
+            }
+        }
+
+        var tName = String(trk.title || trk.name || "").toLowerCase().trim();
+        var tArtist = String(trk.artist || "").toLowerCase().trim();
+        if (win.allTracks && win.allTracks.length > 0) {
+            for (var i = 0; i < win.allTracks.length; i++) {
+                var lt = win.allTracks[i];
+                if (!lt || !lt.path || !win.isLocalPathExisting(lt.path)) continue;
+                var ltVid = lt.videoId || "";
+                if (rVid && (ltVid === rVid || (lt.image && String(lt.image).indexOf(rVid) !== -1))) {
+                    return lt;
+                }
+                var ltName = String(lt.title || lt.name || "").toLowerCase().trim();
+                var ltArtist = String(lt.artist || "").toLowerCase().trim();
+                if (tName && ltName === tName && (!tArtist || !ltArtist || ltArtist.indexOf(tArtist) !== -1 || tArtist.indexOf(ltArtist) !== -1)) {
+                    return lt;
+                }
+            }
+        }
+        return null;
+    }
+
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
         if (win.listeningAlongFriend && !win.isSyncingFromFriend) {
@@ -1591,11 +1717,16 @@ Scope {
             return;
         }
         if (startRadio === undefined) startRadio = false;
+
+        // Check if this song is ALREADY downloaded locally (0ms playback priority!)
+        var localMatch = win.findLocalDownloadedTrack(trk);
+        var hasLocalFile = Boolean(localMatch && localMatch.path);
+
         win.trackChangeTimestamp = Date.now();
         win.postLoadGraceTimestamp = Date.now();
         win.currentTrack = trk;
         win.currentTime = 0.0;
-        win.isLoadingAudio = true;
+        win.isLoadingAudio = !hasLocalFile;
         win.totalDuration = 0.0;
         win.isPlaying = true;
         if (win.currentView !== "search") {
@@ -1623,10 +1754,10 @@ Scope {
             }
         }
 
-        var streamPath = "ytdl://" + rVid;
-        var tTitle = trk.title || trk.name || "";
-        var tArtist = trk.artist || "";
-        var tImage = trk.image || trk.cover || "";
+        var streamPath = hasLocalFile ? localMatch.path : ("ytdl://" + rVid);
+        var tTitle = trk.title || trk.name || (localMatch ? (localMatch.title || localMatch.name || "") : "");
+        var tArtist = trk.artist || (localMatch ? (localMatch.artist || "") : "");
+        var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
         win.syncNowPlaying(true);
         if (!win.isSyncingFromFriend && win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -1946,6 +2077,10 @@ Scope {
              (win.listeningAlongFriend.user_name && friend.user_name && win.listeningAlongFriend.user_name === friend.user_name)));
 
         win.listeningAlongFriend = friend;
+        // Becoming a Guest clears any old Host co-listener list to prevent dual-role loops
+        win.activeCoListeners = [];
+        win.activeCoListenersDetails = [];
+        win.lastLocalActionTimestamp = Date.now();
         var activeTrackObj = null;
         if (friend.now_playing && (friend.now_playing.title || friend.now_playing.name) && friend.now_playing.is_playing !== false) {
             activeTrackObj = friend.now_playing;
@@ -2064,19 +2199,18 @@ Scope {
     function sendChatMessage(text) {
         if (!text || text.trim() === "") return;
         var cleanText = text.trim();
-        var myName = win.authAccountName;
-        if (!myName) {
-            var profileN = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-            myName = (profileN === "user2") ? "Hiếu Trần" : I18n.tr("Tôi", "Me");
-        }
-        var myAvatar = win.authAccountAvatar || "";
+        var myName = win.getCurrentUserName() || I18n.tr("Tôi", "Me");
+        var myAvatar = win.getCurrentUserAvatar() || "";
         if (!myAvatar && win.myLatestNote && win.myLatestNote.avatar_url) {
             myAvatar = win.myLatestNote.avatar_url;
         }
 
         // 1. Gửi cho Host (nếu mình là Listener)
-        if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
-            win.sendSocialEventFast("chat_message", win.listeningAlongFriend.user_email, { text: cleanText });
+        if (win.listeningAlongFriend) {
+            var targetHost = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email || "";
+            if (targetHost) {
+                win.sendSocialEventFast("chat_message", targetHost, { text: cleanText });
+            }
         }
 
         // 2. Gửi cho các Listeners (nếu mình là Host)
@@ -2409,44 +2543,75 @@ Scope {
         id: masterContainer
         anchors.fill: parent
         radius: (win.maximized || win.fullscreen) ? 0 : 16
-        color: Qt.rgba(0.04, 0.04, 0.06, 0.58)
+        color: "transparent"
         border.color: "transparent"
         border.width: 0
         clip: true
         focus: true
 
         // =====================================================================
-        // Dynamic Playing Backdrop Cover:
-        // 1. PAUSED / STOPPED / IDLE:
-        //    Opacity is 0.0. The window is 100% translucent acrylic (masterContainer 0.58),
-        //    allowing the desktop wallpaper to be seen directly beneath wherever you move the app.
-        // 2. PLAYING MUSIC:
-        //    Smoothly transitions in to opacity 1.0 over 900ms (Easing.InOutQuad).
-        //    Completely covers the desktop wallpaper underneath with a solid dark foundation,
-        //    so the wallpaper and artwork NEVER clash or overlay each other.
-        //    Applies ultra-diffuse blur (blurMax: 96) to turn the song's artwork into
-        //    a pure, rich, velvet aurora glow.
+        // Dynamic Backdrop Atmosphere & Foundation:
+        // 1. Solid Dark Base Foundation (#0a0b0e):
+        //    Always opaque, preventing terminal windows or background apps from bleeding through.
+        // 2. Desktop Wallpaper Atmosphere (active when PAUSED / IDLE):
+        //    Renders win.currentWallpaperPath with deep frosted MultiEffect blur (blurMax: 64).
+        //    Gives the exact Linux Wayland frosted wallpaper aesthetic!
+        // 3. Active Song Velvet Aurora Atmosphere (active when PLAYING):
+        //    Renders win.currentTrack artwork with ultra-diffuse velvet blur (blurMax: 64).
+        //    Cross-fades smoothly over 400ms when playing/pausing music.
+        // 4. Adaptive Dark Scrim:
+        //    Preserves high-contrast readability for all text, cards, and buttons.
         // =====================================================================
         Item {
-            id: playingBackdropCover
+            id: masterBackdropStack
             anchors.fill: parent
             z: 0
-            visible: opacity > 0.001
-            opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 400
-                    easing.type: Easing.InOutQuad
-                }
-            }
 
-            // Solid dark base to completely block the desktop wallpaper underneath while playing!
+            // 1. Solid dark foundation to completely block background windows/terminals
             Rectangle {
                 anchors.fill: parent
                 color: "#0a0b0e"
             }
 
-            // Song Artwork Atmosphere Wrapper - clipped & zoomed 1.7x to push out YouTube pillarbox/letterbox black bars
+            // 2. Desktop Wallpaper Atmosphere Wrapper (when paused / idle)
+            Item {
+                id: wallpaperAtmosphereWrapper
+                anchors.fill: parent
+                clip: true
+                visible: false
+
+                Image {
+                    id: wallpaperAtmosphereImg
+                    anchors.centerIn: parent
+                    width: parent.width * 1.15
+                    height: parent.height * 1.15
+                    source: win.formatFileUrl(win.currentWallpaperPath)
+                    sourceSize: Qt.size(1920, 1080)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                }
+            }
+
+            MultiEffect {
+                id: wallpaperAtmosphereEffect
+                anchors.fill: parent
+                source: wallpaperAtmosphereWrapper
+                visible: wallpaperAtmosphereImg.status === Image.Ready
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 64
+                saturation: 1.35
+                brightness: -0.15
+                opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.65
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 400
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+            }
+
+            // 3. Song Artwork Atmosphere Wrapper (when playing music)
             Item {
                 id: songAtmosphereWrapper
                 anchors.fill: parent
@@ -2465,7 +2630,6 @@ Scope {
                 }
             }
 
-            // Ultra-diffuse Velvet MultiEffect Blur (blurMax: 64)
             MultiEffect {
                 id: songAtmosphereEffect
                 anchors.fill: parent
@@ -2476,10 +2640,16 @@ Scope {
                 blurMax: 64
                 saturation: 1.45
                 brightness: -0.15
-                opacity: 0.60
+                opacity: (win.currentTrack && win.isPlaying) ? 0.65 : 0.0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 400
+                        easing.type: Easing.InOutQuad
+                    }
+                }
             }
 
-            // Adaptive Dark Scrim (10% reduced opacity for subtle, comfortable ambient blur)
+            // 4. Adaptive Dark Scrim
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
@@ -2591,7 +2761,7 @@ Scope {
                     Image {
                         id: fallbackWallpaperImg
                         anchors.fill: parent
-                        source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
+                        source: win.formatFileUrl(win.currentWallpaperPath)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
@@ -2736,7 +2906,7 @@ Scope {
 
                 Image {
                     anchors.fill: parent
-                    source: win.currentWallpaperPath ? ("file://" + win.currentWallpaperPath) : ""
+                    source: win.formatFileUrl(win.currentWallpaperPath)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
@@ -2847,24 +3017,16 @@ Scope {
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
-                    if (typeof __NutstyBridge !== "undefined") {
+                    var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+                    if (profile && profile !== "user1") {
+                        win.sendOfflineSignal();
                         Qt.quit();
                     } else {
-                        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-                        if (profile && profile !== "user1") {
-                            win.sendOfflineSignal();
-                            Qt.quit();
-                        } else {
-                            win.visible = false;
-                        }
+                        win.visible = false;
                     }
                 }
                 onMinimizeWindowRequested: {
-                    if (typeof win.showMinimized === "function") {
-                        win.showMinimized();
-                    } else {
-                        win.visibility = 3;
-                    }
+                    win.visible = false;
                 }
                 onMaximizeWindowRequested: {
                     if (win.visibility === 4) {
@@ -3721,8 +3883,9 @@ Scope {
             try {
                 var p = JSON.parse(raw);
                 if (p.wallpaper) {
-                    win.currentWallpaperPath = p.wallpaper;
-                    win.syncLyricsPositionForWallpaper(p.wallpaper);
+                    var wp = p.wallpaper.replace(/\\/g, "/");
+                    win.currentWallpaperPath = wp;
+                    win.syncLyricsPositionForWallpaper(wp);
                 }
                 var col = p.highlightColor || p.accentColor || "#deb06c";
                 win.wallpaperAccentColor = col;
@@ -4030,12 +4193,13 @@ Scope {
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
         }
 
+        win.lastLocalActionTimestamp = Date.now();
         win.syncNowPlaying(true);
 
         if (!win.isSyncingFromFriend) {
             var evType = win.isPlaying ? "play" : "pause";
-            if (win.listeningAlongFriend && win.listeningAlongFriend.user_email) {
-                win.sendSocialEventFast(evType, win.listeningAlongFriend.user_email);
+            if (win.listeningAlongFriend && (win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email)) {
+                win.sendSocialEventFast(evType, win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email);
             }
             if (win.activeCoListeners && win.activeCoListeners.length > 0) {
                 for (var li = 0; li < win.activeCoListeners.length; li++) {
@@ -4526,6 +4690,8 @@ Scope {
                             var p = win.pendingListenAlongSeekPosition;
                             win.pendingListenAlongSeekPosition = 0;
                             win.seekLocalOnly(p);
+                            listenAlongSeekSafetyTimer.targetPos = p;
+                            listenAlongSeekSafetyTimer.restart();
                         }
                     } else {
                         if (s.is_loading) {
@@ -4544,6 +4710,13 @@ Scope {
                             win.currentTime = s.time_pos;
                         }
                         if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
+                        if (win.pendingListenAlongSeekPosition > 0 && (s.is_playing || s.is_paused)) {
+                            var p2 = win.pendingListenAlongSeekPosition;
+                            win.pendingListenAlongSeekPosition = 0;
+                            win.seekLocalOnly(p2);
+                            listenAlongSeekSafetyTimer.targetPos = p2;
+                            listenAlongSeekSafetyTimer.restart();
+                        }
                     }
 
 
@@ -4992,7 +5165,7 @@ Scope {
     // =========================================================================
     Loader {
         id: desktopMusicWidgetLoader
-        active: !win.visible && win.currentTrack !== null
+        active: !win.visible
         sourceComponent: Component {
             DesktopMusicWidget {
                 currentTrack: win.currentTrack
@@ -5009,6 +5182,13 @@ Scope {
                 onSeekRequested: (sec) => win.seekAudio(sec)
                 onOpenFullAppRequested: {
                     win.visible = true;
+                    if (typeof win.showNormal === "function") win.showNormal();
+                    if (typeof win.show === "function") win.show();
+                    if (typeof win.raise === "function") win.raise();
+                    if (typeof win.requestActivate === "function") win.requestActivate();
+                    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.restoreWindow) {
+                        __NutstyBridge.restoreWindow(win);
+                    }
                 }
                 onSavePositionRequested: (newX, newY) => {
                     win.widgetX = newX;

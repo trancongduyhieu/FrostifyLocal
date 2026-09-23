@@ -24,6 +24,21 @@ _bin_dir = os.path.join(APP_ROOT, "bin")
 if os.path.exists(_bin_dir) and _bin_dir not in os.environ.get("PATH", ""):
     os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
 
+def configure_windows_utf8():
+    """Ensure standard input/output/error streams use UTF-8 on Windows."""
+    if IS_WINDOWS:
+        os.environ["PYTHONIOENCODING"] = "utf-8"
+        os.environ["PYTHONUTF8"] = "1"
+        try:
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+configure_windows_utf8()
+
 def get_config_dir() -> str:
     """Return platform-appropriate configuration directory."""
     if IS_WINDOWS:

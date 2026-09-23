@@ -85,15 +85,23 @@ Item {
         ]);
     }
 
+    property var cancelledTimestamps: ({})
+
     function cancel(videoId) {
         if (!videoId) return;
+        var cts = Object.assign({}, root.cancelledTimestamps || {});
+        cts[videoId] = Date.now();
+        root.cancelledTimestamps = cts;
+
+        var updated = Object.assign({}, root.downloadTasks);
+        delete updated[videoId];
+        root.downloadTasks = updated;
+        root.tasksList = root.getTasksList();
+
         Quickshell.execDetached([
             "python3", win.appDir + "/backend/download_manager.py", "cancel",
             videoId
         ]);
-        var updated = Object.assign({}, root.downloadTasks);
-        delete updated[videoId];
-        root.downloadTasks = updated;
     }
 
     function deleteDownloaded(videoId, trk) {
@@ -208,7 +216,14 @@ Item {
                 var newStates = {};
                 var tasks = data.tasks;
 
+                var nowMs = Date.now();
+                var cts = root.cancelledTimestamps || {};
+                var filteredTasks = {};
+
                 for (var vid in tasks) {
+                    if (cts[vid] && (nowMs - cts[vid]) < 5000) {
+                        continue;
+                    }
                     var t = tasks[vid];
                     var prevState = prevStates[vid];
                     newStates[vid] = t.state;
@@ -219,10 +234,11 @@ Item {
                     } else if (t.state === 4 && prevState !== 4) {
                         root.taskFailed(vid, t.title || "", t.error || "");
                     }
+                    filteredTasks[vid] = t;
                 }
 
                 root.lastTaskStates = newStates;
-                root.downloadTasks = Object.assign({}, tasks);
+                root.downloadTasks = filteredTasks;
                 root.tasksList = root.getTasksList();
             }
 
