@@ -39,19 +39,110 @@ def configure_windows_utf8():
 
 configure_windows_utf8()
 
+_CONFIG_MIGRATED = False
+
 def get_config_dir() -> str:
-    """Return platform-appropriate configuration directory."""
-    if IS_WINDOWS:
+    """
+    Single Source of Truth (SSOT) configuration directory across Linux and Windows.
+    Always resolves to ~/.config/noctalia (matching QML FileView & Quickshell paths)
+    and migrates any legacy %APPDATA%/Nutsty files on Windows seamlessly.
+    """
+    global _CONFIG_MIGRATED
+    xdg = os.getenv("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    base = os.path.join(xdg, "noctalia")
+    os.makedirs(base, exist_ok=True)
+
+    if IS_WINDOWS and not _CONFIG_MIGRATED:
+        _CONFIG_MIGRATED = True
         appdata = os.getenv("APPDATA")
         if appdata:
-            base = os.path.join(appdata, "Nutsty")
-        else:
-            base = os.path.expanduser("~/.config/nutsty")
-    else:
-        # Standard Noctalia/Nutsty directory on Linux
-        base = os.path.expanduser("~/.config/noctalia")
-    os.makedirs(base, exist_ok=True)
+            legacy_win_dir = os.path.join(appdata, "Nutsty")
+            if os.path.isdir(legacy_win_dir):
+                try:
+                    for item in os.listdir(legacy_win_dir):
+                        src = os.path.join(legacy_win_dir, item)
+                        dst = os.path.join(base, item)
+                        if not os.path.exists(dst):
+                            if os.path.isdir(src):
+                                shutil.copytree(src, dst, dirs_exist_ok=True)
+                            else:
+                                shutil.copy2(src, dst)
+                except Exception:
+                    pass
     return base
+
+def get_config_path() -> Path:
+    """Return SSOT configuration directory as a pathlib.Path."""
+    return Path(get_config_dir())
+
+def get_profile_suffix(profile: str = None, user_email: str = None) -> str:
+    """Resolve profile suffix (_user1, _user2, _friend, or '') from profile or email."""
+    if profile:
+        p = str(profile).strip().lower()
+        if p in ("user1", "_user1"):
+            return "_user1"
+        elif p in ("default", "main", ""):
+            return ""
+        elif p.startswith("_"):
+            return p
+        else:
+            return f"_{p}"
+    if user_email:
+        em = str(user_email).strip().lower()
+        if "user1" in em:
+            return "_user1"
+        elif "user2" in em:
+            return "_user2"
+        elif "friend" in em:
+            return "_friend"
+        d = get_config_dir()
+        import glob
+        for cache_file in glob.glob(os.path.join(d, "nutsty_user_cache*.json")):
+            try:
+                import json
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                    if (cdata.get("email") or "").strip().lower() == em or (cdata.get("handle") or "").strip().lower() == em:
+                        base_name = os.path.basename(cache_file)
+                        return base_name.replace("nutsty_user_cache", "").replace(".json", "")
+            except Exception:
+                pass
+    env_p = os.getenv("NUTSTY_PROFILE", "").strip().lower()
+    if env_p in ("user1", "_user1"):
+        return "_user1"
+    if env_p in ("default", "main", ""):
+        return ""
+    return env_p if env_p.startswith("_") else f"_{env_p}"
+
+def get_cloud_identity_file(suffix: str = "") -> Path:
+    if suffix in ("_user1", "user1"):
+        norm_suffix = "_user1"
+    elif suffix:
+        norm_suffix = suffix if suffix.startswith("_") else f"_{suffix}"
+    else:
+        norm_suffix = ""
+    return get_config_path() / f"nutsty_cloud_identity{norm_suffix}.json"
+
+def get_notes_vault_file() -> Path:
+    return get_config_path() / "nutsty_notes_vault.json"
+
+def get_events_vault_file() -> Path:
+    return get_config_path() / "nutsty_notes_events.json"
+
+def get_friends_vault_file() -> Path:
+    return get_config_path() / "nutsty_friends_vault.json"
+
+def get_friend_requests_vault_file() -> Path:
+    return get_config_path() / "nutsty_friend_requests_vault.json"
+
+def get_profiles_vault_file() -> Path:
+    return get_config_path() / "nutsty_profiles_vault.json"
+
+def get_friends_file(suffix: str = "") -> Path:
+    return get_config_path() / f"nutsty_friends{suffix}.json"
+
+def get_notes_cache_file(suffix: str = "") -> Path:
+    return get_config_path() / f"nutsty_notes_cache{suffix}.json"
 
 def get_cache_dir() -> str:
     """Return platform-appropriate cache directory."""

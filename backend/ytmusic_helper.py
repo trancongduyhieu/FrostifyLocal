@@ -8,6 +8,7 @@ import sys
 import os
 import json
 import time
+import shutil
 import re
 import hashlib
 import urllib.request

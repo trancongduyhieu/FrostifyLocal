@@ -25,42 +25,28 @@ DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
 COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"
 
 def get_profile_suffix() -> str:
-    """Hỗ trợ đa profile (NUTSTY_PROFILE) để kiểm thử song song nhiều cửa sổ trên 1 máy."""
-    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    return f"_{profile}" if profile else ""
+    """Hỗ trợ đa profile (NUTSTY_PROFILE) qua Single Source of Truth platform_compat."""
+    return pc.get_profile_suffix()
 
 def get_config_dir() -> Path:
-    """Xác định thư mục cấu hình chuẩn đồng nhất với auth_server.py và shell.qml (~/.config/noctalia)."""
-    xdg_config = os.getenv("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    noctalia_dir = Path(xdg_config) / "noctalia"
-    if noctalia_dir.exists() or sys.platform != "win32":
-        noctalia_dir.mkdir(parents=True, exist_ok=True)
-        return noctalia_dir
-    if sys.platform == "win32":
-        app_data = os.getenv("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        win_dir = Path(app_data) / "Nutsty"
-        if (win_dir / "nutsty_cloud_identity.json").exists():
-            return win_dir
-    noctalia_dir.mkdir(parents=True, exist_ok=True)
-    return noctalia_dir
+    """Xác định thư mục cấu hình chuẩn đồng nhất qua Single Source of Truth platform_compat (~/.config/noctalia)."""
+    return pc.get_config_path()
 
 def get_friends_file() -> Path:
-    suffix = get_profile_suffix()
-    return get_config_dir() / f"nutsty_friends{suffix}.json"
+    return pc.get_friends_file(get_profile_suffix())
 
 def get_cache_file() -> Path:
-    suffix = get_profile_suffix()
-    return get_config_dir() / f"nutsty_notes_cache{suffix}.json"
+    return pc.get_notes_cache_file(get_profile_suffix())
 
 def get_current_user() -> Dict[str, str]:
-    """Lấy thông tin tài khoản hiện tại từ cloud identity, settings hoặc profile môi trường."""
+    """Lấy thông tin tài khoản hiện tại từ cloud identity (SSOT), settings hoặc profile môi trường."""
     profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
     suffix = get_profile_suffix()
 
-    # 0. Đọc từ nutsty_cloud_identity{suffix}.json trước nếu có
-    cloud_id_file = get_config_dir() / f"nutsty_cloud_identity{suffix}.json"
+    # 0. Đọc từ nutsty_cloud_identity{suffix}.json trước (SSOT)
+    cloud_id_file = pc.get_cloud_identity_file(suffix)
     if not cloud_id_file.exists() and not suffix:
-        cloud_id_file = get_config_dir() / "nutsty_cloud_identity.json"
+        cloud_id_file = pc.get_cloud_identity_file("")
     if cloud_id_file.exists():
         try:
             with open(cloud_id_file, "r", encoding="utf-8") as cif:

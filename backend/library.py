@@ -6,10 +6,12 @@ Scans tracks from local folders and phone downloads into library.json
 import os
 import sys
 import json
+import time
 import subprocess
 import glob
 HOME = os.path.expanduser("~")
-LOCAL_DIR = os.path.join(HOME, "Music", "Nutsty", "Tracks") if os.path.exists(os.path.join(HOME, "Music", "Nutsty", "Tracks")) else os.path.join(HOME, "Music", "SimpMusic", "Tracks")
+SIMP_DIR = os.path.join(HOME, "Music", "SimpMusic", "Tracks")
+LOCAL_DIR = os.path.join(HOME, "Music", "Nutsty", "Tracks") if os.path.exists(os.path.join(HOME, "Music", "Nutsty", "Tracks")) else SIMP_DIR
 DOWNLOADS_DIR = os.path.join(HOME, "Music", "Downloads_Phone")
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "library.json")
 
