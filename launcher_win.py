@@ -261,6 +261,7 @@ class NutstyBridge(QObject):
                     win_obj.setMask(QRegion(QRect(-100, -100, 1, 1)))
                 else:
                     win_obj.setMask(QRegion(QRect(int(x), int(y), int(w), int(h))))
+                self.pinWindowToDesktopBottom(win_obj)
         except Exception as e:
             sys.stderr.write(f"setWindowMaskRect error: {e}\n")
 
@@ -269,8 +270,39 @@ class NutstyBridge(QObject):
         try:
             if win_obj and hasattr(win_obj, "setMask"):
                 win_obj.setMask(QRegion())
+                self.pinWindowToDesktopBottom(win_obj)
         except Exception as e:
             sys.stderr.write(f"clearWindowMask error: {e}\n")
+
+    @Slot(QObject)
+    def pinWindowToDesktopBottom(self, win_obj):
+        """Pin DesktopMusicWidget and DesktopLyricsWidget to Win32 HWND_BOTTOM (matching WlrLayer.Bottom)."""
+        try:
+            if not win_obj:
+                return
+            if hasattr(win_obj, "lower"):
+                win_obj.lower()
+            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
+                import ctypes
+                hwnd = int(win_obj.winId())
+                if hwnd:
+                    user32 = ctypes.windll.user32
+                    GWL_EXSTYLE = -20
+                    WS_EX_NOACTIVATE = 0x08000000
+                    WS_EX_TOOLWINDOW = 0x00000080
+                    WS_EX_APPWINDOW = 0x00040000
+                    WS_EX_TOPMOST = 0x00000008
+                    ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                    target_ex = (ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~(WS_EX_APPWINDOW | WS_EX_TOPMOST)
+                    if ex_style != target_ex:
+                        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
+                    HWND_BOTTOM = 1
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOMOVE = 0x0002
+                    SWP_NOACTIVATE = 0x0010
+                    user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        except Exception as e:
+            sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
     @Slot(QObject)
     def restoreWindow(self, win_obj):
@@ -663,28 +695,33 @@ def main():
             pass
         sys.exit(1)
 
+    def _is_bottom_panel(w):
+        try:
+            return bool(w.property("isDesktopBottomPanel"))
+        except Exception:
+            return False
+
+    def _init_win(w):
+        if _is_bottom_panel(w):
+            w.show()
+            bridge.pinWindowToDesktopBottom(w)
+        else:
+            if main_win_ref[0] is None and w.width() >= 500:
+                main_win_ref[0] = w
+            w.show()
+            w.raise_()
+            w.requestActivate()
+
     main_win_ref = [None]
     for obj in engine.rootObjects():
         if isinstance(obj, (QWindow, QQuickWindow)):
-            if main_win_ref[0] is None and obj.width() >= 500:
-                main_win_ref[0] = obj
-            obj.show()
-            obj.raise_()
-            obj.requestActivate()
+            _init_win(obj)
         if hasattr(obj, "findChildren"):
             for child_win in obj.findChildren(QWindow):
-                if main_win_ref[0] is None and child_win.width() >= 500:
-                    main_win_ref[0] = child_win
-                child_win.show()
-                child_win.raise_()
-                child_win.requestActivate()
+                _init_win(child_win)
 
     for top_win in app.topLevelWindows():
-        if main_win_ref[0] is None and top_win.width() >= 500:
-            main_win_ref[0] = top_win
-        top_win.show()
-        top_win.raise_()
-        top_win.requestActivate()
+        _init_win(top_win)
 
     # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
     tray_icon = None
@@ -722,9 +759,9 @@ def main():
 
         def _open_full_window():
             target_w = main_win_ref[0]
-            if not target_w:
+            if not target_w or _is_bottom_panel(target_w):
                 for tw in app.topLevelWindows():
-                    if tw.width() >= 500:
+                    if not _is_bottom_panel(tw) and tw.width() >= 500:
                         target_w = tw
                         main_win_ref[0] = tw
                         break

@@ -4,7 +4,8 @@ import QtQuick.Window
 Window {
     id: root
     default property alias contentData: root.data
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool
+    readonly property bool isDesktopBottomPanel: true
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool | Qt.WindowStaysOnBottomHint
     color: "transparent"
     visible: true
 
@@ -21,6 +22,7 @@ Window {
 
     function updateMask() {
         if (typeof __NutstyBridge === "undefined") return;
+        __NutstyBridge.pinWindowToDesktopBottom(root);
         if (!mask || !mask.item) {
             __NutstyBridge.clearWindowMask(root);
         } else {
@@ -35,6 +37,27 @@ Window {
     }
 
     onMaskChanged: updateMask()
+    onVisibleChanged: {
+        if (visible && typeof __NutstyBridge !== "undefined") {
+            __NutstyBridge.pinWindowToDesktopBottom(root);
+        }
+    }
+    onActiveChanged: {
+        if (active && typeof __NutstyBridge !== "undefined") {
+            __NutstyBridge.pinWindowToDesktopBottom(root);
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: root.visible
+        repeat: true
+        onTriggered: {
+            if (typeof __NutstyBridge !== "undefined") {
+                __NutstyBridge.pinWindowToDesktopBottom(root);
+            }
+        }
+    }
 
     Connections {
         target: (mask && mask.item) ? mask.item : null
@@ -47,7 +70,10 @@ Window {
 
     Component.onCompleted: {
         root.show();
-        root.raise();
+        root.lower();
+        if (typeof __NutstyBridge !== "undefined") {
+            __NutstyBridge.pinWindowToDesktopBottom(root);
+        }
         updateMask();
         Qt.callLater(updateMask);
     }
