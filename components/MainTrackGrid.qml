@@ -28,11 +28,18 @@ Rectangle {
     signal playPlaylistRequested(var playlist, bool shuffle)
     signal editPlaylistRequested(var playlist)
     signal deletePlaylistRequested(string plId)
+    signal toggleFavoritePlaylistRequested(var playlist)
 
     property var albumMetadata: null
-    property string downloadsSubTab: "tracks" // "tracks", "playlists", "albums"
+    property string downloadsSubTab: "tracks" // "tracks", "playlists", "favorites"
+    onDownloadsSubTabChanged: {
+        if (downloadsSubTab === "tracks" && typeof win !== "undefined" && win) {
+            win.browsingTracks = win.allTracks;
+        }
+    }
     property var localAlbums: []
     property var customPlaylists: []
+    property var favoritePlaylists: (typeof win !== "undefined" && win.favoritePlaylists) ? win.favoritePlaylists : []
 
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
@@ -309,7 +316,7 @@ Rectangle {
                     visible: root.albumMetadata === null
                     spacing: 16
 
-                    // Title & Count Badge
+                    // Title & Static Count
                     RowLayout {
                         spacing: 12
 
@@ -317,7 +324,7 @@ Rectangle {
                             text: {
                                 if (!root.isDownloadsView) return root.sectionTitle;
                                 if (root.downloadsSubTab === "playlists") return I18n.tr("Danh sách phát cá nhân của bạn", "Your Personal Playlists");
-                                if (root.downloadsSubTab === "albums") return I18n.tr("Tuyển tập", "Compilations");
+                                if (root.downloadsSubTab === "favorites") return I18n.tr("Danh sách phát yêu thích", "Favorite Playlists");
                                 return I18n.tr("Tải xuống", "Downloads");
                             }
                             font.family: Theme.fontFamily
@@ -326,38 +333,34 @@ Rectangle {
                             color: Theme.textPrimary
                         }
 
-                        // Badge count pill
-                        Rectangle {
-                            height: 22
-                            width: countBadgeText.implicitWidth + 14
-                            radius: 11
-                            color: Qt.rgba(1, 1, 1, 0.06)
-                            border.color: Qt.rgba(1, 1, 1, 0.10)
-                            border.width: 1
-
-                            Text {
-                                id: countBadgeText
-                                anchors.centerIn: parent
-                                text: {
-                                    if (root.isDownloadsView && root.downloadsSubTab === "playlists") {
-                                        return (root.customPlaylists ? root.customPlaylists.length : 0) + " " + I18n.tr("danh sách phát", "playlists");
-                                    }
-                                    if (root.isDownloadsView && root.downloadsSubTab === "albums") {
-                                        return (root.localAlbums ? root.localAlbums.length : 0) + " " + I18n.tr("tuyển tập", "albums");
-                                    }
+                        // Plain static text (No capsule, no border)
+                        Text {
+                            visible: {
+                                if (!root.isDownloadsView) return false;
+                                if (root.downloadsSubTab === "tracks") return true;
+                                if (root.downloadsSubTab === "favorites") return (root.favoritePlaylists && root.favoritePlaylists.length > 0);
+                                return false; // In playlists, hide count text completely as requested!
+                            }
+                            text: {
+                                if (root.downloadsSubTab === "tracks") {
                                     return (root.sortedTracks ? root.sortedTracks.length : 0) + I18n.tr(" bài hát", " songs");
                                 }
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Theme.textSecondary
+                                if (root.downloadsSubTab === "favorites") {
+                                    return (root.favoritePlaylists ? root.favoritePlaylists.length : 0) + I18n.tr(" danh sách phát", " playlists");
+                                }
+                                return "";
                             }
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: false
+                            color: Theme.textSecondary
+                            Layout.alignment: Qt.AlignBaseline
                         }
                     }
 
                     Item { Layout.fillWidth: true }
 
-                    // Downloads Sub-tab Switcher: [ Bài hát | Danh sách phát | Tuyển tập ] (Refined Dark Glass Segmented Control)
+                    // Downloads Sub-tab Switcher: [ Bài hát | Danh sách phát | Danh sách phát yêu thích ] (Refined Dark Glass Segmented Control)
                     Rectangle {
                         visible: root.isDownloadsView
                         implicitHeight: 34
@@ -408,11 +411,16 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.downloadsSubTab = "tracks"
+                                    onClicked: {
+                                        root.downloadsSubTab = "tracks";
+                                        if (typeof win !== "undefined" && win) {
+                                            win.browsingTracks = win.allTracks;
+                                        }
+                                    }
                                 }
                             }
 
-                            // Subtab 2: Danh sách phát
+                            // Subtab 2: Danh sách phát (No count in parens!)
                             Rectangle {
                                 implicitWidth: plsText.implicitWidth + 28
                                 implicitHeight: 28
@@ -433,7 +441,7 @@ Rectangle {
                                 Text {
                                     id: plsText
                                     anchors.centerIn: parent
-                                    text: I18n.tr("Danh sách phát (", "Playlists (") + (root.customPlaylists ? root.customPlaylists.length : 0) + ")"
+                                    text: I18n.tr("Danh sách phát", "Playlists")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: root.downloadsSubTab === "playlists"
@@ -448,39 +456,39 @@ Rectangle {
                                 }
                             }
 
-                            // Subtab 3: Albums / Tuyển tập
+                            // Subtab 3: Danh sách phát yêu thích (Favorite Playlists)
                             Rectangle {
-                                implicitWidth: albsText.implicitWidth + 28
+                                implicitWidth: favsText.implicitWidth + 28
                                 implicitHeight: 28
                                 width: implicitWidth
                                 height: implicitHeight
                                 radius: 14
-                                color: root.downloadsSubTab === "albums" 
+                                color: root.downloadsSubTab === "favorites" 
                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
-                                       : (albsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "albums" 
+                                       : (favsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                                border.color: root.downloadsSubTab === "favorites" 
                                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
                                               : "transparent"
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 Behavior on border.color { ColorAnimation { duration: 150 } }
-                                HoverHandler { id: albsH }
+                                HoverHandler { id: favsH }
 
                                 Text {
-                                    id: albsText
+                                    id: favsText
                                     anchors.centerIn: parent
-                                    text: I18n.tr("Tuyển tập (", "Albums (") + (root.localAlbums ? root.localAlbums.length : 0) + ")"
+                                    text: I18n.tr("Danh sách phát yêu thích", "Favorite Playlists")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
-                                    font.bold: root.downloadsSubTab === "albums"
-                                    color: root.downloadsSubTab === "albums" ? root.accentColor : (albsH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    font.bold: root.downloadsSubTab === "favorites"
+                                    color: root.downloadsSubTab === "favorites" ? root.accentColor : (favsH.hovered ? "#ffffff" : Theme.textSecondary)
                                     Behavior on color { ColorAnimation { duration: 150 } }
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.downloadsSubTab = "albums"
+                                    onClicked: root.downloadsSubTab = "favorites"
                                 }
                             }
                         }
@@ -676,6 +684,75 @@ Rectangle {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.downloadAlbumRequested(root.sortedTracks)
+                        }
+                    }
+
+                    // Favorite / Like Playlist Button (when viewing a playlist or album)
+                    Rectangle {
+                        id: favPlBtn
+                        readonly property string currentPlId: (typeof win !== "undefined" && win.activePlaylistId) ? win.activePlaylistId : (root.albumMetadata ? (root.albumMetadata.id || root.albumMetadata.browseId) : "")
+                        readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite) 
+                                                      ? win.isPlaylistFavorite(favPlBtn.currentPlId)
+                                                      : false
+                        implicitHeight: 36
+                        implicitWidth: favPlRow.implicitWidth + 28
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: implicitWidth
+                        radius: 18
+                        visible: root.isPlaylistView || root.albumMetadata !== null
+                        color: isFav 
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                               : (favPlH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08))
+                        border.color: isFav ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.5) : Qt.rgba(1, 1, 1, 0.15)
+                        border.width: 1
+                        scale: favPlH.hovered ? 1.03 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        Row {
+                            id: favPlRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            AppIcon {
+                                source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                iconSize: 15
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: favPlBtn.isFav ? root.accentColor : "#ffffff"
+                            }
+
+                            Text {
+                                text: favPlBtn.isFav ? I18n.tr("Đã thích", "Favorited") : I18n.tr("Yêu thích", "Favorite")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: favPlBtn.isFav ? root.accentColor : "#ffffff"
+                            }
+                        }
+
+                        HoverHandler { id: favPlH }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var pid = favPlBtn.currentPlId;
+                                var plObj = {
+                                    id: pid,
+                                    playlistId: pid,
+                                    browseId: pid,
+                                    title: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : "Playlist"),
+                                    name: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : "Playlist"),
+                                    subtitle: root.albumMetadata ? (root.albumMetadata.artist || "") : "",
+                                    artist: root.albumMetadata ? (root.albumMetadata.artist || "") : "",
+                                    image: (root.albumMetadata && root.albumMetadata.image) ? root.albumMetadata.image : (root.sortedTracks && root.sortedTracks.length > 0 ? (root.sortedTracks[0].image || "") : ""),
+                                    type: root.albumMetadata ? "album" : "playlist",
+                                    trackCount: root.sortedTracks ? root.sortedTracks.length : 0,
+                                    tracks: root.sortedTracks || []
+                                };
+                                root.toggleFavoritePlaylistRequested(plObj);
+                            }
                         }
                     }
 
@@ -1256,21 +1333,23 @@ Rectangle {
                     }
                 }
 
-                // Local Albums Grid (when in Downloads view and Albums sub-tab is selected)
+                // Favorite Playlists Grid (when in Downloads view and Favorites sub-tab is selected)
                 Flow {
                     Layout.fillWidth: true
                     spacing: 16
-                    visible: root.isDownloadsView && root.downloadsSubTab === "albums" && root.albumMetadata === null
+                    visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && root.albumMetadata === null && root.favoritePlaylists && root.favoritePlaylists.length > 0
 
                     Repeater {
-                        model: root.localAlbums
+                        model: root.favoritePlaylists
 
                         Rectangle {
+                            id: favPlCard
+                            readonly property var plData: modelData
                             width: 176
                             height: 250
                             radius: Theme.radiusCard
-                            color: albCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
-                            border.color: albCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                            color: favCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                            border.color: favCardMouse.containsMouse ? root.accentColor : Qt.rgba(1.0, 1.0, 1.0, 0.06)
                             border.width: 1
                             Behavior on color { ColorAnimation { duration: 120 } }
                             Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -1285,9 +1364,9 @@ Rectangle {
                                     Layout.preferredHeight: width
 
                                     Rectangle {
-                                        id: albImgMask
+                                        id: favImgMask
                                         anchors.fill: parent
-                                        radius: 8
+                                        radius: 10
                                         color: "#ffffff"
                                         visible: false
                                         layer.enabled: true
@@ -1298,22 +1377,22 @@ Rectangle {
                                         layer.enabled: true
                                         layer.effect: MultiEffect {
                                             maskEnabled: true
-                                            maskSource: albImgMask
+                                            maskSource: favImgMask
                                             autoPaddingEnabled: false
                                         }
 
                                         Rectangle {
                                             anchors.fill: parent
                                             color: "#202024"
-                                            visible: !albImg.visible || albImg.status !== Image.Ready
+                                            visible: !favImg.visible || favImg.status !== Image.Ready
                                         }
 
                                         Image {
-                                            id: albImg
+                                            id: favImg
                                             anchors.fill: parent
                                             source: {
-                                                if (!modelData || !modelData.image) return "";
-                                                var s = modelData.image;
+                                                if (!modelData) return "";
+                                                var s = modelData.image || modelData.thumbnail || "";
                                                 return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                                             }
                                             fillMode: Image.PreserveAspectCrop
@@ -1326,16 +1405,16 @@ Rectangle {
 
                                         Rectangle {
                                             anchors.fill: parent
-                                            visible: !albImg.visible || albImg.status !== Image.Ready
+                                            visible: !favImg.visible || favImg.status !== Image.Ready
                                             gradient: Gradient {
-                                                GradientStop { position: 0.0; color: "#333333" }
-                                                GradientStop { position: 1.0; color: "#181818" }
+                                                GradientStop { position: 0.0; color: "#2e1065" }
+                                                GradientStop { position: 1.0; color: "#18181b" }
                                             }
                                             AppIcon {
                                                 anchors.centerIn: parent
-                                                source: "../assets/icons/media-optical-audio-symbolic.svg"
+                                                source: "../assets/icons/emblem-favorite-symbolic.svg"
                                                 iconSize: 42
-                                                color: Qt.rgba(1, 1, 1, 0.25)
+                                                color: root.accentColor
                                             }
                                         }
                                     }
@@ -1343,14 +1422,48 @@ Rectangle {
                                     // 1px Hairline Border Overlay
                                     Rectangle {
                                         anchors.fill: parent
-                                        radius: 8
+                                        radius: 10
                                         color: "transparent"
                                         border.color: Qt.rgba(1, 1, 1, 0.12)
                                         border.width: 1
                                         z: 2
                                     }
 
-                                    // Play Album Button on Hover
+                                    // Top-Right Remove/Toggle Heart Button
+                                    Rectangle {
+                                        width: 30
+                                        height: 30
+                                        radius: 15
+                                        color: Qt.rgba(0, 0, 0, 0.65)
+                                        border.color: root.accentColor
+                                        border.width: 1
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.margins: 6
+                                        visible: favCardMouse.containsMouse
+                                        scale: favHBtnMouse.containsMouse ? 1.1 : 1.0
+                                        Behavior on scale { NumberAnimation { duration: 100 } }
+                                        z: 10
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                            iconSize: 14
+                                            color: root.accentColor
+                                        }
+
+                                        MouseArea {
+                                            id: favHBtnMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.toggleFavoritePlaylistRequested(modelData);
+                                            }
+                                        }
+                                    }
+
+                                    // Bottom-Right Play Button on Hover
                                     Rectangle {
                                         width: 38
                                         height: 38
@@ -1359,7 +1472,7 @@ Rectangle {
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 6
-                                        visible: albCardMouse.containsMouse
+                                        visible: favCardMouse.containsMouse
                                         z: 10
 
                                         AppIcon {
@@ -1374,9 +1487,7 @@ Rectangle {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                if (modelData.tracks && modelData.tracks.length > 0) {
-                                                    root.trackPlayRequested(modelData.tracks[0]);
-                                                }
+                                                root.playlistSelected(modelData);
                                             }
                                         }
                                     }
@@ -1384,7 +1495,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.title || modelData.name || "Album"
+                                    text: modelData.title || modelData.name || "Playlist"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -1395,7 +1506,11 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: (modelData.artist || I18n.tr("Không rõ", "Unknown")) + " • " + (modelData.trackCount || 0) + I18n.tr(" bài", " songs")
+                                    text: {
+                                        var sub = modelData.artist || modelData.subtitle || I18n.tr("Danh sách phát", "Playlist");
+                                        var cnt = modelData.trackCount ? (" • " + modelData.trackCount + I18n.tr(" bài", " tracks")) : "";
+                                        return sub + cnt;
+                                    }
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     color: Theme.textSecondary
@@ -1407,13 +1522,56 @@ Rectangle {
                             }
 
                             MouseArea {
-                                id: albCardMouse
+                                id: favCardMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.albumSelected(modelData)
+                                onClicked: root.playlistSelected(modelData)
                             }
                         }
+                    }
+                }
+
+                // Empty state for Favorite Playlists
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 48
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 16
+                    visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        width: 72
+                        height: 72
+                        radius: 36
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                        border.width: 1
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/emblem-favorite-symbolic.svg"
+                            iconSize: 32
+                            color: root.accentColor
+                        }
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: I18n.tr("Chưa có danh sách phát yêu thích", "No favorite playlists yet")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: Theme.textPrimary
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: I18n.tr("Khám phá các danh sách phát trực tuyến và nhấn biểu tượng Yêu thích để lưu lại.", "Explore online playlists and tap the Favorite icon to save them here.")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                        color: Theme.textSecondary
                     }
                 }
 
@@ -1709,7 +1867,7 @@ Rectangle {
                 Flow {
                     Layout.fillWidth: true
                     spacing: 16
-                    visible: !root.isLoading && (!root.isDownloadsView || root.albumMetadata !== null) && !(root.isDownloadsView && (root.downloadsSubTab === "albums" || root.downloadsSubTab === "playlists"))
+                    visible: !root.isLoading && (!root.isDownloadsView || root.albumMetadata !== null) && !(root.isDownloadsView && (root.downloadsSubTab === "favorites" || root.downloadsSubTab === "playlists"))
 
                     Repeater {
                         model: root.sortedTracks

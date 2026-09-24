@@ -507,6 +507,26 @@ Scope {
     }
 
     Process {
+        id: authServerProc
+        command: ["python3", "-u", win.appDir + "/backend/auth_server.py"]
+        running: true
+        onExited: (exitCode, exitStatus) => {
+            restartAuthServerTimer.restart();
+        }
+    }
+
+    Timer {
+        id: restartAuthServerTimer
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            if (!authServerProc.running) {
+                authServerProc.running = true;
+            }
+        }
+    }
+
+    Process {
         id: radioProc
         stdout: SplitParser {
             splitMarker: "\n"
@@ -520,8 +540,20 @@ Scope {
                             userQueued = win.currentTracks.slice(curIdx + 1);
                         }
                         var filteredRadio = arr.filter(rt => !win.isSameTrack(rt, win.currentTrack) && !userQueued.some(uq => win.isSameTrack(uq, rt)));
-                        var base = win.currentTrack ? [win.currentTrack] : [];
-                        win.currentTracks = base.concat(userQueued).concat(filteredRadio);
+                        var taggedRadio = filteredRadio.map(function(item) {
+                            var copy = Object.assign({}, item);
+                            copy.isRadioSuggestion = true;
+                            return copy;
+                        });
+
+                        if (win.playingPlaylistId) {
+                            // When playing a custom playlist: preserve playlist tracks first!
+                            var plTracks = win.currentTracks.filter(function(t) { return !t.isRadioSuggestion; });
+                            win.currentTracks = plTracks.concat(taggedRadio);
+                        } else {
+                            var base = win.currentTrack ? [win.currentTrack] : [];
+                            win.currentTracks = base.concat(userQueued).concat(taggedRadio);
+                        }
                     }
                 } catch(e) {
                     console.log("radioProc error:", e);
@@ -1285,7 +1317,7 @@ Scope {
             }
         }
 
-        if ((startRadio || !win.currentTracks || win.currentTracks.length <= 1) && rVid) {
+        if ((startRadio || (!win.playingPlaylistId && (!win.currentTracks || win.currentTracks.length <= 1))) && rVid) {
             radioProc.running = false;
             radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", rVid];
             radioProc.running = true;
@@ -1476,6 +1508,7 @@ Scope {
         win.loadHomeFeed();
         win.checkAuthStatus();
         win.loadCustomPlaylists();
+        win.loadFavoritePlaylists();
         win.refreshLocalAlbums();
         win.fetchFriendsDataFast();
         win.fetchCurrentUserProfile();
@@ -1997,6 +2030,7 @@ Scope {
                     win.mainSectionTitle = "Downloads";
                     mainGrid.sectionTitle = "Downloads";
                     win.loadCustomPlaylists();
+                    win.loadFavoritePlaylists();
                     win.refreshLocalAlbums();
                 }
                 onSettingsClicked: {
@@ -2159,7 +2193,7 @@ Scope {
                             id: mainGrid
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            tracks: win.browsingTracks
+                            tracks: (win.currentView === "library" && mainGrid.downloadsSubTab === "tracks") ? win.allTracks : win.browsingTracks
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
                             isLoadingAudio: win.isLoadingAudio
@@ -2168,7 +2202,10 @@ Scope {
                             albumMetadata: win.currentAlbumMetadata
                             localAlbums: win.localAlbums
                             customPlaylists: win.customPlaylists
+                            favoritePlaylists: win.favoritePlaylists
                             accentColor: win.accentColor
+
+                            onToggleFavoritePlaylistRequested: pl => win.toggleFavoritePlaylist(pl)
 
                             onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
                             onDownloadAlbumRequested: trks => win.downloadEntireAlbum(trks)
@@ -2365,6 +2402,7 @@ Scope {
                             onBackRequested: {
                                 win.currentView = "library";
                                 mainGrid.downloadsSubTab = "playlists";
+                                win.browsingTracks = win.allTracks;
                             }
                             onPlayAllRequested: trks => win.playCustomPlaylistTracks(trks, false)
                             onShuffleRequested: trks => win.playCustomPlaylistTracks(trks, true)
@@ -2753,6 +2791,7 @@ Scope {
             id: playlistTrackSearchModal
             accentColor: win.accentColor
             currentTrack: win.currentTrack
+            isPlaying: win.isPlaying
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
             onTrackAddRequested: trk => {
                 if (win.selectedCustomPlaylist) {
@@ -2760,6 +2799,7 @@ Scope {
                     win.addTrackToCustomPlaylist(plId, trk);
                 }
             }
+            onPreviewTrackRequested: trk => win.togglePreviewTrack(trk)
         }
 
         CoListenersPopover {
@@ -3674,7 +3714,84 @@ Scope {
         id: refreshPlaylistsTimer
         interval: 300
         repeat: false
-        onTriggered: win.loadCustomPlaylists()
+        onTriggered: {
+            win.loadCustomPlaylists();
+            win.loadFavoritePlaylists();
+        }
+    }
+
+    property var favoritePlaylists: []
+
+    Process {
+        id: favPlaylistsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var arr = JSON.parse(data);
+                    if (Array.isArray(arr)) {
+                        win.favoritePlaylists = arr;
+                    }
+                } catch(e) {
+                    console.log("favPlaylistsProc error:", e);
+                }
+            }
+        }
+    }
+
+    function loadFavoritePlaylists() {
+        favPlaylistsProc.running = false;
+        favPlaylistsProc.command = ["python3", "-u", win.appDir + "/backend/playlist_manager.py", "list_favorites"];
+        favPlaylistsProc.running = true;
+    }
+
+    function isPlaylistFavorite(plId) {
+        if (!plId || !win.favoritePlaylists) return false;
+        var pStr = String(plId);
+        return win.favoritePlaylists.some(p => {
+            return (p.id && String(p.id) === pStr) ||
+                   (p.playlistId && String(p.playlistId) === pStr) ||
+                   (p.browseId && String(p.browseId) === pStr);
+        });
+    }
+
+    function toggleFavoritePlaylist(pl) {
+        if (!pl) return;
+        var pid = String(pl.id || pl.playlistId || pl.browseId || "");
+        if (!pid) return;
+
+        var isFav = win.isPlaylistFavorite(pid);
+        var plJson = JSON.stringify({
+            id: pid,
+            playlistId: pid,
+            browseId: pid,
+            title: pl.title || pl.name || "Playlist",
+            name: pl.title || pl.name || "Playlist",
+            subtitle: pl.subtitle || pl.artist || "",
+            artist: pl.artist || pl.subtitle || "",
+            image: win.getTrackCoverUrl(pl) || pl.image || pl.thumbnail || "",
+            thumbnail: win.getTrackCoverUrl(pl) || pl.image || pl.thumbnail || "",
+            type: pl.type || "playlist",
+            trackCount: pl.trackCount || pl.itemCount || (pl.tracks ? pl.tracks.length : 0),
+            tracks: pl.tracks || []
+        });
+
+        // Optimistic UI update
+        if (isFav) {
+            win.favoritePlaylists = win.favoritePlaylists.filter(p => {
+                return String(p.id || p.playlistId || p.browseId) !== pid;
+            });
+            win.showToast(I18n.tr("Đã xóa khỏi danh sách phát yêu thích", "Removed from favorite playlists"));
+        } else {
+            var item = JSON.parse(plJson);
+            win.favoritePlaylists = [item].concat(win.favoritePlaylists || []);
+            win.showToast(I18n.tr("Đã thêm vào danh sách phát yêu thích", "Added to favorite playlists"));
+        }
+
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "toggle_favorite", plJson
+        ]);
+        refreshPlaylistsTimer.restart();
     }
 
     function loadCustomPlaylists() {
@@ -3753,6 +3870,8 @@ Scope {
                 list[j] = temp;
             }
         }
+        win.playingPlaylistId = win.selectedCustomPlaylist ? (win.selectedCustomPlaylist.id || win.selectedCustomPlaylist.playlistId || "") : "";
+        win.playingSourceTitle = win.selectedCustomPlaylist ? (win.selectedCustomPlaylist.title || win.selectedCustomPlaylist.name || "") : "";
         win.currentTracks = list;
         var first = list[0];
         if (first) {
@@ -3763,6 +3882,22 @@ Scope {
             }
         }
         win.isNowPlayingOpen = true;
+    }
+
+    function togglePreviewTrack(trk) {
+        if (!trk) return;
+        if (win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
+            win.togglePlay();
+        } else {
+            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                win.playOnlineTrack(trk, false);
+            } else {
+                win.playTrack(trk);
+            }
+            if (playlistTrackSearchModal.visible) {
+                win.showAmberolDetails = false;
+            }
+        }
     }
 
     function addTrackToCustomPlaylist(plId, track) {
@@ -3779,7 +3914,7 @@ Scope {
             updated.trackCount = trks.length;
             if (!updated.image && (track.image || track.cover)) updated.image = track.image || track.cover;
             win.selectedCustomPlaylist = updated;
-            win.browsingTracks = trks;
+            playlistTrackSearchModal.playlist = updated;
         }
         refreshPlaylistsTimer.restart();
         win.showToast(I18n.tr("Đã thêm vào danh sách phát", "Added to playlist"));
@@ -3799,7 +3934,7 @@ Scope {
                 trks.splice(toIdx, 0, item);
                 updated.tracks = trks;
                 win.selectedCustomPlaylist = updated;
-                win.browsingTracks = trks;
+                playlistTrackSearchModal.playlist = updated;
             }
         }
         refreshPlaylistsTimer.restart();
@@ -3823,12 +3958,15 @@ Scope {
             updated.tracks = trks;
             updated.trackCount = trks.length;
             win.selectedCustomPlaylist = updated;
+            playlistTrackSearchModal.playlist = updated;
         }
-        win.browsingTracks = win.browsingTracks.filter(t => {
-            if (targetIdent && t.path === targetIdent) return false;
-            if (targetIdent && t.videoId === targetIdent) return false;
-            return true;
-        });
+        if (win.playingPlaylistId === plId && win.currentTracks && win.currentTracks.length > 0) {
+            win.currentTracks = win.currentTracks.filter(t => {
+                if (targetIdent && t.path === targetIdent) return false;
+                if (targetIdent && t.videoId === targetIdent) return false;
+                return true;
+            });
+        }
         win.showToast(I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist"));
     }
 
@@ -4029,6 +4167,12 @@ Scope {
         function testSeekAudio(sec: real) { frostifyIpc.testSeekAudio(sec); }
         function testSendChatMessage(text: string) { frostifyIpc.testSendChatMessage(text); }
         function testSuggestTrack(title: string, artist: string, videoId: string) { frostifyIpc.testSuggestTrack(title, artist, videoId); }
+        function openPlaylistByIndex(idx: int) { frostifyIpc.openPlaylistByIndex(idx); }
+        function openPlaylistSearchModal() { frostifyIpc.openPlaylistSearchModal(); }
+        function testPlaylistSearch(query: string) { frostifyIpc.testPlaylistSearch(query); }
+        function testPreviewPlaylistModalTrack(index: int) { frostifyIpc.testPreviewPlaylistModalTrack(index); }
+        function testAddPlaylistModalTrack(index: int) { frostifyIpc.testAddPlaylistModalTrack(index); }
+        function closePlaylistSearchModal() { frostifyIpc.closePlaylistSearchModal(); }
     }
 
     IpcHandler {
@@ -4135,6 +4279,42 @@ Scope {
             }
         }
         function closePostNoteModal() { postNoteModal.visible = false; }
+        function openPlaylistByIndex(idx: int) {
+            win.visible = true;
+            win.isNowPlayingOpen = false;
+            win.showAmberolDetails = false;
+            if (win.customPlaylists && win.customPlaylists.length > idx) {
+                win.openCustomPlaylistDetail(win.customPlaylists[idx]);
+            }
+        }
+        function openPlaylistSearchModal() {
+            if (win.selectedCustomPlaylist) {
+                playlistTrackSearchModal.openModal(win.selectedCustomPlaylist);
+            }
+        }
+        function testPlaylistSearch(query: string) {
+            if (win.selectedCustomPlaylist) {
+                playlistTrackSearchModal.openModal(win.selectedCustomPlaylist);
+            }
+            playlistTrackSearchModal.trackSearchQuery = query;
+            playlistTrackSearchModal.performOnlineSearch();
+        }
+        function testPreviewPlaylistModalTrack(index: int) {
+            if (playlistTrackSearchModal.onlineSearchResults && playlistTrackSearchModal.onlineSearchResults.length > index) {
+                var trk = playlistTrackSearchModal.onlineSearchResults[index];
+                playlistTrackSearchModal.previewTrackRequested(trk);
+            }
+        }
+        function testAddPlaylistModalTrack(index: int) {
+            if (playlistTrackSearchModal.onlineSearchResults && playlistTrackSearchModal.onlineSearchResults.length > index) {
+                var trk = playlistTrackSearchModal.onlineSearchResults[index];
+                if (win.selectedCustomPlaylist) {
+                    var plId = win.selectedCustomPlaylist.id || win.selectedCustomPlaylist.playlistId;
+                    win.addTrackToCustomPlaylist(plId, trk);
+                }
+            }
+        }
+        function closePlaylistSearchModal() { playlistTrackSearchModal.closeModal(); }
         function toggleSleepTimer() {
             if (sleepTimerPopover.isOpen) sleepTimerPopover.close();
             else sleepTimerPopover.open();
@@ -4201,6 +4381,7 @@ Scope {
             settingsModal.toggleDownloadQualityMenu();
         }
         function showLibrary() {
+            win.isNowPlayingOpen = false;
             win.showAmberolDetails = false;
             if (downloadPopover && downloadPopover.isOpen) downloadPopover.close();
             win.currentView = "library";

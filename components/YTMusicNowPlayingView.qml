@@ -1618,18 +1618,51 @@ Item {
                             Behavior on opacity { NumberAnimation { duration: 150 } }
                             model: root.queueTracks
 
-                            delegate: Rectangle {
-                                id: qRow
+                            delegate: Column {
+                                id: delegateCol
                                 width: queueListView.width
-                                height: 48
-                                radius: 12
-                                readonly property bool isCurrent: root.track && (modelData.id === root.track.id || (modelData.videoId && modelData.videoId === root.track.videoId))
-                                color: isCurrent 
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
-                                       : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
-                                border.width: 0
+                                spacing: 4
 
-                                Behavior on color { ColorAnimation { duration: 120 } }
+                                // Section Header: Gợi ý tiếp theo (Radio Suggestions Separator - Complaint #5)
+                                Item {
+                                    width: delegateCol.width
+                                    height: 34
+                                    visible: Boolean(modelData && modelData.isRadioSuggestion && (index === 0 || (root.queueTracks && root.queueTracks[index - 1] && !root.queueTracks[index - 1].isRadioSuggestion)))
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 6
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+
+                                        Text {
+                                            text: I18n.tr("Gợi ý tiếp theo (Radio)", "Up Next (Radio Suggestions)")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            color: root.accentColor
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 1
+                                            color: Qt.rgba(255, 255, 255, 0.12)
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: qRow
+                                    width: delegateCol.width
+                                    height: 48
+                                    radius: 12
+                                    readonly property bool isCurrent: root.track && (modelData.id === root.track.id || (modelData.videoId && modelData.videoId === root.track.videoId))
+                                    color: isCurrent 
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                           : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+                                    border.width: 0
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1768,6 +1801,7 @@ Item {
                             }
                         }
                     }
+                }
                 }
 
                 // =============================================================

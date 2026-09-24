@@ -33,7 +33,7 @@ Rectangle {
         if (track.path && track.path.startsWith("ytdl://")) return track.path.replace("ytdl://", "");
         return "";
     }
-    readonly property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(trackVideoId) : false
+    readonly property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager && trackVideoId) ? Boolean(downloadManager.isDownloading(trackVideoId)) : false
     readonly property real downloadProgress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(trackVideoId) : -1
     readonly property bool isDownloaded: {
         if (typeof downloadManager !== "undefined" && downloadManager && downloadManager.isDownloaded(trackVideoId)) return true;

@@ -18,6 +18,7 @@ PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
 CONFIG_DIR = pc.get_config_dir()
 PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"custom_playlists{PROFILE_SUFFIX}.json")
+FAVORITE_PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"favorite_playlists{PROFILE_SUFFIX}.json")
 
 def load_playlists():
     p = PLAYLISTS_FILE
@@ -213,10 +214,105 @@ def remove_track_from_playlist(pl_id, track_identifier):
     save_playlists(playlists)
     return {"success": True, "total": len(target["tracks"])}
 
+def load_favorite_playlists():
+    p = FAVORITE_PLAYLISTS_FILE
+    if not os.path.exists(p) and not PROFILE_SUFFIX:
+        p = os.path.join(CONFIG_DIR, "favorite_playlists.json")
+    if not os.path.exists(p):
+        return []
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+def save_favorite_playlists(favs):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    tmp = FAVORITE_PLAYLISTS_FILE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(favs, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, FAVORITE_PLAYLISTS_FILE)
+        return True
+    except Exception as e:
+        sys.stderr.write(f"Error saving favorite playlists: {e}\n")
+        return False
+
+def toggle_favorite_playlist(pl_data):
+    if not pl_data:
+        return {"success": False, "error": "No playlist data"}
+    if isinstance(pl_data, str):
+        try:
+            pl_data = json.loads(pl_data)
+        except Exception:
+            return {"success": False, "error": "Invalid JSON"}
+    if not isinstance(pl_data, dict):
+        return {"success": False, "error": "Invalid playlist format"}
+
+    pl_id = str(pl_data.get("id") or pl_data.get("playlistId") or pl_data.get("browseId") or "")
+    if not pl_id:
+        return {"success": False, "error": "No playlist ID"}
+
+    favs = load_favorite_playlists()
+    existing_idx = -1
+    for idx, item in enumerate(favs):
+        curr_id = str(item.get("id") or item.get("playlistId") or item.get("browseId") or "")
+        if curr_id == pl_id:
+            existing_idx = idx
+            break
+
+    if existing_idx >= 0:
+        favs.pop(existing_idx)
+        save_favorite_playlists(favs)
+        return {"success": True, "isFavorite": False, "playlistId": pl_id, "favorites": favs}
+    else:
+        title = pl_data.get("title") or pl_data.get("name") or "Playlist"
+        subtitle = pl_data.get("subtitle") or pl_data.get("artist") or pl_data.get("author") or ""
+        img = pl_data.get("image") or pl_data.get("thumbnail") or ""
+        if not img and isinstance(pl_data.get("thumbnails"), list) and pl_data["thumbnails"]:
+            img = pl_data["thumbnails"][-1].get("url", "")
+
+        normalized = {
+            "id": pl_id,
+            "playlistId": pl_id,
+            "browseId": pl_id,
+            "title": title,
+            "name": title,
+            "subtitle": subtitle,
+            "artist": pl_data.get("artist") or subtitle,
+            "image": img,
+            "thumbnail": img,
+            "type": pl_data.get("type", "playlist"),
+            "trackCount": pl_data.get("trackCount") or pl_data.get("itemCount") or len(pl_data.get("tracks", [])),
+            "addedAt": int(time.time()),
+            "tracks": pl_data.get("tracks", [])
+        }
+        favs.insert(0, normalized)
+        save_favorite_playlists(favs)
+        return {"success": True, "isFavorite": True, "playlistId": pl_id, "favorites": favs}
+
+def remove_favorite_playlist(pl_id):
+    if not pl_id:
+        return {"success": False}
+    favs = load_favorite_playlists()
+    filtered = [
+        p for p in favs
+        if str(p.get("id") or p.get("playlistId") or p.get("browseId") or "") != str(pl_id)
+    ]
+    save_favorite_playlists(filtered)
+    return {"success": True, "favorites": filtered}
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
     if cmd == "list":
         print(json.dumps(load_playlists(), ensure_ascii=False))
+    elif cmd == "list_favorites":
+        print(json.dumps(load_favorite_playlists(), ensure_ascii=False))
+    elif cmd == "toggle_favorite" and len(sys.argv) > 2:
+        print(json.dumps(toggle_favorite_playlist(sys.argv[2]), ensure_ascii=False))
+    elif cmd == "remove_favorite" and len(sys.argv) > 2:
+        print(json.dumps(remove_favorite_playlist(sys.argv[2]), ensure_ascii=False))
     elif cmd == "create" and len(sys.argv) > 2:
         title = sys.argv[2]
         trks = sys.argv[3] if len(sys.argv) > 3 else None

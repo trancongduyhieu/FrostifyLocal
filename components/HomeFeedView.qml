@@ -1027,6 +1027,49 @@ Rectangle {
                                                 color: "#000000"
                                             }
                                         }
+
+                                        // Top-Right Favorite Heart Button
+                                        Rectangle {
+                                            id: aFavBtn
+                                            readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
+                                            readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
+                                                                          ? win.isPlaylistFavorite(aFavBtn.plKey)
+                                                                          : false
+                                            width: 32
+                                            height: 32
+                                            radius: 16
+                                            color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (aFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
+                                            border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
+                                            border.width: 1
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 8
+                                            visible: aFavBtn.isFav || aCardMouse.containsMouse
+                                            scale: aFavArea.containsMouse ? 1.1 : 1.0
+                                            z: 4
+                                            Behavior on scale { NumberAnimation { duration: 120 } }
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                                iconSize: 15
+                                                color: aFavBtn.isFav ? root.accentColor : "#ffffff"
+                                            }
+
+                                            MouseArea {
+                                                id: aFavArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: mouse => {
+                                                    mouse.accepted = true;
+                                                    if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
+                                                        win.toggleFavoritePlaylist(modelData);
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
                                     // Text Metadata
@@ -1300,6 +1343,49 @@ Rectangle {
                                             source: "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 18
                                             color: "#000000"
+                                        }
+                                    }
+
+                                    // Top-Right Favorite Heart Button
+                                    Rectangle {
+                                        id: dFavBtn
+                                        readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
+                                        readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
+                                                                      ? win.isPlaylistFavorite(dFavBtn.plKey)
+                                                                      : false
+                                        width: 32
+                                        height: 32
+                                        radius: 16
+                                        color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (dFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
+                                        border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
+                                        border.width: 1
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.margins: 8
+                                        visible: dFavBtn.isFav || plMouse.containsMouse
+                                        scale: dFavArea.containsMouse ? 1.1 : 1.0
+                                        z: 4
+                                        Behavior on scale { NumberAnimation { duration: 120 } }
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                            iconSize: 15
+                                            color: dFavBtn.isFav ? root.accentColor : "#ffffff"
+                                        }
+
+                                        MouseArea {
+                                            id: dFavArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: mouse => {
+                                                mouse.accepted = true;
+                                                if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
+                                                    win.toggleFavoritePlaylist(modelData);
+                                                }
+                                            }
                                         }
                                     }
                                 }

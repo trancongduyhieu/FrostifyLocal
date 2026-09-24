@@ -297,8 +297,8 @@ Rectangle {
                             Layout.preferredHeight: 38
                             Layout.preferredWidth: addTrkRow.implicitWidth + 24
                             radius: 19
-                            color: addTrkArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
-                            border.color: addTrkArea.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            color: addTrkArea.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(255, 255, 255, 0.06)
+                            border.color: addTrkArea.containsMouse ? root.accentColor : Qt.rgba(255, 255, 255, 0.10)
                             border.width: 1
 
                             Behavior on color { ColorAnimation { duration: 150 } }
@@ -313,7 +313,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: "../assets/icons/list-add-symbolic.svg"
                                     iconSize: 13
-                                    color: root.accentColor
+                                    color: addTrkArea.containsMouse ? root.accentColor : "#ffffff"
                                 }
 
                                 Text {
@@ -321,8 +321,8 @@ Rectangle {
                                     text: I18n.tr("Thêm bài", "Add Songs")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
-                                    font.weight: Font.DemiBold
-                                    color: "#ffffff"
+                                    font.weight: Font.Medium
+                                    color: addTrkArea.containsMouse ? root.accentColor : "#ffffff"
                                 }
                             }
 
@@ -380,9 +380,12 @@ Rectangle {
                             Layout.preferredHeight: 38
                             Layout.preferredWidth: delRow.implicitWidth + 20
                             radius: 19
-                            color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(244, 63, 94, 0.12)
-                            border.color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(244, 63, 94, 0.25)
+                            color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                            border.color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(255, 255, 255, 0.10)
                             border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
 
                             Row {
                                 id: delRow
@@ -393,7 +396,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: "../assets/icons/user-trash-symbolic.svg"
                                     iconSize: 13
-                                    color: "#f43f5e"
+                                    color: delArea.containsMouse ? "#f43f5e" : Qt.rgba(244, 63, 94, 0.85)
                                 }
 
                                 Text {
@@ -402,7 +405,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.weight: Font.Medium
-                                    color: "#f43f5e"
+                                    color: delArea.containsMouse ? "#f43f5e" : Qt.rgba(244, 63, 94, 0.85)
                                 }
                             }
 
@@ -423,87 +426,97 @@ Rectangle {
             }
 
             // Empty State (Centered in Viewport - ui-layout-design-rules)
-            ColumnLayout {
+            Item {
                 Layout.fillWidth: true
-                Layout.topMargin: Math.max(40, (scrollArea.height - 240) / 4)
+                Layout.preferredHeight: emptyStateCol.implicitHeight + 80
+                Layout.topMargin: Math.max(30, (scrollArea.height - 240) / 4)
                 visible: root.playlistTracks.length === 0
-                spacing: 16
 
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    width: 72
-                    height: 72
-                    radius: 36
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                    border.width: 1
+                ColumnLayout {
+                    id: emptyStateCol
+                    anchors.centerIn: parent
+                    width: Math.min(scrollArea.width, 480)
+                    spacing: 16
 
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/folder-music-symbolic.svg"
-                        iconSize: 34
-                        color: root.accentColor
-                    }
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: I18n.tr("Danh sách phát chưa có bài hát nào", "This playlist has no tracks yet")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
-                    color: "#ffffff"
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: I18n.tr("Tìm kiếm bài hát yêu thích để thêm ngay vào danh sách phát này", "Search and add your favorite songs directly to this playlist")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 13
-                    color: Theme.textSecondary
-                }
-
-                // Call to action button: Search & Add Songs
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.topMargin: 8
-                    Layout.preferredHeight: 40
-                    Layout.preferredWidth: addSearchRow.implicitWidth + 32
-                    radius: 20
-                    color: addSearchArea.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
-                    border.color: Qt.rgba(255, 255, 255, 0.25)
-                    border.width: 1
-
-                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                    Row {
-                        id: addSearchRow
-                        anchors.centerIn: parent
-                        spacing: 8
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        width: 72
+                        height: 72
+                        radius: 36
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                        border.width: 1
 
                         AppIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "../assets/icons/system-search-symbolic.svg"
-                            iconSize: 15
-                            color: "#000000"
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("Tìm & thêm bài hát", "Search & Add Songs")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.weight: Font.Bold
-                            color: "#000000"
+                            anchors.centerIn: parent
+                            source: "../assets/icons/folder-music-symbolic.svg"
+                            iconSize: 34
+                            color: root.accentColor
                         }
                     }
 
-                    MouseArea {
-                        id: addSearchArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.addTracksRequested(root.playlist)
+                    Text {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: I18n.tr("Danh sách phát chưa có bài hát nào", "This playlist has no tracks yet")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        font.weight: Font.Bold
+                        color: "#ffffff"
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: I18n.tr("Tìm kiếm bài hát yêu thích để thêm ngay vào danh sách phát này", "Search and add your favorite songs directly to this playlist")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                        color: Theme.textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // Call to action button: Search & Add Songs
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 8
+                        Layout.preferredHeight: 40
+                        Layout.preferredWidth: addSearchRow.implicitWidth + 32
+                        radius: 20
+                        color: addSearchArea.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
+                        border.color: Qt.rgba(255, 255, 255, 0.25)
+                        border.width: 1
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Row {
+                            id: addSearchRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/system-search-symbolic.svg"
+                                iconSize: 15
+                                color: "#000000"
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Tìm & thêm bài hát", "Search & Add Songs")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                                color: "#000000"
+                            }
+                        }
+
+                        MouseArea {
+                            id: addSearchArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.addTracksRequested(root.playlist)
+                        }
                     }
                 }
             }

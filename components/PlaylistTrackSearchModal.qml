@@ -13,6 +13,7 @@ Rectangle {
 
     property var playlist: null
     property var currentTrack: null
+    property bool isPlaying: false
     property var availableTracks: []
     property color accentColor: Theme.accent
 
@@ -24,6 +25,14 @@ Rectangle {
     signal closeRequested()
     signal trackAddRequested(var track)
     signal previewTrackRequested(var track)
+
+    function isSameTrack(a, b) {
+        if (!a || !b) return false;
+        if (a.videoId && b.videoId && a.videoId === b.videoId) return true;
+        if (a.path && b.path && a.path === b.path) return true;
+        if (a.id && b.id && a.id === b.id) return true;
+        return (a.title && b.title && a.title === b.title && a.artist === b.artist);
+    }
 
     function getTrackKey(t) {
         if (!t) return "";
@@ -97,7 +106,7 @@ Rectangle {
 
     Timer {
         id: searchDebounceTimer
-        interval: 320
+        interval: 200
         repeat: false
         onTriggered: root.performOnlineSearch()
     }
@@ -123,63 +132,63 @@ Rectangle {
             // Prevent clicks from dismissing
         }
 
+        // Top-Right Close Button (Pinned firmly to top-right corner of modal card - ui-layout-design-rules)
+        Rectangle {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 18
+            z: 20
+            width: 32
+            height: 32
+            radius: 16
+            color: closeArea.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : Qt.rgba(255, 255, 255, 0.06)
+            border.color: Qt.rgba(255, 255, 255, 0.10)
+            border.width: 1
+
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/window-close-symbolic.svg"
+                iconSize: 12
+                color: closeArea.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
+            }
+
+            MouseArea {
+                id: closeArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.closeModal()
+            }
+        }
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
             spacing: 14
 
-            // Header Row: Title & Close Button
-            RowLayout {
+            // Header Row: Title and Playlist Name
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                Layout.rightMargin: 40 // Give clearance for pinned top-right close button
+                spacing: 3
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Text {
-                        text: I18n.tr("Thêm bài hát vào danh sách phát", "Add Songs to Playlist")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 18
-                        font.weight: Font.Bold
-                        color: "#ffffff"
-                    }
-
-                    Text {
-                        text: root.playlist ? (root.playlist.title || root.playlist.name || "") : ""
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        color: root.accentColor
-                        elide: Text.ElideRight
-                        visible: text.length > 0
-                    }
+                Text {
+                    text: I18n.tr("Thêm bài hát vào danh sách phát", "Add Songs to Playlist")
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 18
+                    font.weight: Font.Bold
+                    color: "#ffffff"
                 }
 
-                // Close Button
-                Rectangle {
-                    width: 32
-                    height: 32
-                    radius: 16
-                    color: closeArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
-                    border.color: Qt.rgba(255, 255, 255, 0.08)
-                    border.width: 1
-
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 12
-                        color: closeArea.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.7)
-                    }
-
-                    MouseArea {
-                        id: closeArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.closeModal()
-                    }
+                Text {
+                    text: root.playlist ? (root.playlist.title || root.playlist.name || "") : ""
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    color: root.accentColor
+                    elide: Text.ElideRight
+                    visible: text.length > 0
                 }
             }
 
@@ -304,10 +313,21 @@ Rectangle {
                 }
 
                 model: {
-                    if (root.trackSearchQuery.trim().length > 0) {
-                        return root.onlineSearchResults;
+                    var q = root.trackSearchQuery.trim();
+                    if (q.length > 0) {
+                        if (root.onlineSearchResults && root.onlineSearchResults.length > 0) {
+                            return root.onlineSearchResults;
+                        }
+                        // Instant local search filter while typing
+                        var qLower = q.toLowerCase();
+                        var locals = (root.availableTracks || []).filter(function(t) {
+                            return (t.title && t.title.toLowerCase().indexOf(qLower) !== -1) ||
+                                   (t.name && t.name.toLowerCase().indexOf(qLower) !== -1) ||
+                                   (t.artist && t.artist.toLowerCase().indexOf(qLower) !== -1);
+                        });
+                        return locals;
                     }
-                    return (root.availableTracks && root.availableTracks.length > 0) ? root.availableTracks : (root.currentTrack ? [root.currentTrack] : []);
+                    return [];
                 }
 
                 delegate: Rectangle {
@@ -321,11 +341,35 @@ Rectangle {
 
                     Behavior on color { ColorAnimation { duration: 100 } }
 
+                    // Double-click row area to add track (leaves 90px on right for prevBtn and addBtn)
+                    MouseArea {
+                        id: rowMouse
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.right: parent.right
+                        anchors.rightMargin: 90
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onDoubleClicked: {
+                            if (!rowCard.inPl) {
+                                var k = root.getTrackKey(trk);
+                                if (k) {
+                                    var updated = Object.assign({}, root.addedTrackKeys);
+                                    updated[k] = true;
+                                    root.addedTrackKeys = updated;
+                                }
+                                root.trackAddRequested(trk);
+                            }
+                        }
+                    }
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 8
                         anchors.rightMargin: 12
-                        spacing: 12
+                        spacing: 10
 
                         // Cover Artwork
                         RoundedImage {
@@ -378,11 +422,49 @@ Rectangle {
                             color: Theme.textMuted
                         }
 
-                        // Add / Added Button
+                        // Preview / Listen Button (Audition track before adding!)
                         Rectangle {
+                            id: prevBtn
                             width: 34
                             height: 34
                             radius: 17
+                            z: 2
+                            readonly property bool isThisPlaying: (root.currentTrack && root.isSameTrack(root.currentTrack, trk) && root.isPlaying)
+                            color: isThisPlaying 
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                                   : (prevMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : Qt.rgba(255, 255, 255, 0.06))
+                            border.color: isThisPlaying ? root.accentColor : Qt.rgba(255, 255, 255, 0.12)
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: prevBtn.isThisPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                                iconSize: 13
+                                color: prevBtn.isThisPlaying ? root.accentColor : (prevMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.8))
+                            }
+
+                            MouseArea {
+                                id: prevMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                preventStealing: true
+                                onClicked: {
+                                    root.previewTrackRequested(trk);
+                                }
+                            }
+                        }
+
+                        // Add / Added Button
+                        Rectangle {
+                            id: addBtn
+                            width: 34
+                            height: 34
+                            radius: 17
+                            z: 2
                             color: rowCard.inPl 
                                    ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                                    : (addMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(1, 1, 1, 0.08))
@@ -404,6 +486,7 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: rowCard.inPl ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                preventStealing: true
                                 onClicked: {
                                     if (!rowCard.inPl) {
                                         var k = root.getTrackKey(trk);
@@ -418,23 +501,58 @@ Rectangle {
                             }
                         }
                     }
+                }
+            }
 
-                    MouseArea {
-                        id: rowMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
-                        onDoubleClicked: {
-                            if (!rowCard.inPl) {
-                                var k = root.getTrackKey(trk);
-                                if (k) {
-                                    var updated = Object.assign({}, root.addedTrackKeys);
-                                    updated[k] = true;
-                                    root.addedTrackKeys = updated;
-                                }
-                                root.trackAddRequested(trk);
-                            }
+            // Empty State Prompt (ui-layout-design-rules)
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: resultsList.count === 0 && !root.isSearchingOnline
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 12
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        width: 52
+                        height: 52
+                        radius: 26
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                        border.width: 1
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: root.trackSearchQuery.trim().length === 0 
+                                    ? "../assets/icons/system-search-symbolic.svg" 
+                                    : "../assets/icons/dialog-information-symbolic.svg"
+                            iconSize: 22
+                            color: root.accentColor
                         }
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.trackSearchQuery.trim().length === 0
+                              ? I18n.tr("Tìm kiếm bài hát yêu thích", "Search for your favorite songs")
+                              : I18n.tr("Không tìm thấy bài hát nào", "No songs found")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                        color: "#ffffff"
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.trackSearchQuery.trim().length === 0
+                              ? I18n.tr("Nhập tên bài hát hoặc nghệ sĩ để tìm kiếm, nghe thử và thêm vào danh sách", "Type song or artist to search, preview, and add to playlist")
+                              : I18n.tr("Hãy thử tìm kiếm với từ khóa khác", "Try searching with different keywords")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: Qt.rgba(1, 1, 1, 0.5)
+                        horizontalAlignment: Text.AlignHCenter
                     }
                 }
             }

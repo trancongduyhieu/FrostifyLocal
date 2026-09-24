@@ -122,7 +122,7 @@ Rectangle {
 
     Timer {
         id: searchDebounceTimer
-        interval: 350
+        interval: 200
         repeat: false
         onTriggered: root.performOnlineSearch()
     }
@@ -790,8 +790,18 @@ Rectangle {
                 spacing: 6
 
                 model: {
-                    if (root.trackSearchQuery.trim().length > 0) {
-                        return root.onlineSearchResults;
+                    var q = root.trackSearchQuery.trim();
+                    if (q.length > 0) {
+                        if (root.onlineSearchResults && root.onlineSearchResults.length > 0) {
+                            return root.onlineSearchResults;
+                        }
+                        var qLower = q.toLowerCase();
+                        var locals = (root.availableTracks || []).filter(function(t) {
+                            return (t.title && t.title.toLowerCase().indexOf(qLower) !== -1) ||
+                                   (t.name && t.name.toLowerCase().indexOf(qLower) !== -1) ||
+                                   (t.artist && t.artist.toLowerCase().indexOf(qLower) !== -1);
+                        });
+                        return locals;
                     }
                     // Fallback to queue and library tracks when search query is empty
                     var list = (root.availableTracks && root.availableTracks.length > 0) ? root.availableTracks : (root.currentTrack ? [root.currentTrack] : []);
