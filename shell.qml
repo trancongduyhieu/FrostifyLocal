@@ -992,8 +992,8 @@ Scope {
     }
 
     function getCurrentUserName() {
-        if (win.authAccountName) return win.authAccountName;
         if (win.currentUserName && !win.currentUserName.toLowerCase().includes("shiraori")) return win.currentUserName;
+        if (win.authAccountName) return win.authAccountName;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") return "Hiếu Trần";
         return I18n.tr("Khách", "Guest");
@@ -1016,7 +1016,7 @@ Scope {
     function fetchCurrentUserProfile() {
         var email = win.getCurrentUserEmail();
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-        var preferredName = win.authAccountName || "";
+        var preferredName = (!win.currentUserName && win.authAccountName) ? win.authAccountName : "";
         var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/me?user_email=" + encodeURIComponent(email) + "&profile=" + encodeURIComponent(profile) + "&name=" + encodeURIComponent(preferredName);
         var xhr = new XMLHttpRequest();
         xhr.open("GET", apiUrl, true);
@@ -1027,12 +1027,12 @@ Scope {
                     if (res && res.success && res.profile) {
                         win.currentUserPin = res.profile.discriminator || res.profile.pin_code || "";
                         win.currentUserCloudId = res.profile.user_id || res.profile.id || "";
-                        if (win.authAccountName) {
-                            win.currentUserName = win.authAccountName;
-                            win.currentUserTag = win.authAccountName + "#" + win.currentUserPin;
-                        } else if (res.profile.username && !res.profile.username.toLowerCase().includes("shiraori")) {
+                        if (res.profile.username && !res.profile.username.toLowerCase().includes("shiraori") && res.profile.username !== "Nutsty User") {
                             win.currentUserName = res.profile.username;
                             win.currentUserTag = res.profile.tag || (res.profile.username + "#" + win.currentUserPin);
+                        } else if (win.authAccountName) {
+                            win.currentUserName = win.authAccountName;
+                            win.currentUserTag = win.authAccountName + "#" + win.currentUserPin;
                         }
                     }
                 } catch(e) {}

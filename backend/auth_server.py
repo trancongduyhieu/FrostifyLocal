@@ -783,10 +783,11 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
         except Exception:
             pass
 
-    # If identity exists, verify if username needs synchronization with Google account
+    # If identity exists, only sync username from Google account if current username is still a generic placeholder and not custom-renamed
     if ident and ident.get("user_id") and ident.get("secret_key"):
-        # Auto-update if user logged in with a real name (e.g. "Hieu Tran") and identity still has a placeholder or old name
-        if user_name and user_name not in ("Nutsty User", "Shiraori", "Khách", "Guest") and ident.get("username") != user_name:
+        cur_uname = (ident.get("username") or "").strip()
+        is_placeholder = cur_uname in ("", "User", "Nutsty User", "Khách", "Guest")
+        if not ident.get("custom_username") and is_placeholder and user_name and user_name not in ("User", "Nutsty User", "Shiraori", "Khách", "Guest"):
             try:
                 up_res = GLOBAL_RELAY_CLIENT.update_profile(
                     user_id=ident["user_id"],
@@ -803,21 +804,10 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
                         ident["avatar_url"] = u["avatar_url"]
                     save_cloud_identity(ident, profile_suffix)
                 elif up_res and up_res.get("unauthorized"):
-                    # Credentials rejected by Cloudflare D1 (401)! Purge invalid identity and re-register afresh!
                     sys.stderr.write(f"[CloudRelay] Cloud identity unauthorized for {ident.get('user_id')}. Re-registering as {user_name}...\n")
                     return ensure_cloud_identity(profile_suffix, fallback_name=user_name, fallback_avatar=avatar_url, force_recreate=True)
-                else:
-                    ident["username"] = user_name
-                    ident["tag"] = f"{user_name}#{ident.get('discriminator', '0001')}"
-                    if avatar_url:
-                        ident["avatar_url"] = avatar_url
-                    save_cloud_identity(ident, profile_suffix)
             except Exception:
-                ident["username"] = user_name
-                ident["tag"] = f"{user_name}#{ident.get('discriminator', '0001')}"
-                if avatar_url:
-                    ident["avatar_url"] = avatar_url
-                save_cloud_identity(ident, profile_suffix)
+                pass
         return ident
 
     if not user_name:
@@ -1496,8 +1486,13 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             preferred_name = query.get("name", [""])[0].strip()
             suffix = resolve_profile_suffix(profile, user_email)
             ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None)
-            display_name = preferred_name if (preferred_name and preferred_name not in ("Nutsty User", "Shiraori", "Khách", "Guest")) else ident["username"]
-            display_tag = f"{display_name}#{ident.get('discriminator', '0001')}" if display_name != ident["username"] else ident["tag"]
+            cur_uname = (ident.get("username") or "").strip()
+            if cur_uname and cur_uname not in ("User", "Nutsty User", "Khách", "Guest"):
+                display_name = cur_uname
+                display_tag = ident.get("tag") or f"{display_name}#{ident.get('discriminator', '0001')}"
+            else:
+                display_name = preferred_name if (preferred_name and preferred_name not in ("User", "Nutsty User", "Shiraori", "Khách", "Guest")) else (cur_uname or "Nutsty User")
+                display_tag = f"{display_name}#{ident.get('discriminator', '0001')}"
             self._send_json({
                 "success": True,
                 "profile": {
@@ -1521,9 +1516,28 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             caller_ident = ensure_cloud_identity(suffix)
 
             res = GLOBAL_RELAY_CLIENT.search(raw_q, caller_user_id=caller_ident.get("user_id"))
-            results = []
-            for r in res.get("results", []):
-                results.append({
+            raw_results = res.get("results", [])
+
+            # Deduplicate multiple stale IDs belonging to the same user (keep newest active / accepted friend ID)
+            deduped_map = {}
+            avatar_to_uname = {}
+            ordered_keys = []
+            exact_tag_query = raw_q.lower() if "#" in raw_q else ""
+            for r in raw_results:
+                uname_key = (r.get("username") or "").strip().lower()
+                av_key = (r.get("avatar_url") or "").strip()
+                if av_key and len(av_key) > 24 and av_key in avatar_to_uname:
+                    person_key = avatar_to_uname[av_key]
+                elif uname_key and uname_key not in ("user", "nutsty user", "khách", "guest"):
+                    person_key = f"u:{uname_key}"
+                    if av_key and len(av_key) > 24:
+                        avatar_to_uname[av_key] = person_key
+                elif av_key and len(av_key) > 24:
+                    person_key = f"av:{av_key}"
+                else:
+                    person_key = f"id:{r.get('id', '')}"
+
+                item_obj = {
                     "id": r["id"],
                     "user_id": r["id"],
                     "email": r["tag"],
@@ -1535,11 +1549,36 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "avatar": r.get("avatar_url", ""),
                     "avatar_url": r.get("avatar_url", ""),
                     "now_playing": r.get("now_playing", ""),
+                    "last_active_at": r.get("last_active_at", 0) or 0,
                     "is_self": False,
                     "is_friend": r.get("is_friend", False),
                     "has_outgoing_request": r.get("has_outgoing_request", False),
                     "has_incoming_request": r.get("has_incoming_request", False)
-                })
+                }
+
+                if person_key not in deduped_map:
+                    deduped_map[person_key] = item_obj
+                    ordered_keys.append(person_key)
+                else:
+                    existing = deduped_map[person_key]
+                    cand_tag_low = (r.get("tag") or "").strip().lower()
+                    if (exact_tag_query and cand_tag_low == exact_tag_query) or \
+                       (item_obj["last_active_at"] > existing["last_active_at"]) or \
+                       (item_obj["is_friend"] and not existing["is_friend"]):
+                        if not item_obj["avatar"] and existing["avatar"]:
+                            item_obj["avatar"] = existing["avatar"]
+                            item_obj["avatar_url"] = existing["avatar_url"]
+                        if existing["is_friend"]:
+                            item_obj["is_friend"] = True
+                        deduped_map[person_key] = item_obj
+                    else:
+                        if not existing["avatar"] and item_obj["avatar"]:
+                            existing["avatar"] = item_obj["avatar"]
+                            existing["avatar_url"] = item_obj["avatar_url"]
+                        if item_obj["is_friend"]:
+                            existing["is_friend"] = True
+
+            results = [deduped_map[k] for k in ordered_keys]
             self._send_json({"results": results}, 200)
         elif path == "/api/notes/events":
             profile = query.get("profile", [""])[0].strip()
@@ -1571,7 +1610,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "data": inner_data
                 })
 
-            user_aliases = set(get_user_all_identifiers(user_email))
+            user_aliases = get_user_all_identifiers(user_email)
             if caller_ident.get("tag"):
                 user_aliases.add(caller_ident["tag"].strip().lower())
             if caller_ident.get("user_id"):
@@ -1619,6 +1658,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 ident["username"] = u["username"]
                 ident["discriminator"] = u["discriminator"]
                 ident["tag"] = u["tag"]
+                ident["custom_username"] = True
                 if "avatar_url" in u:
                     ident["avatar_url"] = u["avatar_url"]
                 save_cloud_identity(ident, suffix)

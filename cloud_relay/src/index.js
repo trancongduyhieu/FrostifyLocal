@@ -67,6 +67,59 @@ async function findAvailableDiscriminator(db, username, preferred = null) {
   return null;
 }
 
+async function consolidateDuplicateUserAccounts(db, keepUserId, username, avatarUrl) {
+  if (!keepUserId) return;
+  const cleanName = (username || "").trim();
+  const cleanAvatar = (avatarUrl || "").trim();
+  const isGenericName = !cleanName || ["user", "nutsty user", "khách", "guest"].includes(cleanName.toLowerCase());
+
+  let staleRows = [];
+  if (cleanAvatar && cleanAvatar.length > 24) {
+    const res = await db
+      .prepare("SELECT id FROM nutsty_users WHERE id != ? AND (avatar_url = ? OR (? = 0 AND LOWER(username) = LOWER(?)))")
+      .bind(keepUserId, cleanAvatar, isGenericName ? 1 : 0, cleanName)
+      .all();
+    staleRows = res.results || [];
+  } else if (!isGenericName) {
+    const res = await db
+      .prepare("SELECT id FROM nutsty_users WHERE id != ? AND LOWER(username) = LOWER(?)")
+      .bind(keepUserId, cleanName)
+      .all();
+    staleRows = res.results || [];
+  }
+
+  for (const r of staleRows) {
+    const oldId = r.id;
+    if (!oldId || oldId === keepUserId) continue;
+
+    // Migrate friendships from oldId -> keepUserId
+    const fRows = await db
+      .prepare("SELECT * FROM nutsty_friendships WHERE user_id_1 = ? OR user_id_2 = ?")
+      .bind(oldId, oldId)
+      .all();
+    for (const f of fRows.results || []) {
+      const peerId = f.user_id_1 === oldId ? f.user_id_2 : f.user_id_1;
+      if (!peerId || peerId === keepUserId) continue;
+      const u1 = keepUserId < peerId ? keepUserId : peerId;
+      const u2 = keepUserId < peerId ? peerId : keepUserId;
+      const initBy = f.initiated_by === oldId ? keepUserId : f.initiated_by;
+      await db
+        .prepare(
+          `INSERT INTO nutsty_friendships (id, user_id_1, user_id_2, status, initiated_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id_1, user_id_2) DO UPDATE SET
+             status = CASE WHEN nutsty_friendships.status = 'accepted' OR excluded.status = 'accepted' THEN 'accepted' ELSE excluded.status END,
+             updated_at = MAX(nutsty_friendships.updated_at, excluded.updated_at)`
+        )
+        .bind("fr_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16), u1, u2, f.status, initBy, f.created_at, f.updated_at)
+        .run();
+    }
+    await db.prepare("DELETE FROM nutsty_friendships WHERE user_id_1 = ? OR user_id_2 = ?").bind(oldId, oldId).run();
+    await db.prepare("DELETE FROM nutsty_notes WHERE user_id = ?").bind(oldId).run();
+    await db.prepare("DELETE FROM nutsty_users WHERE id = ?").bind(oldId).run();
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
@@ -121,6 +174,8 @@ export default {
               .bind(user_id)
               .first();
 
+            await consolidateDuplicateUserAccounts(db, user_id, refreshed.username, refreshed.avatar_url);
+
             return jsonResponse({
               success: true,
               user: refreshed,
@@ -148,6 +203,8 @@ export default {
           )
           .bind(newUserId, newSecret, cleanUsername, disc, tag, avatar_url || "", now, now, now)
           .run();
+
+        await consolidateDuplicateUserAccounts(db, newUserId, cleanUsername, avatar_url || "");
 
         return jsonResponse({
           success: true,
@@ -212,6 +269,8 @@ export default {
           )
           .bind(targetUsername, targetDisc, targetTag, targetAvatar, now, now, user_id)
           .run();
+
+        await consolidateDuplicateUserAccounts(db, user_id, targetUsername, targetAvatar);
 
         const updated = await db
           .prepare("SELECT id, username, discriminator, tag, avatar_url, now_playing FROM nutsty_users WHERE id = ?")
@@ -305,7 +364,21 @@ export default {
 
         const stmt = db.prepare(querySql);
         const { results } = await stmt.bind(...binds).all();
-        const list = results || [];
+        const rawList = results || [];
+
+        // Auto-consolidate duplicate accounts (keep the most recently active row per username/avatar)
+        const seenPersons = new Set();
+        const list = [];
+        for (const item of rawList) {
+          const unameLow = (item.username || "").trim().toLowerCase();
+          const av = (item.avatar_url || "").trim();
+          const pKey = unameLow && !["user", "nutsty user", "khách", "guest"].includes(unameLow) ? `u:${unameLow}` : (av ? `av:${av}` : `id:${item.id}`);
+          if (!seenPersons.has(pKey)) {
+            seenPersons.add(pKey);
+            list.push(item);
+            await consolidateDuplicateUserAccounts(db, item.id, item.username, item.avatar_url);
+          }
+        }
 
         // Check friendship status if callerUserId is present
         const processed = [];
