@@ -3,6 +3,10 @@
 
 function startRadioFromTrack(win, trk) {
     if (!trk) return;
+    if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+        win.suggestTrackToHost(trk);
+        return;
+    }
     var rVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
     if (!rVid) {
         console.warn("Nutsty: startRadioFromTrack called without valid videoId", JSON.stringify(trk));
@@ -16,6 +20,10 @@ function startRadioFromTrack(win, trk) {
 
 function playFriendTrack(win, trk) {
     if (!trk) return;
+    if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+        win.suggestTrackToHost(trk);
+        return;
+    }
     var rVid = trk.id || trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
     if (rVid) {
         win.currentTracks = [trk];
@@ -32,6 +40,10 @@ function playFriendTrack(win, trk) {
 
 function playArtistShuffle(win, artistItem, candidateTracks) {
     if (!artistItem) return;
+    if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+        win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
+        return;
+    }
     var aName = artistItem.name || artistItem.title || artistItem.artist || "";
     var bId = artistItem.browseId || artistItem.channelId || "";
     win.mainSectionTitle = aName;

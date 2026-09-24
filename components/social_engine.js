@@ -144,6 +144,7 @@ function syncNowPlaying(win, force) {
             position: reportPos,
             duration: win.totalDuration || cur.duration || 0,
             is_playing: win.isPlaying,
+            allow_control: Boolean(win.allowCoListenerControl),
             timestamp: Date.now() / 1000.0
         };
     }
@@ -321,25 +322,31 @@ function fetchFriendsNotesFast(win) {
                         }
 
                         if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0) && Array.isArray(parsed.notes)) {
-                            if ((Date.now() - win.lastTrackSwitchTimestamp < 5000) || (Date.now() - win.lastLocalActionTimestamp < 5000)) {
-                                return;
-                            }
                             var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
+                            var targetUserId = (win.listeningAlongFriend.user_id || win.listeningAlongFriend.id || "");
                             var targetName = win.listeningAlongFriend.user_name;
                             var updated = parsed.notes.find(function(f) {
                                 var fEm = (f.user_email || f.tag || "").toLowerCase();
-                                return (targetEmail && fEm === targetEmail) ||
+                                var fUid = f.user_id || f.id || "";
+                                return (targetUserId && fUid && fUid === targetUserId) ||
+                                       (targetEmail && fEm === targetEmail) ||
                                        (targetName && f.user_name === targetName);
                             });
                             if (updated && updated.now_playing) {
-                                win.listeningAlongFriend = updated;
                                 var np = updated.now_playing;
+                                if (np.allow_control !== undefined) {
+                                    win.guestCanControlHost = Boolean(np.allow_control);
+                                }
+                                if (win.guestCanControlHost && ((Date.now() - win.lastTrackSwitchTimestamp < 5000) || (Date.now() - win.lastLocalActionTimestamp < 5000))) {
+                                    return;
+                                }
+                                win.listeningAlongFriend = updated;
                                 var npVid = np.videoId || np.id || "";
                                 if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
                                 var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
                                 if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
 
-                                if (npVid && curVid && npVid !== curVid) {
+                                if (npVid && npVid !== curVid) {
                                     win.isSyncingFromFriend = true;
                                     win.startListeningAlong(updated);
                                     win.isSyncingFromFriend = false;
@@ -387,9 +394,32 @@ function fetchFriendsNotesFast(win) {
 
 function setAllowCoListenerControl(win, allowed) {
     win.allowCoListenerControl = Boolean(allowed);
+    win.syncNowPlaying(true);
+    var sentPermTargets = {};
+    function sendPermOnce(peerObjOrKey) {
+        if (!peerObjOrKey) return;
+        var peer = normalizePeer(peerObjOrKey);
+        var bestKey = peer.user_id || peer.tag || peer.email || String(peerObjOrKey).trim();
+        if (!bestKey) return;
+        var aliases = [peer.user_id, peer.tag, peer.email, peer.name, bestKey];
+        for (var a = 0; a < aliases.length; a++) {
+            var al = String(aliases[a] || "").trim().toLowerCase();
+            if (al && sentPermTargets[al]) return;
+        }
+        for (var b = 0; b < aliases.length; b++) {
+            var al2 = String(aliases[b] || "").trim().toLowerCase();
+            if (al2) sentPermTargets[al2] = true;
+        }
+        win.sendSocialEventFast("permission_update", bestKey, { allow_control: win.allowCoListenerControl });
+    }
+    if (win.activeCoListenersDetails && win.activeCoListenersDetails.length > 0) {
+        for (var di = 0; di < win.activeCoListenersDetails.length; di++) {
+            sendPermOnce(win.activeCoListenersDetails[di]);
+        }
+    }
     if (win.activeCoListeners && win.activeCoListeners.length > 0) {
         for (var i = 0; i < win.activeCoListeners.length; i++) {
-            win.sendSocialEventFast("permission_update", win.activeCoListeners[i], { allow_control: win.allowCoListenerControl });
+            sendPermOnce(win.activeCoListeners[i]);
         }
     }
     win.showToast(win.allowCoListenerControl
@@ -526,7 +556,10 @@ function pollSocialEventsFast(win) {
                             }
                         } else if (ev.event === "pause") {
                             win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
+                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                                _forceResyncUnauthorizedGuest(win, ev);
+                                continue;
+                            }
                             win.lastLocalActionTimestamp = Date.now();
                             if (win.isPlaying) {
                                 win.isSyncingFromFriend = true;
@@ -540,7 +573,10 @@ function pollSocialEventsFast(win) {
                             win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                         } else if (ev.event === "play" || ev.event === "resume") {
                             win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
+                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                                _forceResyncUnauthorizedGuest(win, ev);
+                                continue;
+                            }
                             win.lastLocalActionTimestamp = Date.now();
                             if (!win.isPlaying && win.currentTrack) {
                                 win.isSyncingFromFriend = true;
@@ -553,7 +589,10 @@ function pollSocialEventsFast(win) {
                             win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
                         } else if (ev.event === "seek") {
                             win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) continue;
+                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                                _forceResyncUnauthorizedGuest(win, ev);
+                                continue;
+                            }
                             var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
                             if (sPos >= 0) {
                                 win.lastLocalActionTimestamp = Date.now();
@@ -574,6 +613,10 @@ function pollSocialEventsFast(win) {
                         } else if (ev.event === "track_change") {
                             win.ensureCoListenerRegistered(ev, true);
                             var canAcceptTrackChange = (win.listeningAlongFriend !== null) || win.allowCoListenerControl;
+                            if (!canAcceptTrackChange) {
+                                _forceResyncUnauthorizedGuest(win, ev);
+                                continue;
+                            }
                             if (ev.data && ev.data.track && canAcceptTrackChange) {
                                 var newTrk = ev.data.track;
                                 var newVid = newTrk.videoId || newTrk.id || "";
@@ -615,6 +658,7 @@ function pollSocialEventsFast(win) {
                             var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             var cAvatar = ev.from_avatar || "";
                             var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
+                            var cMsgId = (ev.data && ev.data.msg_id) ? String(ev.data.msg_id) : "";
                             if (!cAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
                                 var matchC = win.friendsNotes.find(function(n) {
                                     return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
@@ -622,7 +666,7 @@ function pollSocialEventsFast(win) {
                                 });
                                 if (matchC) cAvatar = matchC.avatar_url || "";
                             }
-                            if (cText) {
+                            if (cText && !_isDuplicateIncomingChat(ev, cFrom, cText, cMsgId)) {
                                 floatingChatContainer.spawnBubble(cFrom, cAvatar, cText);
                             }
                         } else if (ev.event === "friend_request") {
@@ -945,8 +989,12 @@ function startListeningAlong(win, friend) {
         }
     }
     win.isNowPlayingOpen = true;
-    if (!wasAlreadyListening) {
+    if (friend.now_playing && friend.now_playing.allow_control !== undefined) {
+        win.guestCanControlHost = Boolean(friend.now_playing.allow_control);
+    } else if (!wasAlreadyListening) {
         win.guestCanControlHost = true;
+    }
+    if (!wasAlreadyListening) {
         var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
         win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
         var joinTarget = friend.tag || friend.user_id || friend.user_email || "";
@@ -1004,7 +1052,41 @@ function suggestTrackToHost(win, trk) {
     if (!hostEmail) return;
     var hostName = win.listeningAlongFriend.user_name || I18n.tr("Host", "Host");
     win.sendSocialEventFast("track_suggest", hostEmail, { track: trk });
-    win.showToast(I18n.tr("Đã gửi đề xuất bài hát cho " + hostName, "Suggested track to " + hostName));
+    win.showToast(I18n.tr("Host đã khóa quyền chuyển bài — Đã gửi đề xuất cho " + hostName, "Host locked track change — Suggested track to " + hostName));
+}
+
+var _recentChatDedupe = {};
+
+function _isDuplicateIncomingChat(ev, senderName, text, msgId) {
+    var now = Date.now();
+    for (var k in _recentChatDedupe) {
+        if (now - _recentChatDedupe[k] > 3500) {
+            delete _recentChatDedupe[k];
+        }
+    }
+    var fromKey = String((ev && (ev.from_id || ev.from_email || ev.from_name)) || senderName || "").trim().toLowerCase();
+    var textKey = fromKey + "|" + String(text || "").trim();
+    if (msgId && _recentChatDedupe["id:" + msgId]) {
+        return true;
+    }
+    if (_recentChatDedupe["txt:" + textKey] && (now - _recentChatDedupe["txt:" + textKey] < 3000)) {
+        return true;
+    }
+    if (msgId) _recentChatDedupe["id:" + msgId] = now;
+    _recentChatDedupe["txt:" + textKey] = now;
+    return false;
+}
+
+function _forceResyncUnauthorizedGuest(win, ev) {
+    if (!ev) return;
+    var senderTarget = ev.from_id || ev.from_email || "";
+    if (!senderTarget) return;
+    win.sendSocialEventFast("permission_update", senderTarget, { allow_control: false });
+    if (win.currentTrack) {
+        win.sendSocialEventFast("track_change", senderTarget, { track: win.currentTrack });
+        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", senderTarget);
+        win.sendSocialEventFast("seek", senderTarget, { position: win.currentTime });
+    }
 }
 
 function sendChatMessage(win, text) {
@@ -1016,31 +1098,78 @@ function sendChatMessage(win, text) {
         myAvatar = win.myLatestNote.avatar_url;
     }
 
+    var msgId = "msg_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
     var sentTargets = {};
-    function sendOnce(targetKey) {
-        if (!targetKey) return;
-        var norm = String(targetKey).trim().toLowerCase();
-        if (!norm || sentTargets[norm]) return;
-        sentTargets[norm] = true;
-        win.sendSocialEventFast("chat_message", String(targetKey).trim(), { text: cleanText });
+
+    function collectPeerAliases(candidate) {
+        var peer = normalizePeer(candidate);
+        var keys = [];
+        function addK(v) {
+            var s = String(v || "").trim().toLowerCase();
+            if (s && keys.indexOf(s) === -1) keys.push(s);
+        }
+        addK(peer.user_id);
+        addK(peer.tag);
+        addK(peer.email);
+        addK(peer.name);
+        if (typeof candidate === "string") addK(candidate);
+        if (win.activeCoListenersDetails && Array.isArray(win.activeCoListenersDetails)) {
+            for (var i = 0; i < win.activeCoListenersDetails.length; i++) {
+                var d = normalizePeer(win.activeCoListenersDetails[i]);
+                if ((d.user_id && keys.indexOf(d.user_id.toLowerCase()) !== -1) ||
+                    (d.tag && keys.indexOf(d.tag.toLowerCase()) !== -1) ||
+                    (d.email && keys.indexOf(d.email.toLowerCase()) !== -1) ||
+                    (d.name && keys.indexOf(d.name.toLowerCase()) !== -1)) {
+                    addK(d.user_id);
+                    addK(d.tag);
+                    addK(d.email);
+                    addK(d.name);
+                }
+            }
+        }
+        if (win.friendsNotes && Array.isArray(win.friendsNotes)) {
+            for (var j = 0; j < win.friendsNotes.length; j++) {
+                var fn = normalizePeer(win.friendsNotes[j]);
+                if ((fn.user_id && keys.indexOf(fn.user_id.toLowerCase()) !== -1) ||
+                    (fn.tag && keys.indexOf(fn.tag.toLowerCase()) !== -1) ||
+                    (fn.email && keys.indexOf(fn.email.toLowerCase()) !== -1) ||
+                    (fn.name && keys.indexOf(fn.name.toLowerCase()) !== -1)) {
+                    addK(fn.user_id);
+                    addK(fn.tag);
+                    addK(fn.email);
+                    addK(fn.name);
+                }
+            }
+        }
+        return { peer: peer, keys: keys };
+    }
+
+    function sendOnceToPeer(candidate) {
+        if (!candidate) return;
+        var info = collectPeerAliases(candidate);
+        var bestTarget = info.peer.user_id || info.peer.tag || info.peer.email || (typeof candidate === "string" ? candidate.trim() : "");
+        if (!bestTarget) return;
+        for (var k = 0; k < info.keys.length; k++) {
+            if (sentTargets[info.keys[k]]) return;
+        }
+        for (var m = 0; m < info.keys.length; m++) {
+            sentTargets[info.keys[m]] = true;
+        }
+        win.sendSocialEventFast("chat_message", String(bestTarget).trim(), { text: cleanText, msg_id: msgId });
     }
 
     if (win.listeningAlongFriend) {
-        var targetHost = win.listeningAlongFriend.user_id || win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email || "";
-        sendOnce(targetHost);
+        sendOnceToPeer(win.listeningAlongFriend);
     }
 
     if (win.activeCoListenersDetails && win.activeCoListenersDetails.length > 0) {
         for (var di = 0; di < win.activeCoListenersDetails.length; di++) {
-            var dItem = win.activeCoListenersDetails[di];
-            if (dItem) {
-                sendOnce(dItem.user_id || dItem.tag || dItem.email);
-            }
+            sendOnceToPeer(win.activeCoListenersDetails[di]);
         }
     }
     if (win.activeCoListeners && win.activeCoListeners.length > 0) {
         for (var ci = 0; ci < win.activeCoListeners.length; ci++) {
-            sendOnce(win.activeCoListeners[ci]);
+            sendOnceToPeer(win.activeCoListeners[ci]);
         }
     }
 
@@ -1048,7 +1177,7 @@ function sendChatMessage(win, text) {
         for (var fi = 0; fi < win.friendsNotes.length; fi++) {
             var fn = win.friendsNotes[fi];
             if (fn && (fn.is_online || win.friendsNotes.length === 1)) {
-                sendOnce(fn.user_id || fn.tag || fn.user_email);
+                sendOnceToPeer(fn);
             }
         }
     }

@@ -1153,17 +1153,8 @@ Scope {
     function playOnlineTrack(trk, startRadio) {
         if (!trk) return;
         if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            var hostObj = win.listeningAlongFriend;
-            var hostTrack = hostObj.now_playing || hostObj.track;
-            var hostVid = hostTrack ? (hostTrack.videoId || hostTrack.id || "") : "";
-            if (hostVid.startsWith("yt_")) hostVid = hostVid.replace(/^yt_/, "");
-            var myVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-            if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
-
-            if ((hostVid && myVid && hostVid !== myVid) || (win.currentTrack && !win.isSameTrack(win.currentTrack, trk))) {
-                win.suggestTrackToHost(trk);
-                return;
-            }
+            win.suggestTrackToHost(trk);
+            return;
         }
         if (!win.isSyncingFromFriend) {
             win.pendingListenAlongSeekPosition = 0.0;
