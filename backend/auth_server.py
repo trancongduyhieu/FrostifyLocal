@@ -1518,22 +1518,23 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             res = GLOBAL_RELAY_CLIENT.search(raw_q, caller_user_id=caller_ident.get("user_id"))
             raw_results = res.get("results", [])
 
-            # Deduplicate multiple stale IDs belonging to the same user (keep newest active / accepted friend ID)
+            # Deduplicate multiple stale IDs that have the EXACT SAME username (e.g. Shiraori#4444, #3333, #1168 -> keep newest Shiraori#4444)
+            # Never merge across avatar_url alone so two devices sharing a Google account with different names (e.g. Shiraori vs nick) stay distinct!
             deduped_map = {}
-            avatar_to_uname = {}
             ordered_keys = []
-            exact_tag_query = raw_q.lower() if "#" in raw_q else ""
+            q_clean = raw_q.strip().lower()
+            exact_disc_query = q_clean.split("#")[-1].strip() if "#" in q_clean else (q_clean if q_clean.isdigit() else "")
+            caller_uid = (caller_ident.get("user_id") or "").strip()
+
             for r in raw_results:
+                if caller_uid and r.get("id") == caller_uid:
+                    continue
                 uname_key = (r.get("username") or "").strip().lower()
-                av_key = (r.get("avatar_url") or "").strip()
-                if av_key and len(av_key) > 24 and av_key in avatar_to_uname:
-                    person_key = avatar_to_uname[av_key]
+                r_disc = str(r.get("discriminator") or "").strip()
+                if exact_disc_query and r_disc == exact_disc_query.zfill(4):
+                    person_key = f"disc:{r.get('id', '')}"
                 elif uname_key and uname_key not in ("user", "nutsty user", "khách", "guest"):
                     person_key = f"u:{uname_key}"
-                    if av_key and len(av_key) > 24:
-                        avatar_to_uname[av_key] = person_key
-                elif av_key and len(av_key) > 24:
-                    person_key = f"av:{av_key}"
                 else:
                     person_key = f"id:{r.get('id', '')}"
 
@@ -1546,8 +1547,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     "tag": r["tag"],
                     "pin_code": r["discriminator"],
                     "discriminator": r["discriminator"],
-                    "avatar": r.get("avatar_url", ""),
-                    "avatar_url": r.get("avatar_url", ""),
+                    "avatar": r.get("avatar_url", "") or "",
+                    "avatar_url": r.get("avatar_url", "") or "",
                     "now_playing": r.get("now_playing", ""),
                     "last_active_at": r.get("last_active_at", 0) or 0,
                     "is_self": False,
@@ -1562,19 +1563,13 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 else:
                     existing = deduped_map[person_key]
                     cand_tag_low = (r.get("tag") or "").strip().lower()
-                    if (exact_tag_query and cand_tag_low == exact_tag_query) or \
+                    if (q_clean and cand_tag_low == q_clean) or \
                        (item_obj["last_active_at"] > existing["last_active_at"]) or \
                        (item_obj["is_friend"] and not existing["is_friend"]):
-                        if not item_obj["avatar"] and existing["avatar"]:
-                            item_obj["avatar"] = existing["avatar"]
-                            item_obj["avatar_url"] = existing["avatar_url"]
                         if existing["is_friend"]:
                             item_obj["is_friend"] = True
                         deduped_map[person_key] = item_obj
                     else:
-                        if not existing["avatar"] and item_obj["avatar"]:
-                            existing["avatar"] = item_obj["avatar"]
-                            existing["avatar_url"] = item_obj["avatar_url"]
                         if item_obj["is_friend"]:
                             existing["is_friend"] = True
 

@@ -70,23 +70,14 @@ async function findAvailableDiscriminator(db, username, preferred = null) {
 async function consolidateDuplicateUserAccounts(db, keepUserId, username, avatarUrl) {
   if (!keepUserId) return;
   const cleanName = (username || "").trim();
-  const cleanAvatar = (avatarUrl || "").trim();
   const isGenericName = !cleanName || ["user", "nutsty user", "khách", "guest"].includes(cleanName.toLowerCase());
+  if (isGenericName) return;
 
-  let staleRows = [];
-  if (cleanAvatar && cleanAvatar.length > 24) {
-    const res = await db
-      .prepare("SELECT id FROM nutsty_users WHERE id != ? AND (avatar_url = ? OR (? = 0 AND LOWER(username) = LOWER(?)))")
-      .bind(keepUserId, cleanAvatar, isGenericName ? 1 : 0, cleanName)
-      .all();
-    staleRows = res.results || [];
-  } else if (!isGenericName) {
-    const res = await db
-      .prepare("SELECT id FROM nutsty_users WHERE id != ? AND LOWER(username) = LOWER(?)")
-      .bind(keepUserId, cleanName)
-      .all();
-    staleRows = res.results || [];
-  }
+  const res = await db
+    .prepare("SELECT id FROM nutsty_users WHERE id != ? AND LOWER(username) = LOWER(?)")
+    .bind(keepUserId, cleanName)
+    .all();
+  const staleRows = res.results || [];
 
   for (const r of staleRows) {
     const oldId = r.id;
