@@ -24,11 +24,13 @@ except Exception:
 hidden_imports = [
     'PySide6.QtCore',
     'PySide6.QtGui',
+    'PySide6.QtWidgets',
     'PySide6.QtQml',
     'PySide6.QtQuick',
     'PySide6.QtQuickControls2',
     'PySide6.QtQuickLayouts',
     'PySide6.QtMultimedia',
+    'yt_dlp',
     'http',
     'http.server',
     'http.client',
