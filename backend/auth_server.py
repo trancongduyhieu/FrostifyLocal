@@ -678,6 +678,7 @@ class CloudRelayClient:
         return None
 
 GLOBAL_RELAY_CLIENT = CloudRelayClient()
+_cloud_notes_cache = {"ts": 0.0, "data": [], "my_note": None}
 
 def resolve_profile_suffix(profile=None, user_email=None):
     if profile:
@@ -1332,6 +1333,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     my_n = res.get("my_note")
                     if isinstance(my_n, dict) and my_n.get("tag"):
                         my_n["user_email"] = my_n["tag"]
+                    _cloud_notes_cache["ts"] = time.time()
+                    _cloud_notes_cache["data"] = notes_arr
+                    _cloud_notes_cache["my_note"] = my_n
                     res["notes"] = notes_arr
                     res["count"] = len(notes_arr)
                     self._send_json(res, 200)

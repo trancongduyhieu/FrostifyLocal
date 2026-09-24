@@ -855,17 +855,32 @@ Scope {
             myAvatar = win.myLatestNote.avatar_url;
         }
 
-        // Resolve exact case-preserved tag and user_id from friendsDetails / friendsNotes if available
-        var resolvedEmail = to_email;
-        var resolvedUserId = "";
-        var lowerTarget = String(to_email).trim().toLowerCase();
-        if (win.friendsDetails && Array.isArray(win.friendsDetails)) {
+        // Resolve exact case-preserved tag and user_id from activeCoListenersDetails / friendsDetails / friendsNotes if available
+        var resolvedEmail = String(to_email).trim();
+        var resolvedUserId = resolvedEmail.startsWith("usr_") ? resolvedEmail : "";
+        var lowerTarget = resolvedEmail.toLowerCase();
+        if (win.activeCoListenersDetails && Array.isArray(win.activeCoListenersDetails)) {
+            for (var cli = 0; cli < win.activeCoListenersDetails.length; cli++) {
+                var cld = win.activeCoListenersDetails[cli];
+                if (!cld) continue;
+                var cldEm = String(cld.email || cld.tag || "").trim();
+                var cldId = String(cld.user_id || cld.id || "").trim();
+                var cldName = String(cld.name || "").trim();
+                if (cldEm.toLowerCase() === lowerTarget || cldId.toLowerCase() === lowerTarget || (cldName && cldName.toLowerCase() === lowerTarget)) {
+                    if (cldEm) resolvedEmail = cldEm;
+                    if (cldId) resolvedUserId = cldId;
+                    break;
+                }
+            }
+        }
+        if (!resolvedUserId && win.friendsDetails && Array.isArray(win.friendsDetails)) {
             for (var fi = 0; fi < win.friendsDetails.length; fi++) {
                 var fd = win.friendsDetails[fi];
                 if (!fd) continue;
                 var fdTag = String(fd.tag || fd.email || "").trim();
                 var fdId = String(fd.user_id || fd.id || "").trim();
-                if (fdTag.toLowerCase() === lowerTarget || fdId.toLowerCase() === lowerTarget) {
+                var fdName = String(fd.name || fd.username || "").trim();
+                if (fdTag.toLowerCase() === lowerTarget || fdId.toLowerCase() === lowerTarget || (fdName && fdName.toLowerCase() === lowerTarget)) {
                     if (fdTag) resolvedEmail = fdTag;
                     if (fdId) resolvedUserId = fdId;
                     break;
@@ -878,7 +893,8 @@ Scope {
                 if (!fn) continue;
                 var fnTag = String(fn.tag || fn.user_email || "").trim();
                 var fnId = String(fn.user_id || "").trim();
-                if (fnTag.toLowerCase() === lowerTarget || fnId.toLowerCase() === lowerTarget) {
+                var fnName = String(fn.user_name || "").trim();
+                if (fnTag.toLowerCase() === lowerTarget || fnId.toLowerCase() === lowerTarget || (fnName && fnName.toLowerCase() === lowerTarget)) {
                     if (fnTag) resolvedEmail = fnTag;
                     if (fnId) resolvedUserId = fnId;
                     break;
@@ -1257,6 +1273,7 @@ Scope {
         }
 
         var rawEmail = String(ev.from_email || ev.from_id || "").trim();
+        var rawUserId = String(ev.from_id || "").trim();
         var jEmail = rawEmail.toLowerCase();
         if (!jEmail) return false;
 
@@ -1274,23 +1291,28 @@ Scope {
         }
         var jName = ev.from_name || rawEmail;
         var jAvatar = ev.from_avatar || "";
-        if (!jAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+        if (win.friendsNotes && Array.isArray(win.friendsNotes)) {
             var matchNote = win.friendsNotes.find(function(n) {
                 return (n.user_email && n.user_email.toLowerCase() === jEmail) ||
                        (n.tag && n.tag.toLowerCase() === jEmail) ||
+                       (rawUserId && n.user_id && n.user_id === rawUserId) ||
                        (n.user_name && n.user_name === jName);
             });
             if (matchNote) {
-                jAvatar = matchNote.avatar_url || "";
+                if (!jAvatar) jAvatar = matchNote.avatar_url || "";
+                if (!rawUserId && matchNote.user_id) rawUserId = matchNote.user_id;
                 if ((!ev.from_name || ev.from_name === "User") && matchNote.user_name) jName = matchNote.user_name;
             }
         }
         var curDetails = win.activeCoListenersDetails ? win.activeCoListenersDetails.slice(0) : [];
-        var existIdx = curDetails.findIndex(function(d) { return String(d.email || "").toLowerCase() === jEmail; });
+        var existIdx = curDetails.findIndex(function(d) {
+            return String(d.email || "").toLowerCase() === jEmail || (rawUserId && d.user_id === rawUserId);
+        });
+        var detailObj = { email: rawEmail, tag: rawEmail, user_id: rawUserId, name: jName, avatar: jAvatar };
         if (existIdx === -1) {
-            curDetails.push({ email: rawEmail, name: jName, avatar: jAvatar });
+            curDetails.push(detailObj);
         } else {
-            curDetails[existIdx] = { email: rawEmail, name: jName, avatar: jAvatar };
+            curDetails[existIdx] = detailObj;
         }
         win.activeCoListenersDetails = curDetails;
 
@@ -2308,22 +2330,47 @@ Scope {
             myAvatar = win.myLatestNote.avatar_url;
         }
 
+        var sentTargets = {};
+        function sendOnce(targetKey) {
+            if (!targetKey) return;
+            var norm = String(targetKey).trim().toLowerCase();
+            if (!norm || sentTargets[norm]) return;
+            sentTargets[norm] = true;
+            win.sendSocialEventFast("chat_message", String(targetKey).trim(), { text: cleanText });
+        }
+
         // 1. Gửi cho Host (nếu mình là Listener)
         if (win.listeningAlongFriend) {
-            var targetHost = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-            if (targetHost) {
-                win.sendSocialEventFast("chat_message", targetHost, { text: cleanText });
-            }
+            var targetHost = win.listeningAlongFriend.user_id || win.listeningAlongFriend.tag || win.listeningAlongFriend.user_email || "";
+            sendOnce(targetHost);
         }
 
-        // 2. Gửi cho các Listeners (nếu mình là Host)
+        // 2. Gửi cho các Listeners (nếu mình là Host) ưu tiên qua activeCoListenersDetails có user_id
+        if (win.activeCoListenersDetails && win.activeCoListenersDetails.length > 0) {
+            for (var di = 0; di < win.activeCoListenersDetails.length; di++) {
+                var dItem = win.activeCoListenersDetails[di];
+                if (dItem) {
+                    sendOnce(dItem.user_id || dItem.tag || dItem.email);
+                }
+            }
+        }
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
             for (var ci = 0; ci < win.activeCoListeners.length; ci++) {
-                win.sendSocialEventFast("chat_message", win.activeCoListeners[ci], { text: cleanText });
+                sendOnce(win.activeCoListeners[ci]);
             }
         }
 
-        // 3. Hiển thị bong bóng bay của chính mình
+        // 3. Fallback: Nếu chưa kịp đồng bộ mảng listener nhưng có bạn bè đang online, gửi tới bạn bè online
+        if (Object.keys(sentTargets).length === 0 && win.friendsNotes && win.friendsNotes.length > 0) {
+            for (var fi = 0; fi < win.friendsNotes.length; fi++) {
+                var fn = win.friendsNotes[fi];
+                if (fn && (fn.is_online || win.friendsNotes.length === 1)) {
+                    sendOnce(fn.user_id || fn.tag || fn.user_email);
+                }
+            }
+        }
+
+        // 4. Hiển thị bong bóng bay của chính mình
         floatingChatContainer.spawnBubble(myName, myAvatar, cleanText);
     }
 
