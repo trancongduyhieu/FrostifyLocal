@@ -24,10 +24,15 @@ Rectangle {
     signal albumSelected(var album)
     signal batchDeleteRequested(var paths)
     signal createPlaylistRequested(var tracks)
+    signal playlistSelected(var playlist)
+    signal playPlaylistRequested(var playlist, bool shuffle)
+    signal editPlaylistRequested(var playlist)
+    signal deletePlaylistRequested(string plId)
 
     property var albumMetadata: null
-    property string downloadsSubTab: "tracks" // "tracks", "albums"
+    property string downloadsSubTab: "tracks" // "tracks", "playlists", "albums"
     property var localAlbums: []
+    property var customPlaylists: []
 
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
@@ -309,7 +314,12 @@ Rectangle {
                         spacing: 12
 
                         Text {
-                            text: root.isDownloadsView ? I18n.tr("Tải xuống", "Downloads") : root.sectionTitle
+                            text: {
+                                if (!root.isDownloadsView) return root.sectionTitle;
+                                if (root.downloadsSubTab === "playlists") return I18n.tr("Danh sách phát cá nhân của bạn", "Your Personal Playlists");
+                                if (root.downloadsSubTab === "albums") return I18n.tr("Tuyển tập", "Compilations");
+                                return I18n.tr("Tải xuống", "Downloads");
+                            }
                             font.family: Theme.fontFamily
                             font.pixelSize: 28
                             font.bold: true
@@ -328,7 +338,15 @@ Rectangle {
                             Text {
                                 id: countBadgeText
                                 anchors.centerIn: parent
-                                text: (root.sortedTracks ? root.sortedTracks.length : 0) + I18n.tr(" bài hát", " songs")
+                                text: {
+                                    if (root.isDownloadsView && root.downloadsSubTab === "playlists") {
+                                        return (root.customPlaylists ? root.customPlaylists.length : 0) + " " + I18n.tr("danh sách phát", "playlists");
+                                    }
+                                    if (root.isDownloadsView && root.downloadsSubTab === "albums") {
+                                        return (root.localAlbums ? root.localAlbums.length : 0) + " " + I18n.tr("tuyển tập", "albums");
+                                    }
+                                    return (root.sortedTracks ? root.sortedTracks.length : 0) + I18n.tr(" bài hát", " songs");
+                                }
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
@@ -339,25 +357,31 @@ Rectangle {
 
                     Item { Layout.fillWidth: true }
 
-                    // Downloads Sub-tab Switcher: [ Bài hát | Albums ] (Refined Dark Glass Segmented Control)
+                    // Downloads Sub-tab Switcher: [ Bài hát | Danh sách phát | Tuyển tập ] (Refined Dark Glass Segmented Control)
                     Rectangle {
                         visible: root.isDownloadsView
-                        height: 34
-                        width: 210
+                        implicitHeight: 34
+                        implicitWidth: pillRow.implicitWidth + 8
+                        Layout.preferredHeight: 34
+                        Layout.preferredWidth: implicitWidth
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                         radius: 17
-                        color: Qt.rgba(0.08, 0.08, 0.11, 0.85)
-                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
                         border.width: 1
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 3
-                            spacing: 2
+                        Row {
+                            id: pillRow
+                            anchors.centerIn: parent
+                            height: 28
+                            spacing: 4
 
-                            // Subtab: Bài hát
+                            // Subtab 1: Bài hát
                             Rectangle {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                implicitWidth: trksText.implicitWidth + 28
+                                implicitHeight: 28
+                                width: implicitWidth
+                                height: implicitHeight
                                 radius: 14
                                 color: root.downloadsSubTab === "tracks" 
                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
@@ -371,6 +395,7 @@ Rectangle {
                                 HoverHandler { id: trksH }
 
                                 Text {
+                                    id: trksText
                                     anchors.centerIn: parent
                                     text: I18n.tr("Bài hát", "Songs")
                                     font.family: Theme.fontFamily
@@ -387,10 +412,48 @@ Rectangle {
                                 }
                             }
 
-                            // Subtab: Albums
+                            // Subtab 2: Danh sách phát
                             Rectangle {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                implicitWidth: plsText.implicitWidth + 28
+                                implicitHeight: 28
+                                width: implicitWidth
+                                height: implicitHeight
+                                radius: 14
+                                color: root.downloadsSubTab === "playlists" 
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                       : (plsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                                border.color: root.downloadsSubTab === "playlists" 
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                              : "transparent"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on border.color { ColorAnimation { duration: 150 } }
+                                HoverHandler { id: plsH }
+
+                                Text {
+                                    id: plsText
+                                    anchors.centerIn: parent
+                                    text: I18n.tr("Danh sách phát (", "Playlists (") + (root.customPlaylists ? root.customPlaylists.length : 0) + ")"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: root.downloadsSubTab === "playlists"
+                                    color: root.downloadsSubTab === "playlists" ? root.accentColor : (plsH.hovered ? "#ffffff" : Theme.textSecondary)
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.downloadsSubTab = "playlists"
+                                }
+                            }
+
+                            // Subtab 3: Albums / Tuyển tập
+                            Rectangle {
+                                implicitWidth: albsText.implicitWidth + 28
+                                implicitHeight: 28
+                                width: implicitWidth
+                                height: implicitHeight
                                 radius: 14
                                 color: root.downloadsSubTab === "albums" 
                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
@@ -404,6 +467,7 @@ Rectangle {
                                 HoverHandler { id: albsH }
 
                                 Text {
+                                    id: albsText
                                     anchors.centerIn: parent
                                     text: I18n.tr("Tuyển tập (", "Albums (") + (root.localAlbums ? root.localAlbums.length : 0) + ")"
                                     font.family: Theme.fontFamily
@@ -435,7 +499,7 @@ Rectangle {
                 // Unified Toolbar: Play All, Shuffle Play, Sort Options
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: root.isDownloadsView || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
+                    visible: (root.isDownloadsView && root.downloadsSubTab === "tracks" && root.albumMetadata === null) || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
                     spacing: 12
 
                     // Primary Play All Button (Emerald Green Solid)
@@ -988,6 +1052,210 @@ Rectangle {
                     color: Theme.textSecondary
                 }
 
+                // Custom Playlists Grid (when in Downloads view and Playlists sub-tab is selected)
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 16
+                    visible: root.isDownloadsView && root.downloadsSubTab === "playlists" && root.albumMetadata === null
+
+                    // 1. Create New Playlist Card
+                    Rectangle {
+                        width: 176
+                        height: 250
+                        radius: Theme.radiusCard
+                        color: createCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                        border.color: createCardMouse.containsMouse ? root.accentColor : Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                        border.width: 1
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            spacing: 12
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: width
+                                radius: 10
+                                color: createCardMouse.containsMouse 
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                       : Qt.rgba(255, 255, 255, 0.04)
+                                border.color: Qt.rgba(255, 255, 255, 0.1)
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+
+                                    Rectangle {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        width: 44
+                                        height: 44
+                                        radius: 22
+                                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                                        border.color: root.accentColor
+                                        border.width: 1
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/list-add-symbolic.svg"
+                                            iconSize: 20
+                                            color: root.accentColor
+                                        }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 3
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.tr("Tạo danh sách mới", "Create Playlist")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: Font.Bold
+                                    color: createCardMouse.containsMouse ? root.accentColor : "#ffffff"
+                                    elide: Text.ElideRight
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.tr("Thêm bài hát tùy thích", "Add favorite tracks")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textSecondary
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        MouseArea {
+                            id: createCardMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.createPlaylistRequested([])
+                        }
+                    }
+
+                    // 2. Playlists Cards
+                    Repeater {
+                        model: root.customPlaylists
+
+                        Rectangle {
+                            id: plCard
+                            readonly property var plData: modelData
+                            width: 176
+                            height: 250
+                            radius: Theme.radiusCard
+                            color: plCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                            border.color: plCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: width
+
+                                    PlaylistCollageThumbnail {
+                                        anchors.fill: parent
+                                        radius: 10
+                                        customCover: plData.customCover || ""
+                                        tracks: plData.tracks || []
+                                        playlistTitle: plData.title || plData.name || ""
+                                        accentColor: root.accentColor
+                                    }
+
+                                    // Floating Quick Play Button on Hover
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        anchors.margins: 8
+                                        width: 36
+                                        height: 36
+                                        radius: 18
+                                        color: plPlayMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
+                                        opacity: (plCardMouse.containsMouse || plPlayMouse.containsMouse) && (plData.tracks && plData.tracks.length > 0) ? 1.0 : 0.0
+                                        scale: plPlayMouse.containsMouse ? 1.08 : 1.0
+
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        Behavior on scale { NumberAnimation { duration: 150 } }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/media-playback-start-symbolic.svg"
+                                            iconSize: 14
+                                            color: "#000000"
+                                        }
+
+                                        MouseArea {
+                                            id: plPlayMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.playPlaylistRequested(plData, false);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: plData.title || plData.name || I18n.tr("Danh sách phát", "Playlist")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.weight: Font.Bold
+                                        color: plCardMouse.containsMouse ? root.accentColor : "#ffffff"
+                                        elide: Text.ElideRight
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: (plData.trackCount || (plData.tracks ? plData.tracks.length : 0)) + " " + I18n.tr("bài hát", "tracks")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Theme.textSecondary
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                Item { Layout.fillHeight: true }
+                            }
+
+                            MouseArea {
+                                id: plCardMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.playlistSelected(plData)
+                            }
+                        }
+                    }
+                }
+
                 // Local Albums Grid (when in Downloads view and Albums sub-tab is selected)
                 Flow {
                     Layout.fillWidth: true
@@ -1183,11 +1451,53 @@ Rectangle {
                             Behavior on color { ColorAnimation { duration: 100 } }
                             Behavior on border.color { ColorAnimation { duration: 100 } }
 
+                            MouseArea {
+                                id: dlRowMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                preventStealing: true
+                                cursorShape: Qt.PointingHandCursor
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                pressAndHoldInterval: 450
+
+                                property bool wasLongPress: false
+
+                                onPressed: mouse => {
+                                    wasLongPress = false;
+                                }
+
+                                onPressAndHold: mouse => {
+                                    if (mouse.button === Qt.LeftButton && !root.isSelectionMode) {
+                                        wasLongPress = true;
+                                        root.isSelectionMode = true;
+                                        root.toggleTrackSelection(modelData);
+                                    }
+                                }
+
+                                onClicked: mouse => {
+                                    if (wasLongPress) {
+                                        wasLongPress = false;
+                                        return;
+                                    }
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pt = dlRow.mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                    } else {
+                                        if (root.isSelectionMode) {
+                                            root.toggleTrackSelection(modelData);
+                                        } else {
+                                            root.trackPlayRequested(modelData);
+                                        }
+                                    }
+                                }
+                            }
+
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 12
                                 anchors.rightMargin: 16
                                 spacing: 14
+                                z: 1
 
                                 // Index Number / Play Icon OR Selection Checkbox
                                 Item {
@@ -1354,9 +1664,11 @@ Rectangle {
                                     }
                                 }
 
-                                // Duration
+                                // Duration (Fixed width + AlignRight for strict column alignment)
                                 Text {
+                                    Layout.preferredWidth: 46
                                     Layout.alignment: Qt.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
                                     text: modelData.duration || "--:--"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
@@ -1389,47 +1701,6 @@ Rectangle {
                                     }
                                 }
                             }
-
-                            MouseArea {
-                                id: dlRowMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                preventStealing: true
-                                cursorShape: Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                pressAndHoldInterval: 450
-
-                                property bool wasLongPress: false
-
-                                onPressed: mouse => {
-                                    wasLongPress = false;
-                                }
-
-                                onPressAndHold: mouse => {
-                                    if (mouse.button === Qt.LeftButton && !root.isSelectionMode) {
-                                        wasLongPress = true;
-                                        root.isSelectionMode = true;
-                                        root.toggleTrackSelection(modelData);
-                                    }
-                                }
-
-                                onClicked: mouse => {
-                                    if (wasLongPress) {
-                                        wasLongPress = false;
-                                        return;
-                                    }
-                                    if (mouse.button === Qt.RightButton) {
-                                        var pt = dlRow.mapToItem(null, mouse.x, mouse.y);
-                                        root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                    } else {
-                                        if (root.isSelectionMode) {
-                                            root.toggleTrackSelection(modelData);
-                                        } else {
-                                            root.trackPlayRequested(modelData);
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -1438,7 +1709,7 @@ Rectangle {
                 Flow {
                     Layout.fillWidth: true
                     spacing: 16
-                    visible: !root.isLoading && (!root.isDownloadsView || root.albumMetadata !== null) && !(root.isDownloadsView && root.downloadsSubTab === "albums")
+                    visible: !root.isLoading && (!root.isDownloadsView || root.albumMetadata !== null) && !(root.isDownloadsView && (root.downloadsSubTab === "albums" || root.downloadsSubTab === "playlists"))
 
                     Repeater {
                         model: root.sortedTracks

@@ -128,7 +128,8 @@ function syncNowPlaying(win, force) {
     var cur = win.currentTrack;
     var npData = null;
     if (cur) {
-        var vid = cur.videoId || cur.id || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+        var rawVid = cur.videoId || cur.id || (cur.path && typeof cur.path === "string" && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+        var vid = rawVid ? String(rawVid) : "";
         if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
         var cov = win.getTrackCoverUrl(cur);
         var reportPos = (win.pendingListenAlongSeekPosition > 0) ? win.pendingListenAlongSeekPosition : (win.currentTime || 0);

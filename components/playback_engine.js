@@ -137,6 +137,13 @@ function downloadEntireAlbum(win, tracks) {
             downloadManager.enqueueDownload(t);
         }
     }
+    // Automatically create/sync as personal playlist in "Danh sách phát" tab
+    var albumTitle = (win.albumMetadata && win.albumMetadata.title) ? win.albumMetadata.title : (tracks[0] ? (tracks[0].album || tracks[0].title) : "");
+    var albumCover = (win.albumMetadata && (win.albumMetadata.cover || win.albumMetadata.image)) ? (win.albumMetadata.cover || win.albumMetadata.image) : (tracks[0] ? (tracks[0].image || tracks[0].cover || "") : "");
+    var albumDesc = (win.albumMetadata && win.albumMetadata.artist) ? ("Album by " + win.albumMetadata.artist) : (tracks[0] && tracks[0].artist ? ("By " + tracks[0].artist) : "");
+    if (albumTitle && typeof win.createCustomPlaylist === "function") {
+        win.createCustomPlaylist(albumTitle, albumDesc, albumCover, tracks);
+    }
 }
 
 function loadArtistDetails(win, artistNameOrId) {

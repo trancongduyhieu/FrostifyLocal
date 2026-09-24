@@ -97,6 +97,7 @@ def ensure_mpv():
 
     cmd = [
         mpv_bin,
+        "--no-config",
         "--idle=yes",
         "--pause=no",
         "--no-video",
@@ -437,6 +438,11 @@ def get_status_dict():
         is_target_active = (target_vid in path) or (target_vid in filename) or is_stream_playback
     elif target_path:
         is_target_active = (path == target_path) or (filename and target_path.endswith(filename)) or is_stream_playback
+
+    if is_loading and (is_target_active or (time_pos is not None and time_pos > 0.5)):
+        if duration is not None and duration > 0 and pause is True:
+            send_mpv_cmd(["set_property", "pause", False])
+            pause = False
 
     has_audio_flowing = (time_pos is not None and time_pos > 0) or (duration is not None and duration > 0 and pause is False)
     if is_loading and (is_target_active or (time_pos is not None and time_pos > 0.5)) and has_audio_flowing:

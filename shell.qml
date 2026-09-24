@@ -50,6 +50,7 @@ Scope {
     property string playingPlaylistId: ""
     property string playingSourceTitle: ""
     property bool isLoadingAudio: false
+    property var selectedCustomPlaylist: null
 
     property real trackChangeTimestamp: 0
     property real postLoadGraceTimestamp: 0
@@ -1393,7 +1394,17 @@ Scope {
     }
 
     function deleteCustomPlaylist(plId) {
-        return PlaybackEngine.deleteCustomPlaylist(win, plId);
+        if (!plId) return;
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "delete", plId
+        ]);
+        if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
+            win.selectedCustomPlaylist = null;
+            win.currentView = "library";
+            mainGrid.downloadsSubTab = "playlists";
+        }
+        refreshPlaylistsTimer.restart();
+        win.showToast(I18n.tr("Đã xóa danh sách phát", "Playlist deleted"));
     }
 
     function checkAuthStatus() {
@@ -1445,12 +1456,19 @@ Scope {
 
     Shortcut {
         sequences: ["F11", "Shift+F11"]
+        context: Qt.ApplicationShortcut
         onActivated: win.maximized = !win.maximized
     }
 
     Shortcut {
         sequence: "Space"
-        enabled: !((searchView && searchView.isInputActiveFocus) || (win.activeFocusItem && (win.activeFocusItem.hasOwnProperty("cursorPosition") || win.activeFocusItem.hasOwnProperty("selectedText"))))
+        context: Qt.ApplicationShortcut
+        enabled: {
+            if (searchView && searchView.isInputActiveFocus) return false;
+            var af = win.activeFocusItem;
+            if (af && (("cursorPosition" in af) || ("selectedText" in af))) return false;
+            return true;
+        }
         onActivated: win.togglePlay()
     }
 
@@ -1493,6 +1511,15 @@ Scope {
         border.width: 0
         clip: true
         focus: true
+        Keys.onPressed: (event) => {
+            if (event.key === Qt.Key_Space) {
+                if (searchView && searchView.isInputActiveFocus) return;
+                var af = win.activeFocusItem;
+                if (af && (("cursorPosition" in af) || ("selectedText" in af))) return;
+                event.accepted = true;
+                win.togglePlay();
+            }
+        }
         layer.enabled: !(win.maximized || win.fullscreen)
         layer.smooth: true
         layer.effect: MultiEffect {
@@ -1969,6 +1996,7 @@ Scope {
                     win.browsingTracks = win.allTracks;
                     win.mainSectionTitle = "Downloads";
                     mainGrid.sectionTitle = "Downloads";
+                    win.loadCustomPlaylists();
                     win.refreshLocalAlbums();
                 }
                 onSettingsClicked: {
@@ -2085,7 +2113,7 @@ Scope {
                     StackLayout {
                         id: centerStack
                         anchors.fill: parent
-                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : (win.currentView === "search" ? 3 : 1))
+                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : (win.currentView === "search" ? 3 : (win.currentView === "custom_playlist_detail" ? 4 : 1)))
 
                         HomeFeedView {
                             id: homeView
@@ -2139,6 +2167,7 @@ Scope {
                             isLoading: win.isSearchingYT
                             albumMetadata: win.currentAlbumMetadata
                             localAlbums: win.localAlbums
+                            customPlaylists: win.customPlaylists
                             accentColor: win.accentColor
 
                             onAddAlbumToQueueRequested: trks => win.addTracksToQueue(trks)
@@ -2198,7 +2227,11 @@ Scope {
                                 win.isNowPlayingOpen = true;
                             }
                             onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
-                            onCreatePlaylistRequested: trks => win.createCustomPlaylistFromTracks(trks)
+                            onCreatePlaylistRequested: trks => createPlaylistModal.openCreate(trks)
+                            onPlaylistSelected: pl => win.openCustomPlaylistDetail(pl)
+                            onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
+                            onEditPlaylistRequested: pl => createPlaylistModal.openEdit(pl)
+                            onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
                         }
 
                         ArtistDetailView {
@@ -2317,6 +2350,44 @@ Scope {
                             onBackRequested: {
                                 win.currentView = (win.previousView && win.previousView !== "search") ? win.previousView : "home";
                             }
+                        }
+
+                        PlaylistDetailView {
+                            id: playlistDetailView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            playlist: win.selectedCustomPlaylist
+                            currentTrack: win.currentTrack
+                            isPlaying: win.isPlaying
+                            isLoadingAudio: win.isLoadingAudio
+                            accentColor: win.accentColor
+
+                            onBackRequested: {
+                                win.currentView = "library";
+                                mainGrid.downloadsSubTab = "playlists";
+                            }
+                            onPlayAllRequested: trks => win.playCustomPlaylistTracks(trks, false)
+                            onShuffleRequested: trks => win.playCustomPlaylistTracks(trks, true)
+                            onEditRequested: pl => createPlaylistModal.openEdit(pl)
+                            onDeleteRequested: plId => win.deleteCustomPlaylist(plId)
+                            onTrackPlayRequested: (trk, index, trackList) => {
+                                if (win.isContextMenuActive) return;
+                                win.currentTracks = trackList.slice();
+                                win.playingPlaylistId = win.selectedCustomPlaylist ? (win.selectedCustomPlaylist.id || win.selectedCustomPlaylist.playlistId) : "";
+                                win.playingSourceTitle = win.selectedCustomPlaylist ? (win.selectedCustomPlaylist.title || win.selectedCustomPlaylist.name) : "";
+                                if (trk) {
+                                    if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                                        win.playOnlineTrack(trk, false);
+                                    } else {
+                                        win.playTrack(trk);
+                                    }
+                                }
+                                win.isNowPlayingOpen = true;
+                            }
+                            onRemoveTrackRequested: (plId, trk) => win.removeTrackFromCustomPlaylist(plId, trk)
+                            onAddTracksRequested: pl => playlistTrackSearchModal.openModal(pl)
+                            onReorderTrackRequested: (plId, fromIdx, toIdx) => win.reorderTrackInCustomPlaylist(plId, fromIdx, toIdx)
+                            onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                         }
                     }
                 }
@@ -2617,7 +2688,7 @@ Scope {
             onRemoveFromPlaylistRequested: (trk, plId) => win.removeTrackFromCustomPlaylist(plId, trk)
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
             onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
-            onCreatePlaylistWithTrackRequested: trk => win.createCustomPlaylistFromTracks([trk])
+            onCreatePlaylistWithTrackRequested: trk => createPlaylistModal.openCreate([trk])
             onViewArtistRequested: trk => win.loadArtistDetails(trk.artist || trk.author)
         }
 
@@ -2668,6 +2739,26 @@ Scope {
             }
             onPlayTrackRequested: trk => {
                 win.playOnlineTrack(trk, true);
+            }
+        }
+
+        CreatePlaylistModal {
+            id: createPlaylistModal
+            accentColor: win.accentColor
+            onPlaylistCreated: (title, desc, cover, tracks) => win.createCustomPlaylist(title, desc, cover, tracks)
+            onPlaylistUpdated: (plId, title, desc, cover) => win.updateCustomPlaylist(plId, title, desc, cover)
+        }
+
+        PlaylistTrackSearchModal {
+            id: playlistTrackSearchModal
+            accentColor: win.accentColor
+            currentTrack: win.currentTrack
+            availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
+            onTrackAddRequested: trk => {
+                if (win.selectedCustomPlaylist) {
+                    var plId = win.selectedCustomPlaylist.id || win.selectedCustomPlaylist.playlistId;
+                    win.addTrackToCustomPlaylist(plId, trk);
+                }
             }
         }
 
@@ -3564,6 +3655,13 @@ Scope {
                     if (Array.isArray(arr)) {
                         win.customPlaylists = arr;
                         win.playlists = (libLoader.playlists || []).concat(arr);
+                        if (win.selectedCustomPlaylist) {
+                            var plKey = win.selectedCustomPlaylist.id || win.selectedCustomPlaylist.playlistId;
+                            var found = arr.find(p => (p.id === plKey || p.playlistId === plKey));
+                            if (found) {
+                                win.selectedCustomPlaylist = found;
+                            }
+                        }
                     }
                 } catch(e) {
                     console.log("customPlaylistsProc error:", e);
@@ -3585,14 +3683,86 @@ Scope {
         customPlaylistsProc.running = true;
     }
 
-    function createCustomPlaylistFromTracks(tracks) {
-        if (!tracks || tracks.length === 0) return;
-        var plName = "Playlist #" + ((win.customPlaylists ? win.customPlaylists.length : 0) + 1);
+    function openCustomPlaylistDetail(pl) {
+        if (!pl) return;
+        win.selectedCustomPlaylist = pl;
+        win.currentView = "custom_playlist_detail";
+    }
+
+    function createCustomPlaylist(title, desc, cover, tracks) {
+        var cleanTitle = (title && title.trim()) ? title.trim() : ("Playlist #" + ((win.customPlaylists ? win.customPlaylists.length : 0) + 1));
+        var trkJson = (tracks && tracks.length > 0) ? JSON.stringify(tracks) : "[]";
         Quickshell.execDetached([
             "python3", win.appDir + "/backend/playlist_manager.py", "create",
-            plName, JSON.stringify(tracks)
+            cleanTitle, trkJson, desc || "", cover || ""
         ]);
         refreshPlaylistsTimer.restart();
+        win.showToast(I18n.tr("Đã tạo danh sách phát mới", "New playlist created"));
+    }
+
+    function createCustomPlaylistFromTracks(tracks) {
+        if (!tracks || tracks.length === 0) return;
+        win.createCustomPlaylist("", "", "", tracks);
+    }
+
+    function updateCustomPlaylist(plId, newTitle, newDesc, newCover) {
+        if (!plId) return;
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "rename",
+            plId, newTitle, newDesc || ""
+        ]);
+        if (newCover !== undefined) {
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/playlist_manager.py", "set_cover",
+                plId, newCover
+            ]);
+        }
+        refreshPlaylistsTimer.restart();
+        if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
+            var updated = Object.assign({}, win.selectedCustomPlaylist);
+            updated.title = newTitle;
+            updated.name = newTitle;
+            updated.description = newDesc;
+            if (newCover !== undefined) {
+                updated.customCover = newCover;
+                updated.image = newCover || (updated.tracks && updated.tracks[0] ? (updated.tracks[0].image || "") : "");
+            }
+            win.selectedCustomPlaylist = updated;
+        }
+        win.showToast(I18n.tr("Đã cập nhật danh sách phát", "Playlist updated"));
+    }
+
+    function playCustomPlaylist(pl, shuffle) {
+        if (!pl || !pl.tracks || pl.tracks.length === 0) {
+            win.showToast(I18n.tr("Danh sách phát rỗng", "Playlist is empty"));
+            return;
+        }
+        win.playCustomPlaylistTracks(pl.tracks, shuffle);
+        win.playingPlaylistId = pl.id || pl.playlistId || "";
+        win.playingSourceTitle = pl.title || pl.name || "";
+    }
+
+    function playCustomPlaylistTracks(tracks, shuffle) {
+        if (!tracks || tracks.length === 0) return;
+        var list = tracks.slice();
+        if (shuffle) {
+            for (var i = list.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var temp = list[i];
+                list[i] = list[j];
+                list[j] = temp;
+            }
+        }
+        win.currentTracks = list;
+        var first = list[0];
+        if (first) {
+            if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
+                win.playOnlineTrack(first, false);
+            } else {
+                win.playTrack(first);
+            }
+        }
+        win.isNowPlayingOpen = true;
     }
 
     function addTrackToCustomPlaylist(plId, track) {
@@ -3601,18 +3771,65 @@ Scope {
             "python3", win.appDir + "/backend/playlist_manager.py", "add",
             plId, JSON.stringify([track])
         ]);
+        if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
+            var updated = Object.assign({}, win.selectedCustomPlaylist);
+            var trks = (updated.tracks || []).slice();
+            trks.push(track);
+            updated.tracks = trks;
+            updated.trackCount = trks.length;
+            if (!updated.image && (track.image || track.cover)) updated.image = track.image || track.cover;
+            win.selectedCustomPlaylist = updated;
+            win.browsingTracks = trks;
+        }
+        refreshPlaylistsTimer.restart();
+        win.showToast(I18n.tr("Đã thêm vào danh sách phát", "Added to playlist"));
+    }
+
+    function reorderTrackInCustomPlaylist(plId, fromIdx, toIdx) {
+        if (!plId || fromIdx < 0 || toIdx < 0) return;
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/playlist_manager.py", "reorder",
+            plId, String(fromIdx), String(toIdx)
+        ]);
+        if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
+            var updated = Object.assign({}, win.selectedCustomPlaylist);
+            var trks = (updated.tracks || []).slice();
+            if (fromIdx < trks.length && toIdx < trks.length) {
+                var item = trks.splice(fromIdx, 1)[0];
+                trks.splice(toIdx, 0, item);
+                updated.tracks = trks;
+                win.selectedCustomPlaylist = updated;
+                win.browsingTracks = trks;
+            }
+        }
         refreshPlaylistsTimer.restart();
     }
 
     function removeTrackFromCustomPlaylist(plId, track) {
         if (!plId || !track) return;
-        var p = track.path || "";
+        var targetIdent = track.path || track.videoId || "";
         Quickshell.execDetached([
             "python3", win.appDir + "/backend/playlist_manager.py", "remove",
-            plId, p
+            plId, targetIdent
         ]);
         refreshPlaylistsTimer.restart();
-        win.browsingTracks = win.browsingTracks.filter(t => t.path !== p);
+        if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
+            var updated = Object.assign({}, win.selectedCustomPlaylist);
+            var trks = (updated.tracks || []).filter(t => {
+                if (targetIdent && t.path === targetIdent) return false;
+                if (targetIdent && t.videoId === targetIdent) return false;
+                return true;
+            });
+            updated.tracks = trks;
+            updated.trackCount = trks.length;
+            win.selectedCustomPlaylist = updated;
+        }
+        win.browsingTracks = win.browsingTracks.filter(t => {
+            if (targetIdent && t.path === targetIdent) return false;
+            if (targetIdent && t.videoId === targetIdent) return false;
+            return true;
+        });
+        win.showToast(I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist"));
     }
 
     Process {
@@ -3688,7 +3905,11 @@ Scope {
                         if (s.is_playing) {
                             win.isPlaying = true;
                         } else if (s.is_paused) {
-                            win.isPlaying = false;
+                            if (Date.now() - win.postLoadGraceTimestamp < 2500) {
+                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                            } else {
+                                win.isPlaying = false;
+                            }
                         }
                         // During brief file transitions when neither is_playing nor is_paused is true,
                         // preserve win.isPlaying to avoid local bounce and false pause loops!

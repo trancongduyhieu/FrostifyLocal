@@ -8,6 +8,7 @@ CategorizedSearchView 1.0 CategorizedSearchView.qml
 CircularSpinner 1.0 CircularSpinner.qml
 CoListenersPopover 1.0 CoListenersPopover.qml
 ContentView 1.0 ContentView.qml
+CreatePlaylistModal 1.0 CreatePlaylistModal.qml
 DesktopLyricsWidget 1.0 DesktopLyricsWidget.qml
 DesktopMusicWidget 1.0 DesktopMusicWidget.qml
 DownloadManager 1.0 DownloadManager.qml
@@ -30,6 +31,9 @@ MinimalistLyricsView 1.0 MinimalistLyricsView.qml
 NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml
+PlaylistCollageThumbnail 1.0 PlaylistCollageThumbnail.qml
+PlaylistDetailView 1.0 PlaylistDetailView.qml
+PlaylistTrackSearchModal 1.0 PlaylistTrackSearchModal.qml
 PlayerBar 1.0 PlayerBar.qml
 PlayerBarBottom 1.0 PlayerBarBottom.qml
 PostNoteModal 1.0 PostNoteModal.qml
