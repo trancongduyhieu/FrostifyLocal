@@ -36,7 +36,7 @@ Item {
         for (var i = 0; i < ws.length; i++) {
             var w = ws[i];
             var dur = (w.duration || (w.end - w.start)) || 0;
-            if ((w.isHeld || dur >= 0.85) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
+            if ((w.isHeld || dur >= 0.5) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
                 return true;
             }
         }
@@ -68,7 +68,7 @@ Item {
                     readonly property real wStart: modelData.start
                     readonly property real wEnd: modelData.end
                     readonly property real wDur: Math.max(0.08, modelData.duration || (wEnd - wStart))
-                    readonly property bool isHeld: modelData.isHeld || (wDur >= 0.85)
+                    readonly property bool isHeld: modelData.isHeld || (wDur >= 0.5)
                     readonly property bool isPast: root.effectiveTime >= wEnd
                     readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
                     readonly property real rawProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
