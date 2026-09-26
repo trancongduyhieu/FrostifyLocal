@@ -1875,11 +1875,13 @@ Item {
                         // — if index flips 3 times in 1s, it gracefully converges instead of triple-animating.
                         Behavior on contentY {
                             enabled: !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking
-                            SmoothedAnimation {
-                                duration: 380
-                                easing.type: Easing.OutCubic
-                                // velocity cap: prevents runaway scroll on seek jumps across many lines
-                                velocity: lyricsView.height * 6
+                            NumberAnimation {
+                                // cubic-bezier(0.4, 0, 0.2, 1) — AMLL scrollIntoView easing (Material standard).
+                                // Feels: slow start → accelerates → very soft landing.
+                                // QML BezierSpline format: [cp1x, cp1y, cp2x, cp2y, endX, endY]
+                                duration: 520
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0, 1.0, 1.0]
                             }
                         }
 
