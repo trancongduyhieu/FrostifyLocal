@@ -190,7 +190,7 @@ Item {
                 id: flowLoader
                 anchors.fill: parent
                 active: lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
-                visible: lyricRow.isCurrent || lyricRow.isHeldNoteActive
+                visible: active && (lyricRow.isCurrent || lyricRow.isHeldNoteActive)
 
                 sourceComponent: Component {
                     AppleMusicWordFlow {
@@ -207,8 +207,8 @@ Item {
             }
 
             // ── 2. Static Typography ─────────────────────────────────────────
-            // Exclusively visible when flowLoader is NOT visible (upcoming, previous, or plain LRC).
-            // CANNOT collide or overlap with AppleMusicWordFlow!
+            // Exclusively visible when flowLoader is NOT active (upcoming, previous, or plain LRC).
+            // When isCurrent: illuminates in crisp solid white (#ffffff) with subtle ambient shadow!
             Text {
                 id: staticTxt
                 anchors.verticalCenter: parent.verticalCenter
