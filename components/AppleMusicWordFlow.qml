@@ -1,15 +1,13 @@
 import QtQuick
 import "."
 
-// Apple Music Word-by-Word Flow Engine — AMLL-accurate physics
-// Spec source: amll-dev/applemusic-like-lyrics
-//   • scale:      1.0 + 0.01 × sin(π × progress) → peak 1.010x  (AMLL: ≤1.015x)
-//   • liftY:     -1.2 × sin(π × progress) px       (AMLL: -0.05em ≈ -1.4px on 28px)
-//   • Held notes: bloom opacity held at FULL while currentTime in [word.start, word.end]
-//                 → "Oh" glows at peak the entire duration, even while next line plays
-//   • SmoothedAnimation: duration 160ms, reversingMode Immediate → C¹ velocity continuity
-//   • Footgun: NEVER set x/y directly on Flow children — use transform: Translate { y: }
-//   • Footgun: NEVER use MultiEffect inside Repeater — GPU offscreen pass per word = killer
+// Apple Music Word-by-Word Flow Engine — AMLL-accurate physics & Soft Phosphor Bloom
+// Spec source: amll-dev/applemusic-like-lyrics & Apple Music reference captures
+//   • scale:        1.0 + 0.01 × sin(π × progress) → peak 1.010x (held: 1.020x with soft release)
+//   • liftY:       -1.2 × sin(π × progress) px (held: -0.8px with soft release)
+//   • Held notes:   Soft Phosphor Bloom (Gaussian Blur + Drop Shadow aura, ZERO Text.Outline)
+//   • Release Wipe: When sustained note nears end, bloom sweeps off LEFT-TO-RIGHT via Scissor Clipper
+//   • Overlap:      hasActiveHeldWord keeps prev line visible while sustained note continues to glow
 
 Item {
     id: root
@@ -27,16 +25,14 @@ Item {
     readonly property real effectiveTime: root.currentTime + 0.08
     readonly property var effectiveWords: root.words || []
 
-    // Expose for parent delegate: if any held word is still in its duration window,
-    // the parent should keep this loader visible even when the line is no longer "current".
-    // This enables the held-note-overlap behavior: Oh (34→38s) stays glowing while
-    // I'm blinded... (36→40s) starts playing on the NEXT line simultaneously.
+    // Expose for parent delegate: if any held word is still in its duration window
+    // (including the left-to-right wipe decay phase), keep loader visible.
     readonly property bool hasActiveHeldWord: {
         var ws = root.effectiveWords;
         for (var i = 0; i < ws.length; i++) {
             var w = ws[i];
             var dur = (w.duration || (w.end - w.start)) || 0;
-            if ((w.isHeld || dur >= 0.85) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
+            if ((w.isHeld || dur >= 0.85) && root.effectiveTime >= w.start && root.effectiveTime < (w.end + 0.08)) {
                 return true;
             }
         }
@@ -71,16 +67,28 @@ Item {
                     readonly property bool isHeld: modelData.isHeld || (wDur >= 0.85)
                     readonly property bool isPast: root.effectiveTime >= wEnd
                     readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
-                    readonly property real rawProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
 
-                    // Held-note progress: linear 0→1 over the word's full duration.
-                    // Used for the "breathing sustain glow" that grows and holds bright,
-                    // rather than the sin-bell that fades mid-word.
+                    // Held-note linear progress 0→1 over duration
                     readonly property real heldProgress: isSinging
                         ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur))
                         : (isPast ? 1.0 : 0.0)
 
-                    // Smoothed progress for C¹ continuity — eliminates snap/jump on boundary transitions
+                    // ── Left-to-Right Wipe Decay Calculation ──────────────────────────
+                    // Takes place in the final ~28% (0.28s - 0.50s) of the sustained note.
+                    // wipeProgress: 0.0 (full glow across whole word) → 1.0 (glow completely swept off to the right).
+                    readonly property real wipeDuration: Math.min(0.50, Math.max(0.28, wDur * 0.28))
+                    readonly property real wipeStartTime: wEnd - wipeDuration
+                    readonly property real wipeProgress: {
+                        if (!isHeld) return 0.0;
+                        if (root.effectiveTime < wipeStartTime) return 0.0;
+                        if (root.effectiveTime >= wEnd) return 1.0;
+                        return Math.max(0.0, Math.min(1.0, (root.effectiveTime - wipeStartTime) / wipeDuration));
+                    }
+
+                    // Glow remains active while singing and wipe has not yet completed
+                    readonly property bool isGlowActive: isHeld && (isSinging || (root.effectiveTime >= wEnd && root.effectiveTime < (wEnd + 0.08))) && (wipeProgress < 1.0)
+
+                    // Smoothed progress for C¹ continuity on normal words
                     property real wordProgress: 0.0
                     Behavior on wordProgress {
                         SmoothedAnimation {
@@ -88,72 +96,198 @@ Item {
                             reversingMode: SmoothedAnimation.Immediate
                         }
                     }
-                    // Bind rawProgress → wordProgress via SmoothedAnimation
+                    readonly property real rawProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
                     onRawProgressChanged: wordProgress = rawProgress
 
                     // Anticipation within 0.12s before singing
                     readonly property bool isApproaching: !isSinging && !isPast && (root.effectiveTime >= wStart - 0.12)
 
                     // ── Apple Music Wave Lift ─────────────────────────────────────────
-                    // -1.2px at sin-peak (mid-word), returns smoothly to 0px at end.
-                    // Translate keeps the Flow positioner layout untouched (Footgun #1 safe).
-                    // AMLL ref: float/index.ts → y = -0.05em on 28px = ~-1.4px
-                    // Held notes: clamp lift to a gentle -0.8px to avoid layout thrash at long sustain
+                    // Held notes lift -0.8px smoothly, then gracefully settle back to 0px as wipe completes
                     transform: Translate {
                         y: wordVisual.isHeld
-                            ? -0.8 * Math.min(wordVisual.heldProgress * 2.0, 1.0) // fast ramp to peak, holds flat
+                            ? -0.8 * Math.min(wordVisual.heldProgress * 2.0, 1.0) * (1.0 - wordVisual.wipeProgress)
                             : -1.2 * Math.sin(Math.PI * wordVisual.wordProgress)
                     }
 
                     // ── Micro Scale Breath ────────────────────────────────────────────
-                    // Peak: 1.010x (held notes: 1.013x) — luminance contrast carries perception,
-                    // not geometric expansion. Keeps adjacent glyphs from being crowded.
-                    // Held notes: ramp to peak quickly then hold, not a bell curve.
-                    // AMLL ref: emphasize/index.ts → 1 + 0.1 × amount, amount ≤ 0.1 → ≤1.01×
+                    // Held notes expand +2.0%, then softly converge back to 1.0x as wipe completes
                     scale: wordVisual.isHeld
-                        ? (1.0 + 0.020 * Math.min(wordVisual.heldProgress * 2.5, 1.0))
+                        ? (1.0 + 0.020 * Math.min(wordVisual.heldProgress * 2.5, 1.0) * (1.0 - wordVisual.wipeProgress))
                         : (1.0 + 0.010 * Math.sin(Math.PI * wordVisual.wordProgress))
 
-                    // ── 1. Phosphor Bloom Glow Layer ──────────────────────────────────
-                    // For NORMAL words: sin-bell → blooms at mid-word, fades at endpoints.
-                    // For HELD notes:   ramp-and-hold → grows quickly to ~0.50 then stays
-                    //   bright the ENTIRE duration (Oh 34s→38s stays glowing), fades only
-                    //   AFTER word.end is crossed. This matches AMLL's held-note luminance
-                    //   behavior where sustained notes maintain full mask-alpha throughout.
-                    // Native Text.Outline (zero extra GPU pass vs MultiEffect in Repeater).
-                    Text {
-                        id: bloomGlowTxt
-                        anchors.centerIn: parent
-                        text: modelData.text || ""
-                        font.family: root.fontFamily
-                        font.pixelSize: root.fontSize
-                        font.weight: root.fontWeight
-                        color: "#ffffff"
-                        style: Text.Outline
-                        // Held: halo alpha 0.65 (thick visible glow), normal: 0.38 (subtle)
-                        styleColor: wordVisual.isHeld
-                            ? Qt.rgba(1.0, 1.0, 1.0, 0.65)
-                            : Qt.rgba(1.0, 1.0, 1.0, 0.38)
-                        opacity: {
-                            if (wordVisual.isHeld) {
-                                if (!wordVisual.isSinging) return 0.0;
-                                // Ramp up fast (0→0.82 in first 25% of duration), then hold flat
-                                var ramp = Math.min(wordVisual.heldProgress * 4.0, 1.0);
-                                return 0.82 * ramp;
-                            } else {
-                                // Normal: sin-bell fades in and out symmetrically
-                                return wordVisual.isSinging
-                                    ? (0.50 * Math.sin(Math.PI * wordVisual.wordProgress))
-                                    : 0.0;
+                    // ── 1. Soft Phosphor Bloom Glow Layer (Behind Main Text) ─────────
+                    // Pure vector-glyph bloom: zero MultiEffect FBO bounding box artifacts.
+                    // Stays tightly bounded within 4-6px of the glyph outline (Apple Music spec),
+                    // never spilling over adjacent words or creating rectangular halos.
+                    // Left-to-Right Wipe Decay: When sustained note nears end, bloom sweeps off
+                    // smoothly from left to right via Scissor Clipper.
+                    Item {
+                        id: heldBloomContainer
+                        anchors.fill: parent
+                        visible: wordVisual.isGlowActive
+
+                        // Wipe progress: 0.0 (full glow) → 1.0 (swept completely off to the right)
+                        readonly property real currentWipe: wordVisual.wipeProgress
+
+                        // Base glow intensity: fast ramp-up in first 20% of duration, then holds bright
+                        readonly property real baseIntensity: {
+                            var ramp = Math.min(wordVisual.heldProgress * 5.0, 1.0);
+                            return 0.95 * ramp * (1.0 - currentWipe * 0.4);
+                        }
+
+                        // Scissor Clipper sweeping left-to-right
+                        Item {
+                            id: wipeClipper
+                            x: heldBloomContainer.currentWipe * wordContainer.width
+                            y: -8
+                            width: Math.max(0, wordContainer.width - x + 8)
+                            height: wordContainer.height + 16
+                            clip: true
+
+                            // Inside clipper: counter-offset so glow glyphs align 100% with base text
+                            Item {
+                                x: -wipeClipper.x
+                                y: -wipeClipper.y
+                                width: wordContainer.width
+                                height: wordContainer.height
+
+                                // Layer 3 (Outer soft halo ~5px)
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: -4
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.08 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: 4
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.08 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: -4
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.08 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: 4
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.08 * heldBloomContainer.baseIntensity
+                                }
+
+                                // Layer 2 (Mid aura ~3px)
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: -2.5
+                                    anchors.verticalCenterOffset: -2.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.16 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: 2.5
+                                    anchors.verticalCenterOffset: -2.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.16 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: -2.5
+                                    anchors.verticalCenterOffset: 2.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.16 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: 2.5
+                                    anchors.verticalCenterOffset: 2.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.16 * heldBloomContainer.baseIntensity
+                                }
+
+                                // Layer 1 (Tight core bloom ~1.5px)
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: -1.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.28 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: 1.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.28 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: -1.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.28 * heldBloomContainer.baseIntensity
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: 1.5
+                                    text: modelData.text || ""
+                                    font.family: root.fontFamily
+                                    font.pixelSize: root.fontSize
+                                    font.weight: root.fontWeight
+                                    color: "#ffffff"
+                                    opacity: 0.28 * heldBloomContainer.baseIntensity
+                                }
                             }
                         }
-                        Behavior on opacity { NumberAnimation { duration: wordVisual.isHeld ? 280 : 80 } }
-                        visible: opacity > 0.005
                     }
 
-                    // ── 2. Main Crisp Typography ──────────────────────────────────────
-                    // Luminance jump dim→bright is the PRIMARY perceptual "karaoke" cue.
-                    // AMLL: dark-mask-alpha 0.2→0.4 (dim), bright-mask-alpha 1.0 (active).
+                    // ── 2. Main Crisp Typography (In Front of Bloom) ──────────────────
+                    // Renders ON TOP of the bloom aura for razor-sharp legibility.
+                    // Luminance jump dim (#757a88) → bright (#ffffff) carries word-by-word timing.
                     Text {
                         id: baseWordTxt
                         anchors.centerIn: parent
@@ -173,3 +307,4 @@ Item {
         }
     }
 }
+
