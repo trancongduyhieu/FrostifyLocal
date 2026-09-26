@@ -36,7 +36,7 @@ Item {
         for (var i = 0; i < ws.length; i++) {
             var w = ws[i];
             var dur = (w.duration || (w.end - w.start)) || 0;
-            if ((w.isHeld || dur >= 0.5) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
+            if ((w.isHeld || dur >= 0.85) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
                 return true;
             }
         }
@@ -68,7 +68,7 @@ Item {
                     readonly property real wStart: modelData.start
                     readonly property real wEnd: modelData.end
                     readonly property real wDur: Math.max(0.08, modelData.duration || (wEnd - wStart))
-                    readonly property bool isHeld: modelData.isHeld || (wDur >= 0.5)
+                    readonly property bool isHeld: modelData.isHeld || (wDur >= 0.85)
                     readonly property bool isPast: root.effectiveTime >= wEnd
                     readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
                     readonly property real rawProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
@@ -111,7 +111,7 @@ Item {
                     // Held notes: ramp to peak quickly then hold, not a bell curve.
                     // AMLL ref: emphasize/index.ts → 1 + 0.1 × amount, amount ≤ 0.1 → ≤1.01×
                     scale: wordVisual.isHeld
-                        ? (1.0 + 0.013 * Math.min(wordVisual.heldProgress * 2.5, 1.0))
+                        ? (1.0 + 0.020 * Math.min(wordVisual.heldProgress * 2.5, 1.0))
                         : (1.0 + 0.010 * Math.sin(Math.PI * wordVisual.wordProgress))
 
                     // ── 1. Phosphor Bloom Glow Layer ──────────────────────────────────
@@ -130,17 +130,16 @@ Item {
                         font.weight: root.fontWeight
                         color: "#ffffff"
                         style: Text.Outline
-                        // Held: peak at 0.55 (slightly brighter than normal 0.50 to feel "sustained")
-                        // Normal: sin-bell exactly as before
+                        // Held: halo alpha 0.65 (thick visible glow), normal: 0.38 (subtle)
                         styleColor: wordVisual.isHeld
-                            ? Qt.rgba(1.0, 1.0, 1.0, 0.42)
+                            ? Qt.rgba(1.0, 1.0, 1.0, 0.65)
                             : Qt.rgba(1.0, 1.0, 1.0, 0.38)
                         opacity: {
                             if (wordVisual.isHeld) {
                                 if (!wordVisual.isSinging) return 0.0;
-                                // Ramp up fast (0→0.55 in first 30% of duration), then hold flat at 0.55
-                                var ramp = Math.min(wordVisual.heldProgress * 3.0, 1.0);
-                                return 0.55 * ramp;
+                                // Ramp up fast (0→0.82 in first 25% of duration), then hold flat
+                                var ramp = Math.min(wordVisual.heldProgress * 4.0, 1.0);
+                                return 0.82 * ramp;
                             } else {
                                 // Normal: sin-bell fades in and out symmetrically
                                 return wordVisual.isSinging
@@ -148,7 +147,7 @@ Item {
                                     : 0.0;
                             }
                         }
-                        Behavior on opacity { NumberAnimation { duration: wordVisual.isHeld ? 220 : 80 } }
+                        Behavior on opacity { NumberAnimation { duration: wordVisual.isHeld ? 280 : 80 } }
                         visible: opacity > 0.005
                     }
 
