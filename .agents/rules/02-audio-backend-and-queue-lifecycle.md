@@ -16,11 +16,12 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 ---
 
 ## 2. YouTube Music Streaming & Bóc Tách Phân Đoạn (Continuation Shelves)
-- **Tệp**: `backend/ytmusic_helper.py`.
-- **Thư viện**: `ytmusicapi` (Python).
-- **Cơ chế bóc tách phân đoạn sâu**:
-  - Hàm `_normalize_shelf_item` xử lý đồng thời initial shelves và continuation shelves (`sectionListContinuation`).
-  - Cung cấp hơn 10 phân đoạn sâu (*Listen again*, *Mixed for you*, *Quick picks*, *Long listens*, *Classical for Sleeping*...) cho mọi mood tag (All, Sleep, Romance, Energize, Sad, Focus, Party...).
+- **Kiến trúc bóc tách 4 module sâu**:
+  - `stream_resolver.py`: Trích xuất stream audio (`player_client: ["android"]`), chặn HTTP 403 CDN, autoplay tức thì < 1.0s.
+  - `catalog_engine.py`: Bóc tách initial shelves & continuation shelves (`sectionListContinuation`) cho > 10 mood tags.
+  - `song_enrichment.py`: Bổ sung metadata, lyrics, related tracks và đồng bộ danh mục.
+  - `ytmusic_auth.py`: Quản lý OAuth token Google, refresh cookie và session.
+- **Facade**: `backend/ytmusic_helper.py` (~257 dòng) đóng vai trò single entry-point mỏng gọi 4 module trên.
 
 ---
 
@@ -60,18 +61,19 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 ---
 
 ## 7. Kiến Trúc Modular Social & Music Engine (3 SSOT Chuẩn Hóa)
-- **Backend Modular**: `backend/auth_server.py` (~224 dòng) đóng vai trò HTTP Router thuần túy điều phối sang `backend/music_routes.py` (YTMusic/auth), `backend/social_routes.py` (Notes 24h, Friends, Events, Profile) và `backend/cloud_relay_client.py` (`CloudRelayEngine`, `CloudRelayClient`, vaults).
-- **Frontend JS Engine**: Logic mạng xã hội/Listen Along tách vào `components/social_engine.js` và logic phát nhạc/album/shuffle tách vào `components/playback_engine.js`; `shell.qml` giữ các hàm wrapper 1 dòng trên `win` để bảo toàn 100% visual tree (`MultiEffect`) và QML bindings.
+- **Backend Modular**: `backend/auth_server.py` điều phối sang `backend/music_routes.py` và `backend/social_routes.py`. Toàn bộ logic mạng xã hội tập trung tại Deep Module `backend/social_relay_core.py` (caching, danh tính SSOT #2, phân phối event).
+- **Loại bỏ CLI Subprocess**: 6 khối `Process` zombie cũ trong `shell.qml` đã bị gỡ bỏ; giao tiếp mạng xã hội chạy 100% qua non-blocking async `XMLHttpRequest` tới Port 17890.
+- **Frontend Engines**: `components/social_engine.js` (Listen Along, bạn bè, Danmaku) và `components/playback_engine.js` (toàn bộ vòng đời phát nhạc, mutate queue, reconcile MPV status).
 - **3 Single Sources of Truth (SSOT)**:
-  1. **SSOT #1 (Config Path)**: `platform_compat.get_config_dir()` trả về `~/.config/noctalia` đồng nhất trên cả Linux & Windows (tự động migrate file cũ từ `%APPDATA%/Nutsty`).
-  2. **SSOT #2 (Canonical Identity)**: `cloud_relay_client.get_canonical_user()` lấy định danh chuẩn từ `nutsty_cloud_identity.json` (`user_id`, `username#pin`, `secret_key`).
-  3. **SSOT #3 (Peer Normalization)**: `SocialEngine.normalizePeer(raw)` chuẩn hóa mọi đối tượng bạn bè/co-listener về `{ user_id, tag, email, name, avatar, is_online }`.
+  1. **SSOT #1 (Config Path)**: `platform_compat.get_config_dir()` trả về `~/.config/noctalia` đồng nhất trên Linux & Windows.
+  2. **SSOT #2 (Canonical Identity)**: `social_relay_core.get_caller_identity()` lấy định danh chuẩn từ `nutsty_cloud_identity.json`.
+  3. **SSOT #3 (Peer Normalization)**: `SocialEngine.normalizePeer(raw)` chuẩn hóa mọi peer về `{ user_id, tag, email, name, avatar, is_online }`.
 
 ---
 
-## 8. Friends 24h Notes & Real-time Listen Along Engine
-- **Tệp**: `backend/social_routes.py`, `components/social_engine.js`, `components/FriendStoryModal.qml`, `components/CoListenersPopover.qml`, `components/FloatingChatBubble.qml`.
-- **Đồng bộ 2 chiều thời gian thực (Bidirectional RPC)**: Hàng đợi FIFO `/api/notes/events` truyền sự kiện tức thì (`join`, `leave`, `play`, `pause`, `seek`, `track_change`, `track_suggest`, `chat_message`) độ trễ < 50ms.
+## 8. Friends 24h Notes, Listen Along & PlaybackEngine Consolidate
+- **PlaybackEngine (`components/playback_engine.js`)**: Tập trung toàn bộ logic `playOnlineTrack`, `playTrack`, `togglePlay`, `playNext`, `seekAudio`, `handlePlayerStatus` (bù trôi, sleep timer, auto-advance). `shell.qml` chỉ giữ 1-line delegates.
+- **Đồng bộ 2 chiều thời gian thực (Bidirectional RPC)**: Hàng đợi FIFO `/api/notes/events` truyền sự kiện tức thì (`join`, `leave`, `play`, `pause`, `seek`, `chat_message`) độ trễ < 50ms.
 - **Seek Drift Reconciliation**: Tính toán `expectedPos = np.position + elapsed`. Tự động nắn chỉnh nếu độ lệch $\Delta t > 2.0\text{s}$, giữ trôi lệch thực tế $< 0.4\text{s}$.
 - **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì `null`. Cờ `isSyncingFromFriend` chặn loop phản hồi ngược.
 

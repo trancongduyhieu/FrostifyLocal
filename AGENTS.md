@@ -70,22 +70,21 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   └── src/index.js                # Serverless Edge Router & Logic mạng xã hội toàn cầu
 ├── backend/
 │   ├── auth_server.py              # Resident HTTP router daemon (port 17890)
-│   ├── cloud_relay_client.py       # CloudRelayEngine, CloudRelayClient, SSOT identity & vaults
-│   ├── social_routes.py            # HTTP route handlers cho Notes 24h, Friends, Events, Profile
-│   ├── music_routes.py             # HTTP route handlers cho YTMusic home, mood, search, auth
-│   ├── platform_compat.py          # SSOT đường dẫn cấu hình (~/.config/noctalia) & đa nền tảng
-│   ├── browser_login.py            # Hỗ trợ mở trình duyệt đăng nhập Google
+│   ├── social_relay_core.py        # Deep Module mạng xã hội, SSOT identity, unified cache
+│   ├── stream_resolver.py          # Audio stream resolver (Android client, 403 prevention)
+│   ├── catalog_engine.py           # Shelves, mood continuation, artist/album/search
+│   ├── song_enrichment.py          # Metadata enrichment, lyrics, related tracks
+│   ├── ytmusic_auth.py             # Google OAuth & cookie session manager
+│   ├── ytmusic_helper.py           # Facade tổng hợp 4 module streaming & catalog
 │   ├── download_manager.py         # Daemon tải nhạc đa luồng (yt-dlp, FFmpeg, socket IPC)
 │   ├── library.py                  # Bộ quét thư viện nhạc (~/Music) qua Mutagen
 │   ├── lyrics_helper.py            # Trích xuất và phân giải file LRC (syncedlyrics fallback)
 │   ├── palette_extractor.py        # OKLAB Chromatic Salience Clustering
 │   ├── player_daemon.py            # Điều khiển mpv qua /tmp/nutsty_mpv.sock
-│   ├── playlist_manager.py         # Quản lý danh sách phát cá nhân và hệ thống
-│   ├── social_notes.py             # CLI/helper đồng bộ ghi chú 24h & event nghe cùng
-│   └── ytmusic_helper.py           # Engine YouTube Music: personalized shelves, radio, search
+│   └── platform_compat.py          # SSOT đường dẫn cấu hình (~/.config/noctalia) & đa nền tảng
 ├── components/
 │   ├── social_engine.js            # Logic JS mạng xã hội, Listen Along, normalizePeer (SSOT #3)
-│   ├── playback_engine.js          # Logic JS điều phối radio, artist shuffle, album/playlist
+│   ├── playback_engine.js          # Logic JS điều phối playback, queue mutations, MPV status
 │   ├── AmberolDetailView.qml       # Màn hình chi tiết bài hát, đĩa xoay và lyric cuộn
 │   ├── AppleMusicDesktopLyrics.qml # Mẫu 2: Parametric Multi-Line Engine (DoF quang học)
 │   ├── CircularSpinner.qml         # Con quay loading xoay tròn phong cách Nutsty
@@ -128,7 +127,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 | Lĩnh vực phụ trách | Tệp quy tắc chuyên sâu | Nội dung cốt lõi & Bẫy lỗi (Footguns) |
 | :--- | :--- | :--- |
 | **Giao diện, Đồ họa & Kính lỏng** | [01-design-system-and-visual-effects.md](file:///.agents/rules/01-design-system-and-visual-effects.md) | - Thuật toán Kính lỏng Liquid Glass (Vibrancy 1.6x, chống đục trắng SimpMusic).<br/>- Định lý bo góc đồng tâm $R_{\text{con}} = R_{\text{mẹ}} - \text{Padding}$ & viền hairline 1px.<br/>- **Footgun #1**: Cơ chế xuyên thấu hình nền khi pause (`win.isPlaying ? 1.0 : 0.0`).<br/>- Bo góc avatar người dùng qua `MultiEffect` không vỡ góc đen. |
-| **Âm thanh, IPC & Hàng đợi** | [02-audio-backend-and-queue-lifecycle.md](file:///.agents/rules/02-audio-backend-and-queue-lifecycle.md) | - Backend Python daemon & Unix Socket `/tmp/nutsty_mpv.sock` (gapless stream).<br/>- Kiến trúc Modular Backend (`auth_server`, `cloud_relay_client`, `social_routes`, `music_routes`) & 3 SSOT.<br/>- Phân lập luồng duyệt (`browsingTracks`) vs Hàng đợi thực tế (`currentTracks`).<br/>- **Cơ chế Snapshot & Reset Queue an toàn** khi chuyển đổi Mood Chips.<br/>- Trình tải nhạc đa luồng `download_manager.py` & Lưu trữ cài đặt an toàn. |
+| **Âm thanh, IPC & Hàng đợi** | [02-audio-backend-and-queue-lifecycle.md](file:///.agents/rules/02-audio-backend-and-queue-lifecycle.md) | - Backend Python daemon & Unix Socket `/tmp/nutsty_mpv.sock` (gapless stream).<br/>- Modular Backend (`SocialRelayCore`, `stream_resolver`, `catalog_engine`) & 3 SSOT.<br/>- `playback_engine.js` hợp nhất audio/queue; loại bỏ CLI subprocess.<br/>- **Cơ chế Snapshot & Reset Queue an toàn** khi chuyển đổi Mood Chips.<br/>- Trình tải nhạc đa luồng `download_manager.py` & Lưu trữ cài đặt an toàn. |
 | **Lời bài hát Desktop Lyrics** | [03-desktop-lyrics-engine.md](file:///.agents/rules/03-desktop-lyrics-engine.md) | - Host Native Wayland Layer-Shell qua Quickshell.<br/>- 4 Presets: Gacha Anime Pop (Instrument Serif), Apple Music Multi-line DoF, Motion Blur, Kinetic Typography.<br/>- **Tuyệt đối cấm viền trắng (White Halo)**, dùng Universal Cinematic Shadows.<br/>- Đồng bộ âm tiết Syllable-level Karaoke & Elastic scaling (SimpMusic Footgun #217). |
 | **Kỹ Năng & Mẫu Code Chuẩn** | [04-code-recipes-and-patterns.md](file:///.agents/rules/04-code-recipes-and-patterns.md) | - Thẻ Pattern chuẩn cho các kỹ năng/giải pháp xuất sắc đã được kiểm chứng.<br/>- Code mẫu chuẩn Dynamic Accent & Liquid Glass Button.<br/>- Bố cục đa ngôn ngữ song ngữ co giãn (`Row` + `I18n.tr`). |
 
