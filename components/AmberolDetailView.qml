@@ -1637,10 +1637,13 @@ Rectangle {
                             // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
                             // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
                             // isSynthetic=true means LRC plain line — routed to Full-Line Solid Highlight below.
+                            //
+                            // HELD NOTE OVERLAP: prev line (dist=-1) stays visible if it has a live held word.
                             Loader {
                                 id: appleMusicFlowLoader
                                 active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                visible: lyricRow.isCurrent
+                                visible: lyricRow.isCurrent ||
+                                         (lyricRow.dist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord)
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 sourceComponent: Component {

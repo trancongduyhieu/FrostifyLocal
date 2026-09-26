@@ -5,9 +5,11 @@ import "."
 // Spec source: amll-dev/applemusic-like-lyrics
 //   • scale:      1.0 + 0.01 × sin(π × progress) → peak 1.010x  (AMLL: ≤1.015x)
 //   • liftY:     -1.2 × sin(π × progress) px       (AMLL: -0.05em ≈ -1.4px on 28px)
-//   • Luminance contrast does the heavy lifting — NOT scale
+//   • Held notes: bloom opacity held at FULL while currentTime in [word.start, word.end]
+//                 → "Oh" glows at peak the entire duration, even while next line plays
 //   • SmoothedAnimation: duration 160ms, reversingMode Immediate → C¹ velocity continuity
 //   • Footgun: NEVER set x/y directly on Flow children — use transform: Translate { y: }
+//   • Footgun: NEVER use MultiEffect inside Repeater — GPU offscreen pass per word = killer
 
 Item {
     id: root
@@ -24,6 +26,22 @@ Item {
     // Compensate for 80ms audio buffer latency so words light up on-beat
     readonly property real effectiveTime: root.currentTime + 0.08
     readonly property var effectiveWords: root.words || []
+
+    // Expose for parent delegate: if any held word is still in its duration window,
+    // the parent should keep this loader visible even when the line is no longer "current".
+    // This enables the held-note-overlap behavior: Oh (34→38s) stays glowing while
+    // I'm blinded... (36→40s) starts playing on the NEXT line simultaneously.
+    readonly property bool hasActiveHeldWord: {
+        var ws = root.effectiveWords;
+        for (var i = 0; i < ws.length; i++) {
+            var w = ws[i];
+            var dur = (w.duration || (w.end - w.start)) || 0;
+            if ((w.isHeld || dur >= 0.85) && root.effectiveTime >= w.start && root.effectiveTime < w.end) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     implicitWidth: parent ? parent.width : 300
     implicitHeight: wordsFlow.implicitHeight + 8
@@ -55,6 +73,13 @@ Item {
                     readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
                     readonly property real rawProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
 
+                    // Held-note progress: linear 0→1 over the word's full duration.
+                    // Used for the "breathing sustain glow" that grows and holds bright,
+                    // rather than the sin-bell that fades mid-word.
+                    readonly property real heldProgress: isSinging
+                        ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur))
+                        : (isPast ? 1.0 : 0.0)
+
                     // Smoothed progress for C¹ continuity — eliminates snap/jump on boundary transitions
                     property real wordProgress: 0.0
                     Behavior on wordProgress {
@@ -64,7 +89,6 @@ Item {
                         }
                     }
                     // Bind rawProgress → wordProgress via SmoothedAnimation
-                    // Use a Timer-free pattern: update through property binding + Behavior
                     onRawProgressChanged: wordProgress = rawProgress
 
                     // Anticipation within 0.12s before singing
@@ -74,19 +98,28 @@ Item {
                     // -1.2px at sin-peak (mid-word), returns smoothly to 0px at end.
                     // Translate keeps the Flow positioner layout untouched (Footgun #1 safe).
                     // AMLL ref: float/index.ts → y = -0.05em on 28px = ~-1.4px
+                    // Held notes: clamp lift to a gentle -0.8px to avoid layout thrash at long sustain
                     transform: Translate {
-                        y: -1.2 * Math.sin(Math.PI * wordVisual.wordProgress)
+                        y: wordVisual.isHeld
+                            ? -0.8 * Math.min(wordVisual.heldProgress * 2.0, 1.0) // fast ramp to peak, holds flat
+                            : -1.2 * Math.sin(Math.PI * wordVisual.wordProgress)
                     }
 
                     // ── Micro Scale Breath ────────────────────────────────────────────
                     // Peak: 1.010x (held notes: 1.013x) — luminance contrast carries perception,
                     // not geometric expansion. Keeps adjacent glyphs from being crowded.
+                    // Held notes: ramp to peak quickly then hold, not a bell curve.
                     // AMLL ref: emphasize/index.ts → 1 + 0.1 × amount, amount ≤ 0.1 → ≤1.01×
-                    scale: 1.0 + (wordVisual.isHeld ? 0.013 : 0.010) * Math.sin(Math.PI * wordVisual.wordProgress)
+                    scale: wordVisual.isHeld
+                        ? (1.0 + 0.013 * Math.min(wordVisual.heldProgress * 2.5, 1.0))
+                        : (1.0 + 0.010 * Math.sin(Math.PI * wordVisual.wordProgress))
 
                     // ── 1. Phosphor Bloom Glow Layer ──────────────────────────────────
-                    // White outline glow on the singing word — mimics AM's CSS text-shadow bloom.
-                    // opacity peaks at 0.50 mid-word and fades to 0 at endpoints → no pop.
+                    // For NORMAL words: sin-bell → blooms at mid-word, fades at endpoints.
+                    // For HELD notes:   ramp-and-hold → grows quickly to ~0.50 then stays
+                    //   bright the ENTIRE duration (Oh 34s→38s stays glowing), fades only
+                    //   AFTER word.end is crossed. This matches AMLL's held-note luminance
+                    //   behavior where sustained notes maintain full mask-alpha throughout.
                     // Native Text.Outline (zero extra GPU pass vs MultiEffect in Repeater).
                     Text {
                         id: bloomGlowTxt
@@ -97,10 +130,25 @@ Item {
                         font.weight: root.fontWeight
                         color: "#ffffff"
                         style: Text.Outline
-                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.38)
-                        opacity: wordVisual.isSinging
-                            ? (0.50 * Math.sin(Math.PI * wordVisual.wordProgress))
-                            : 0.0
+                        // Held: peak at 0.55 (slightly brighter than normal 0.50 to feel "sustained")
+                        // Normal: sin-bell exactly as before
+                        styleColor: wordVisual.isHeld
+                            ? Qt.rgba(1.0, 1.0, 1.0, 0.42)
+                            : Qt.rgba(1.0, 1.0, 1.0, 0.38)
+                        opacity: {
+                            if (wordVisual.isHeld) {
+                                if (!wordVisual.isSinging) return 0.0;
+                                // Ramp up fast (0→0.55 in first 30% of duration), then hold flat at 0.55
+                                var ramp = Math.min(wordVisual.heldProgress * 3.0, 1.0);
+                                return 0.55 * ramp;
+                            } else {
+                                // Normal: sin-bell fades in and out symmetrically
+                                return wordVisual.isSinging
+                                    ? (0.50 * Math.sin(Math.PI * wordVisual.wordProgress))
+                                    : 0.0;
+                            }
+                        }
+                        Behavior on opacity { NumberAnimation { duration: wordVisual.isHeld ? 220 : 80 } }
                         visible: opacity > 0.005
                     }
 

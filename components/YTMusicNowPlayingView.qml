@@ -1920,10 +1920,18 @@ Item {
                                 // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
                                 // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
                                 // isSynthetic=true means LRC plain line — routed to Full-Line Solid Highlight below.
+                                //
+                                // HELD NOTE OVERLAP: when a held word (isHeld=true, e.g. "Oh" 34→38s) is still
+                                // within its end timestamp even though the NEXT line became active (dist=-1),
+                                // the loader stays visible via hasActiveHeldWord. This makes "Oh" continue to
+                                // bloom while "I'm blinded..." starts on the line below — exactly like Apple Music.
                                 Loader {
                                     id: appleMusicFlowLoader
                                     active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                    visible: lyricRow.isCurrent
+                                    // Keep visible when: (a) this is the current line, OR
+                                    //                    (b) this is the previous line (dist=-1) with a live held note
+                                    visible: lyricRow.isCurrent ||
+                                             (lyricRow.dist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord)
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     sourceComponent: Component {
