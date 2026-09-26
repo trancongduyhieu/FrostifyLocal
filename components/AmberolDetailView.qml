@@ -1566,8 +1566,8 @@ Rectangle {
                         readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
                         readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
 
-                        HoverHandler { id: lineHover }
-                        readonly property bool isHovered: lineHover.hovered && !isCurrent
+                            // isHovered: chỉ TRUE khi NHẤN GIỮ chuột trái, không phải hover.
+                            readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
                         // SimpMusic & Apple Music Parametric Formulas
                         // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
@@ -1731,6 +1731,7 @@ Rectangle {
                         }
 
                         MouseArea {
+                            id: rowMouse
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
