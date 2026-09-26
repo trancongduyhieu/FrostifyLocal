@@ -218,6 +218,31 @@ Item {
         repeat: false
     }
 
+    // AMLL-style pixel-scroll engine.
+    // scrollTo(index) computes contentY target so the active line sits at 35% from top,
+    // then writes lyricsView.contentY — the Behavior SmoothedAnimation on contentY handles the rest.
+    // Calling scrollTo() rapidly (fast songs) is safe: SmoothedAnimation absorbs rapid retargeting
+    // by converging toward the latest target value without spawning nested animations.
+    QtObject {
+        id: lyricsScrollAnim
+
+        function scrollTo(idx) {
+            if (idx < 0 || !lyricsView) return;
+            var item = lyricsView.itemAtIndex(idx);
+            if (!item) {
+                // Item not yet in viewport (ListView virtualisation). Fallback: estimate via spacing.
+                // This only happens on big seek jumps; SmoothedAnimation will still look smooth.
+                var avgH = (lyricsView.contentHeight / Math.max(1, root.activeLyrics.length));
+                var rawEst = idx * (avgH + lyricsView.spacing) + lyricsView.topMargin - lyricsView.height * 0.35;
+                lyricsView.contentY = Math.max(0, Math.min(rawEst, lyricsView.contentHeight - lyricsView.height));
+                return;
+            }
+            // item.y is in ListView content-coordinate space — correct for topMargin offset
+            var rawY = item.y + lyricsView.topMargin - lyricsView.height * 0.35;
+            lyricsView.contentY = Math.max(0, Math.min(rawY, lyricsView.contentHeight - lyricsView.height));
+        }
+    }
+
     function getHighResImage(url) {
         if (!url || typeof url !== "string") return "";
         if (url.indexOf("googleusercontent.com") !== -1 || url.indexOf("ggpht.com") !== -1) {
@@ -529,12 +554,22 @@ Item {
         if (found !== -1) {
             var changed = (currentLyricIndex !== found);
             currentLyricIndex = found;
-            if (forceScroll) {
-                lyricsView.currentIndex = found;
-                lyricsView.positionViewAtIndex(found, ListView.Center);
-            } else if (changed) {
-                if (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running) {
-                    lyricsView.currentIndex = found;
+
+            // Smooth contentY scroll — AMLL-style pixel-accurate scrolling.
+            // We scroll by animating contentY directly (SmoothedAnimation defined on lyricsView),
+            // NOT via currentIndex/highlight mechanism which causes double-animation conflict.
+            // Target: active line sits at 35% from the top of the visible viewport.
+            if (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running) {
+                if (forceScroll) {
+                    // On first load: jump instantly, no animation
+                    var item0 = lyricsView.itemAtIndex(found);
+                    if (item0) {
+                        var raw0 = item0.y - lyricsView.height * 0.35 + lyricsView.topMargin;
+                        lyricsView.contentY = Math.max(0, Math.min(raw0, lyricsView.contentHeight - lyricsView.height));
+                    }
+                } else if (changed) {
+                    // On line change: smooth scroll via SmoothedAnimation on contentY
+                    lyricsScrollAnim.scrollTo(found);
                 }
             }
         }
@@ -1828,13 +1863,25 @@ Item {
                         spacing: 22
                         topMargin: 24
                         bottomMargin: height * 0.45
+                        // currentIndex tracks highlight only — no longer used for scrolling
                         currentIndex: root.currentLyricIndex
-                        preferredHighlightBegin: height * 0.35
-                        preferredHighlightEnd: height * 0.35
-                        highlightRangeMode: userScrollTimer.running ? ListView.NoHighlightRange : ListView.ApplyRange
-                        highlightMoveDuration: 620
-                        highlightMoveVelocity: -1
+                        // Disable Qt highlight scroll engine entirely — we scroll contentY directly
+                        highlightRangeMode: ListView.NoHighlightRange
                         model: root.activeLyrics
+
+                        // AMLL-style smooth scroll: SmoothedAnimation on contentY
+                        // duration=380ms OutCubic matches AMLL scrollIntoView cubic-bezier(0.4,0,0.2,1)
+                        // SmoothedAnimation (not NumberAnimation) absorbs rapid line changes in fast songs
+                        // — if index flips 3 times in 1s, it gracefully converges instead of triple-animating.
+                        Behavior on contentY {
+                            enabled: !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking
+                            SmoothedAnimation {
+                                duration: 380
+                                easing.type: Easing.OutCubic
+                                // velocity cap: prevents runaway scroll on seek jumps across many lines
+                                velocity: lyricsView.height * 6
+                            }
+                        }
 
                         onMovementStarted: userScrollTimer.restart()
                         onMovementEnded: userScrollTimer.restart()
@@ -1861,15 +1908,22 @@ Item {
 
                             // SimpMusic & Apple Music Parametric Formulas
                             // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
-                            readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
+                            readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.30 : (dist === 2 ? 0.60 : 1.0))
                             readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
                             readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
 
                             opacity: targetOpacity
                             transformOrigin: Item.Left
-                            scale: isCurrent ? 1.0 : 0.97
-                            Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
-                            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+                            // Scale: 1.0 active, 0.985 adjacent — less jarring than 0.97.
+                            // SmoothedAnimation absorbs rapid retargeting (fast songs flip lines every ~0.5s)
+                            // without spawning nested animations — eliminates the "zoom up then snap back" artifact.
+                            scale: isCurrent ? 1.0 : 0.985
+                            Behavior on scale {
+                                SmoothedAnimation { duration: 320; easing.type: Easing.OutCubic; velocity: 4 }
+                            }
+                            Behavior on opacity {
+                                SmoothedAnimation { duration: 320; easing.type: Easing.OutCubic; velocity: 4 }
+                            }
 
                             layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 2
                             layer.effect: MultiEffect {
