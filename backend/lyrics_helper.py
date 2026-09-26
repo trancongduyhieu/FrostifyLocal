@@ -12,6 +12,11 @@ import os
 import re
 import sqlite3
 
+# Ensure backend directory is in sys.path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
 import platform_compat as pc
 pc.configure_windows_ssl()
 
@@ -76,6 +81,33 @@ def parse_rich_sync_words(line_str, default_start=0.0):
         })
     return words
 
+def synthesize_line_words(text, start_time, end_time):
+    if not text:
+        return []
+    raw_words = text.strip().split()
+    if not raw_words:
+        return []
+    dur = max(0.6, end_time - start_time)
+    char_counts = [max(1, len(w)) for w in raw_words]
+    total_chars = sum(char_counts)
+    
+    words = []
+    cur_t = start_time
+    for i, w in enumerate(raw_words):
+        fraction = char_counts[i] / total_chars
+        w_dur = round(max(0.12, dur * fraction), 2)
+        w_start = round(cur_t, 2)
+        w_end = round(cur_t + w_dur, 2)
+        words.append({
+            "text": w,
+            "start": w_start,
+            "end": w_end,
+            "duration": w_dur,
+            "isHeld": (w_dur >= 0.85)
+        })
+        cur_t = w_end
+    return words
+
 def parse_lrc(lrc_text):
     if not lrc_text:
         return []
@@ -109,8 +141,10 @@ def parse_lrc(lrc_text):
             mins = int(m.group(1))
             secs = float(m.group(2))
             total_sec = round(mins * 60.0 + secs, 2)
+            end_sec = max((w["end"] for w in syllable_words), default=None)
             item = {
                 "time": total_sec,
+                "endTime": end_sec if end_sec is not None else round(total_sec + 4.5, 2),
                 "text": clean_text,
                 "hasWords": bool(syllable_words),
                 "words": syllable_words
@@ -118,6 +152,17 @@ def parse_lrc(lrc_text):
             results.append(item)
 
     results.sort(key=lambda x: x["time"])
+
+    # Fallback endTime calculation and word timing synthesis for lines without syllable timestamps
+    for i, it in enumerate(results):
+        if not it.get("hasWords"):
+            if i + 1 < len(results):
+                it["endTime"] = results[i + 1]["time"]
+            else:
+                it["endTime"] = round(it["time"] + 5.0, 2)
+            it["words"] = synthesize_line_words(it["text"], it["time"], it["endTime"])
+            it["hasWords"] = bool(it["words"])
+
     return results
 
 def clean_search_title(title):
@@ -185,13 +230,24 @@ def get_lyrics_from_local_db(title, artist=None, video_id=None):
             clean_w = strip_rich_sync_tags(w)
             st = int(line.get('startTimeMs', 0))
             if clean_w:
-                syllable_words = parse_rich_sync_words(w, default_start=round(st / 1000.0, 2))
+                start_sec = round(st / 1000.0, 2)
+                syllable_words = parse_rich_sync_words(w, default_start=start_sec)
+                end_sec = max((item["end"] for item in syllable_words), default=None)
                 results.append({
-                    'time': round(st / 1000.0, 2),
+                    'time': start_sec,
+                    'endTime': end_sec if end_sec is not None else round(start_sec + 4.5, 2),
                     'text': clean_w,
                     'hasWords': bool(syllable_words),
                     'words': syllable_words
                 })
+        for i, it in enumerate(results):
+            if not it.get("hasWords"):
+                if i + 1 < len(results):
+                    it["endTime"] = results[i + 1]["time"]
+                else:
+                    it["endTime"] = round(it["time"] + 5.0, 2)
+                it["words"] = synthesize_line_words(it["text"], it["time"], it["endTime"])
+                it["hasWords"] = bool(it["words"])
         return results
     except Exception:
         return []

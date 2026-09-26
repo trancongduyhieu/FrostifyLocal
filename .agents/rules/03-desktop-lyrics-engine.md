@@ -53,3 +53,12 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
   2. Fallback trực tuyến tự động qua thư viện `syncedlyrics` theo tuần tự:
      $$\text{LRCLIB} \longrightarrow \text{NetEase Cloud Music} \longrightarrow \text{Musixmatch}$$
 - **Bộ nhớ đệm (Cache)**: Tự động lưu cache file lời bài hát tìm được để tái sử dụng tức thì trong các lần phát sau mà không tốn băng thông mạng.
+
+---
+
+## 5. Apple Music Phrase Traveling Wave (`components/AppleMusicWordFlow.qml`)
+- **Tệp**: `components/AppleMusicWordFlow.qml`, `backend/lyrics_helper.py`, `docs/adr/0004-apple-music-phrase-spatial-wave.md`.
+- **Phrase-Level Spatial Traveling Wave**: Tự động gom cụm từ (phrase) trước dấu câu (`,`, `.`, `!`, `?`, `;`, `—`) hoặc nhịp thở ca sĩ ($> 0.35\text{s}$). Con sóng quét liên tục dọc theo vế câu qua `waveProgressTotal`: từ kế tiếp nhấc nhẹ đón đầu sóng ($T_{\text{lead}} = 160\text{ms}$), đạt đỉnh crest và hạ êm về baseline ($0.0\text{px}$).
+- **Unified Baseline & Spring-Damped SmoothedAnimation**: Toàn bộ từ (chưa hát, đang hát, đã hát) nằm chung baseline $0.0\text{px}$ (xóa bỏ triệt để hố sâu $1.8\text{px}$). Đỉnh sóng nâng $y_{\text{lift}} = -1.6\text{px}$ (biên độ $1.6\text{px} \le 2.0\text{px}$), scale $1.01\times$. Bọc `Translate.y` và `scale` trong `SmoothedAnimation { duration: 150; reversingMode: SmoothedAnimation.Immediate }` đảm bảo $C^1$ velocity continuity, triệt tiêu hoàn toàn giật cục.
+- **Phosphor Bloom Glow**: Tỏa hào quang lân tinh qua `MultiEffect` (blur $0.55$, opacity $0.51$, max $24$) trên nền layer mượt.
+- **Footgun #1**: **TUYỆT ĐỐI CẤM** gán trực tiếp `x, y` trên con trực tiếp của QML `Flow` (làm vỡ positioner và văng chữ lên dòng trên). Bắt buộc bọc qua `transform: Translate { y: waveY }` trên item con bên trong.

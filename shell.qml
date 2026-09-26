@@ -1167,6 +1167,24 @@ Scope {
         win.syncNowPlaying(true);
     }
     property real currentTime: 0.0
+    property real lastSyncTime: 0.0
+    property double lastSyncTimestamp: 0
+
+    // High-precision drift-free 60 FPS clock interpolator for buttery smooth lyrics & progress
+    Timer {
+        id: smoothProgressTimer
+        interval: 16
+        repeat: true
+        running: win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
+        onTriggered: {
+            var elapsed = (Date.now() - win.lastSyncTimestamp) / 1000.0;
+            var newT = win.lastSyncTime + elapsed;
+            if (win.totalDuration > 0 && newT > win.totalDuration) {
+                newT = win.totalDuration;
+            }
+            win.currentTime = newT;
+        }
+    }
     property real totalDuration: 0.0
     property real volume: 100.0
 

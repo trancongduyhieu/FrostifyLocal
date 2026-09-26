@@ -121,6 +121,8 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     win.postLoadGraceTimestamp = Date.now();
     win.currentTrack = trk;
     win.currentTime = 0.0;
+    win.lastSyncTime = 0.0;
+    win.lastSyncTimestamp = Date.now();
     win.isLoadingAudio = !hasLocalFile;
     win.totalDuration = 0.0;
     win.isPlaying = true;
@@ -214,6 +216,8 @@ function playTrack(win, trk, pollTimer) {
     win.postLoadGraceTimestamp = Date.now();
     win.currentTrack = trk;
     win.currentTime = 0.0;
+    win.lastSyncTime = 0.0;
+    win.lastSyncTimestamp = Date.now();
     win.isLoadingAudio = false;
     win.totalDuration = (trk.durationMs || 0) / 1000.0;
     win.isPlaying = true;
@@ -260,6 +264,7 @@ function togglePlay(win, pollTimer) {
     if (win.isLoadingAudio) {
         win.isLoadingAudio = false;
         win.isPlaying = false;
+        win.lastSyncTimestamp = 0;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
         if (pollTimer) pollTimer.restart();
         win.syncNowPlaying(true);
@@ -273,10 +278,13 @@ function togglePlay(win, pollTimer) {
             win.trackChangeTimestamp = Date.now();
         }
         win.isPlaying = true;
+        win.lastSyncTime = win.currentTime;
+        win.lastSyncTimestamp = Date.now();
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
     } else {
         win.isPlaying = false;
         win.isLoadingAudio = false;
+        win.lastSyncTimestamp = 0;
         Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
     }
 
@@ -365,6 +373,8 @@ function playPrev(win) {
 
 function seekLocalOnly(win, sec) {
     win.currentTime = sec;
+    win.lastSyncTime = sec;
+    win.lastSyncTimestamp = Date.now();
     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
 }
 
@@ -375,6 +385,8 @@ function seekAudio(win, sec) {
     }
     win.lastLocalActionTimestamp = Date.now();
     win.currentTime = sec;
+    win.lastSyncTime = sec;
+    win.lastSyncTimestamp = Date.now();
     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
@@ -635,6 +647,8 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
             win.postLoadGraceTimestamp = Date.now();
             win.isPlaying = true;
             win.currentTime = s.time_pos || 0.0;
+            win.lastSyncTime = s.time_pos || 0.0;
+            win.lastSyncTimestamp = Date.now();
             if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
             if (win.pendingListenAlongSeekPosition > 0) {
                 var p = win.pendingListenAlongSeekPosition;
@@ -658,10 +672,17 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
                 } else {
                     win.isPlaying = false;
+                    win.lastSyncTimestamp = 0;
                 }
             }
             if (s.time_pos !== undefined && s.time_pos > 0) {
-                win.currentTime = s.time_pos;
+                if (Math.abs(win.currentTime - s.time_pos) > 0.45) {
+                    win.currentTime = s.time_pos;
+                }
+                win.lastSyncTime = s.time_pos;
+                if (win.isPlaying) {
+                    win.lastSyncTimestamp = Date.now();
+                }
             }
             if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
             if (win.pendingListenAlongSeekPosition > 0 && (s.is_playing || s.is_paused)) {

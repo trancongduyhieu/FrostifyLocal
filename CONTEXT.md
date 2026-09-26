@@ -83,3 +83,18 @@ This document establishes the **Ubiquitous Language** for the Nutsty codebase. E
 - **Definition**: The dedicated frontend JavaScript engine (`components/playback_engine.js`) responsible for all audio playback orchestration, queue lifecycle management, and MPV daemon status reconciliation.
 - **Responsibilities**: Track resolution (`isSameTrack`, `findLocalDownloadedTrack`), playback execution (`playOnlineTrack`, `playTrack`, `togglePlay`), queue navigation (`playNext`, `playPrev`, `seekAudio`), queue manipulation (`insertTrackPlayNext`, `appendTrackToQueue`, `removeTrackFromQueue`, `deleteLocalTrack`, `shufflePlayBrowsing`), and status event processing (`handlePlayerStatus`, `handleRadioResponse`).
 
+---
+
+## 6. Lyrics & Kinetic Typography Domain
+
+### `SpatialTravelingWave`
+- **Definition**: A continuous wave propagation model across a rhythmic phrase where adjacent words anticipate and follow the wave crest with smooth phase offsets and spring-damped velocity continuity (`SmoothedAnimation`), rather than jumping individually.
+- **Attributes**:
+  - `baselineY`: Resting baseline for all words ($0.0\text{px}$), eliminating stepped cliffs and trenches.
+  - `peakLiftY`: Maximum crest elevation above baseline ($1.6\text{px}$).
+  - `dynamicRange`: Total vertical swing capped at $1.6\text{px}$ (within user $\le 2.0\text{px}$ limit).
+  - `smoothing`: 150ms critically damped spring animation on vertical translation and breathing scale.
+
+### `Phrase`
+- **Definition**: A cohesive rhythmic clause within a lyric line bounded by punctuation (`,`, `.`, `!`, `?`, `;`, `—`) or an inter-word vocal breath pause ($\Delta t > 0.35\text{s}$). Each phrase functions as an independent wave propagation envelope.
+

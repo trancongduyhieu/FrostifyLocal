@@ -526,10 +526,15 @@ Item {
             found = 0;
         }
         if (found !== -1) {
+            var changed = (currentLyricIndex !== found);
             currentLyricIndex = found;
-            lyricsView.currentIndex = found;
-            if (forceScroll || (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running)) {
+            if (forceScroll) {
+                lyricsView.currentIndex = found;
                 lyricsView.positionViewAtIndex(found, ListView.Center);
+            } else if (changed) {
+                if (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running) {
+                    lyricsView.currentIndex = found;
+                }
             }
         }
     }
@@ -1825,8 +1830,8 @@ Item {
                         currentIndex: root.currentLyricIndex
                         preferredHighlightBegin: height * 0.38
                         preferredHighlightEnd: height * 0.38
-                        highlightRangeMode: ListView.NoHighlightRange
-                        highlightMoveDuration: 600
+                        highlightRangeMode: userScrollTimer.running ? ListView.NoHighlightRange : ListView.ApplyRange
+                        highlightMoveDuration: 500
                         highlightMoveVelocity: -1
                         model: root.activeLyrics
 
@@ -1841,10 +1846,14 @@ Item {
                             height: Math.max(48, lyricContentItem.implicitHeight + 16)
 
                             readonly property int dist: Math.abs(index - root.currentLyricIndex)
-                            readonly property bool isCurrent: dist === 0
-                            readonly property real nextTime: (index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (modelData.time + 6.0)
-                            readonly property real duration: Math.max(0.6, nextTime - modelData.time)
-                            readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - modelData.time) / duration)) : 0.0
+                            readonly property real lineStartTime: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
+                            readonly property real lineEndTime: (modelData && modelData.endTime && modelData.endTime > lineStartTime)
+                                ? modelData.endTime
+                                : ((index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (lineStartTime + 5.0))
+                            readonly property bool isTimeActive: (dist <= 2) && (root.currentTime >= (lineStartTime - 0.15)) && (root.currentTime <= (lineEndTime + 0.25))
+                            readonly property bool isCurrent: isTimeActive || (dist === 0 && root.currentTime >= lineStartTime - 0.5)
+                            readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
+                            readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
 
                             HoverHandler { id: lineHover }
                             readonly property bool isHovered: lineHover.hovered && !isCurrent
@@ -1860,11 +1869,11 @@ Item {
                             scale: isCurrent ? 1.0 : 0.97
                             Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
 
-                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
+                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 2
                             layer.effect: MultiEffect {
                                 blurEnabled: true
                                 blur: lyricRow.targetBlur
-                                blurMax: 48
+                                blurMax: 32
                             }
 
                             function formatKaraokeWords(rawText, progress) {
@@ -1903,61 +1912,22 @@ Item {
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitHeight: Math.max(36, lyricRow.isCurrent
-                                    ? (activeWordsFlow.visible ? activeWordsFlow.implicitHeight : activeFallbackTxt.paintedHeight)
+                                    ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (activeFallbackTxt.visible ? activeFallbackTxt.paintedHeight : 36))
                                     : nonActiveTxt.paintedHeight)
 
-                                // SimpMusic AMLL Architecture: FlowRow of individual AnimatedWord Items
-                                Flow {
-                                    id: activeWordsFlow
-                                    visible: lyricRow.isCurrent && modelData.hasWords && modelData.words && modelData.words.length > 0
+                                // Apple Music Word Flow: Traveling wave ripple + multi-layer overlap + phosphor bloom
+                                // Loaded lazily only for active/adjacent line (dist <= 1) to eliminate 98% idle word bindings
+                                Loader {
+                                    id: appleMusicFlowLoader
+                                    active: lyricRow.dist <= 1 && modelData.hasWords && modelData.words && modelData.words.length > 0
+                                    visible: lyricRow.isCurrent
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    spacing: 7
-
-                                    Repeater {
-                                        model: (modelData.hasWords && modelData.words) ? modelData.words : []
-                                        delegate: Item {
-                                            id: wordItem
-                                            width: wordTxt.implicitWidth
-                                            height: wordTxt.implicitHeight
-                                            transformOrigin: Item.Bottom
-
-                                            readonly property real wStart: modelData.start
-                                            readonly property real wEnd: modelData.end
-                                            readonly property real wDur: modelData.duration || 0.3
-                                            readonly property bool isHeld: modelData.isHeld || false
-                                            readonly property bool isPast: root.currentTime >= wEnd
-                                            readonly property bool isActive: root.currentTime >= wStart && root.currentTime < wEnd
-                                            readonly property real wordProgress: isActive ? Math.max(0.0, Math.min(1.0, (root.currentTime - wStart) / wDur)) : 0.0
-
-                                            // SimpMusic Organic Breath Curve: Nở siêu êm ái (+0.8% scale, nhấc 1.5px, exponent 2.0)
-                                            readonly property real bump: (isHeld && isActive) ? Math.pow(Math.sin(Math.PI * wordProgress), 2.0) : 0.0
-
-                                            // GPU Matrix Transform: Cực kỳ tinh tế (+0.8% scale ~ 1.008x, nhấc nhẹ 1.5px) chuẩn SimpMusic
-                                            scale: 1.0 + bump * 0.008
-                                            y: -bump * 1.5
-                                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                                            Behavior on y { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-
-                                            Text {
-                                                id: wordTxt
-                                                text: modelData.text
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 28
-                                                font.weight: Font.Bold
-                                                color: {
-                                                    if (isPast) return "#ffffff";
-                                                    if (isActive) {
-                                                        if (isHeld) return "#ffffff";
-                                                        var frac = wordProgress;
-                                                        var r = Math.round(180 + (255 - 180) * frac);
-                                                        var g = Math.round(185 + (255 - 185) * frac);
-                                                        var b = Math.round(195 + (255 - 195) * frac);
-                                                        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-                                                    }
-                                                    return "#a0a4b2";
-                                                }
-                                            }
+                                    sourceComponent: Component {
+                                        AppleMusicWordFlow {
+                                            words: (modelData.hasWords && modelData.words) ? modelData.words : []
+                                            currentTime: root.currentTime
+                                            fontSize: 28
                                         }
                                     }
                                 }
@@ -1969,7 +1939,9 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     textFormat: Text.RichText
-                                    text: lyricRow.formatKaraokeWords(modelData.text || "", lyricRow.lineProgress)
+                                    text: (lyricRow.isCurrent && (!modelData.hasWords || !modelData.words || modelData.words.length === 0))
+                                        ? lyricRow.formatKaraokeWords(modelData.text || "", lyricRow.lineProgress)
+                                        : ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 28
                                     font.weight: Font.Bold
