@@ -150,6 +150,7 @@ Item {
             }
 
             readonly property real targetScale: {
+                if (!hasWords) return 1.0; // Plain lines stay completely still
                 if (isCurrent || isHeldNoteActive || dist === 1 || dist === -1) return 1.0;
                 if (dist === 2) return 0.93;
                 if (dist === 3) return 0.84;

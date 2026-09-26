@@ -1569,15 +1569,16 @@ Rectangle {
                             // isHovered: chỉ TRUE khi NHẤN GIỮ chuột trái, không phải hover.
                             readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
+                            readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
                         // SimpMusic & Apple Music Parametric Formulas
                         // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
                         readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
                         readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
-                        readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
+                        readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18)))
 
                         opacity: targetOpacity
                         transformOrigin: Item.Left
-                        scale: isCurrent ? 1.0 : 0.97
+                        scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.97)
                         Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                         Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
 
@@ -1586,43 +1587,6 @@ Rectangle {
                             blurEnabled: true
                             blur: lyricRow.targetBlur
                             blurMax: 32
-                        }
-
-                        // Function to format sequential word-by-word karaoke text
-                        function formatKaraokeWords(rawText, progress) {
-                            if (!rawText) return "";
-                            var words = rawText.trim().split(/\s+/);
-                            if (words.length === 0) return "";
-                            if (words.length === 1) {
-                                return progress >= 0.5
-                                    ? "<span style='color:#ffffff; font-weight:bold;'>" + words[0] + "</span>"
-                                    : "<span style='color:#757a88; font-weight:bold;'>" + words[0] + "</span>";
-                            }
-
-                            var total = words.length;
-                            var currentFloat = progress * total;
-                            var activeIdx = Math.min(total - 1, Math.floor(currentFloat));
-                            var fraction = Math.max(0.0, Math.min(1.0, currentFloat - activeIdx));
-
-                            var parts = [];
-                            for (var i = 0; i < total; i++) {
-                                var w = words[i];
-                                if (i < activeIdx) {
-                                    // Already sung: pure bright white
-                                    parts.push("<span style='color:#ffffff; font-weight:bold;'>" + w + "</span>");
-                                } else if (i === activeIdx) {
-                                    // Currently singing word: smooth transition from dimmed gray to pure white
-                                    var r = Math.round(117 + (255 - 117) * fraction);
-                                    var g = Math.round(122 + (255 - 122) * fraction);
-                                    var b = Math.round(136 + (255 - 136) * fraction);
-                                    var hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-                                    parts.push("<span style='color:" + hex + "; font-weight:bold;'>" + w + "</span>");
-                                } else {
-                                    // Unsung: dimmed elegant gray
-                                    parts.push("<span style='color:#757a88; font-weight:bold;'>" + w + "</span>");
-                                }
-                            }
-                            return parts.join(" ");
                         }
 
                         Item {
@@ -1655,45 +1619,15 @@ Rectangle {
                                 }
                             }
 
-                            // Apple Music Full-Line Held Note Bloom — for plain LRC lines (isSynthetic / no words).
-                            // Phosphor glow builds up via sin-bell on lineProgress: 0→peak→0 over line duration.
-                            // Scale breathes +1.8% at peak. Native Text.Outline (zero MultiEffect overhead).
+                            // Full-Line Solid Highlight — for plain LRC lines (isSynthetic / no words).
+                            // Zero scale swell, zero wave bounce, crisp static typography.
                             Item {
                                 id: fullLineBlock
-                                readonly property bool shouldShow: lyricRow.isCurrent && (!modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0)
+                                readonly property bool shouldShow: lyricRow.isCurrent && lyricRow.isPlainLine
                                 visible: shouldShow
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 implicitHeight: fullLineMainTxt.implicitHeight
-
-                                readonly property real glowProgress: lyricRow.isCurrent
-                                    ? Math.sin(Math.PI * lyricRow.lineProgress)
-                                    : 0.0
-
-                                transform: Scale {
-                                    xScale: 1.0 + 0.018 * fullLineBlock.glowProgress
-                                    yScale: xScale
-                                    origin.x: 0
-                                    origin.y: fullLineMainTxt.implicitHeight * 0.5
-                                }
-
-                                Text {
-                                    id: fullLineBloomTxt
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    text: modelData.text || ""
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 28
-                                    font.weight: Font.Bold
-                                    color: "#ffffff"
-                                    style: Text.Outline
-                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.45)
-                                    wrapMode: Text.Wrap
-                                    lineHeight: 1.28
-                                    opacity: 0.55 * fullLineBlock.glowProgress
-                                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
-                                    visible: opacity > 0.005
-                                }
 
                                 Text {
                                     id: fullLineMainTxt
@@ -1711,6 +1645,7 @@ Rectangle {
                                     styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
                                 }
                             }
+
 
                             // 2. Non-active blurred/dimmed lines
                             Text {

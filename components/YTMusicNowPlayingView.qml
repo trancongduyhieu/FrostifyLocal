@@ -1910,18 +1910,18 @@ Item {
                             // → Giữ chuột trái trên dòng: unblur để xem rõ trước khi seek.
                             readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
+                            readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
                             // SimpMusic & Apple Music Parametric Formulas
                             // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
                             readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.30 : (dist === 2 ? 0.60 : 1.0))
                             readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
-                            readonly property int targetFontSize: isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18))
+                            readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18)))
 
                             opacity: targetOpacity
                             transformOrigin: Item.Left
                             // Scale: 1.0 active, 0.985 adjacent — less jarring than 0.97.
-                            // SmoothedAnimation absorbs rapid retargeting (fast songs flip lines every ~0.5s)
-                            // without spawning nested animations — eliminates the "zoom up then snap back" artifact.
-                            scale: isCurrent ? 1.0 : 0.985
+                            // For plain lines (isPlainLine): lock to 1.0 completely still, no jump.
+                            scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.985)
                             Behavior on scale {
                                 SmoothedAnimation { duration: 320; easing.type: Easing.OutCubic; velocity: 4 }
                             }
@@ -1934,36 +1934,6 @@ Item {
                                 blurEnabled: true
                                 blur: lyricRow.targetBlur
                                 blurMax: 32
-                            }
-
-                            function formatKaraokeWords(rawText, progress) {
-                                if (!rawText) return "";
-                                var words = rawText.trim().split(/\s+/);
-                                if (words.length <= 1) {
-                                    return "<span style='color:#ffffff; font-weight:bold;'>" + rawText + "</span>";
-                                }
-
-                                var total = words.length;
-                                var currentFloat = progress * total;
-                                var activeIdx = Math.min(total - 1, Math.floor(currentFloat));
-                                var fraction = Math.max(0.0, Math.min(1.0, currentFloat - activeIdx));
-
-                                var parts = [];
-                                for (var i = 0; i < total; i++) {
-                                    var w = words[i];
-                                    if (i < activeIdx) {
-                                        parts.push("<span style='color:#ffffff; font-weight:bold;'>" + w + "</span>");
-                                    } else if (i === activeIdx) {
-                                        var r = Math.round(180 + (255 - 180) * fraction);
-                                        var g = Math.round(185 + (255 - 185) * fraction);
-                                        var b = Math.round(195 + (255 - 195) * fraction);
-                                        var hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-                                        parts.push("<span style='color:" + hex + "; font-weight:bold;'>" + w + "</span>");
-                                    } else {
-                                        parts.push("<span style='color:#a0a4b2; font-weight:bold;'>" + w + "</span>");
-                                    }
-                                }
-                                return parts.join(" ");
                             }
 
                             Item {
@@ -2001,51 +1971,15 @@ Item {
                                     }
                                 }
 
-                                // Apple Music Full-Line Held Note Bloom — for plain LRC lines (isSynthetic / no words).
-                                // When the line is active (isCurrent), a phosphor glow builds up via sin-bell on
-                                // lineProgress: fades in at start, peaks at mid-duration, fades out at end.
-                                // Scale breathes +1.8% at peak — subtle "swell" that sells the sustained note feel.
-                                // Native Text.Outline bloom (zero MultiEffect GPU overhead).
+                                // Full-Line Solid Highlight — for plain LRC lines (isSynthetic / no words).
+                                // Zero scale swell, zero wave bounce, crisp static typography.
                                 Item {
                                     id: fullLineBlock
-                                    readonly property bool shouldShow: lyricRow.isCurrent && (!modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0)
+                                    readonly property bool shouldShow: lyricRow.isCurrent && lyricRow.isPlainLine
                                     visible: shouldShow
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     implicitHeight: fullLineMainTxt.implicitHeight
-
-                                    // sin-bell glow driver: 0→1→0 over line duration
-                                    readonly property real glowProgress: lyricRow.isCurrent
-                                        ? Math.sin(Math.PI * lyricRow.lineProgress)
-                                        : 0.0
-
-                                    // Scale breath: 1.0 at endpoints, 1.018 at peak (same as AMLL held-note spec)
-                                    transform: Scale {
-                                        xScale: 1.0 + 0.018 * fullLineBlock.glowProgress
-                                        yScale: xScale
-                                        origin.x: 0
-                                        origin.y: fullLineMainTxt.implicitHeight * 0.5
-                                    }
-
-                                    // ── Phosphor Bloom Layer ──────────────────────────────
-                                    // Rendered ABOVE main text; white outline widens the glow halo.
-                                    Text {
-                                        id: fullLineBloomTxt
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        text: modelData.text || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 28
-                                        font.weight: Font.Bold
-                                        color: "#ffffff"
-                                        style: Text.Outline
-                                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.45)
-                                        wrapMode: Text.Wrap
-                                        lineHeight: 1.28
-                                        opacity: 0.55 * fullLineBlock.glowProgress
-                                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
-                                        visible: opacity > 0.005
-                                    }
 
                                     // ── Main Crisp Typography ─────────────────────────────
                                     Text {
