@@ -88,6 +88,9 @@ def synthesize_line_words(text, start_time, end_time):
     if not raw_words:
         return []
     dur = max(0.6, end_time - start_time)
+    # Natural phrasing: vocal delivery occupies ~75-80% of line interval, reserving remainder for breath/rest
+    rest = min(1.6, max(0.35, dur * 0.24)) if dur >= 1.6 else 0.15
+    vocal_dur = max(0.5, dur - rest)
     char_counts = [max(1, len(w)) for w in raw_words]
     total_chars = sum(char_counts)
     
@@ -95,7 +98,7 @@ def synthesize_line_words(text, start_time, end_time):
     cur_t = start_time
     for i, w in enumerate(raw_words):
         fraction = char_counts[i] / total_chars
-        w_dur = round(max(0.12, dur * fraction), 2)
+        w_dur = round(max(0.10, vocal_dur * fraction), 2)
         w_start = round(cur_t, 2)
         w_end = round(cur_t + w_dur, 2)
         words.append({
@@ -103,7 +106,7 @@ def synthesize_line_words(text, start_time, end_time):
             "start": w_start,
             "end": w_end,
             "duration": w_dur,
-            "isHeld": (w_dur >= 0.85)
+            "isHeld": (w_dur >= 0.75)
         })
         cur_t = w_end
     return words
