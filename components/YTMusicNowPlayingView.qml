@@ -1972,7 +1972,7 @@ Item {
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitHeight: Math.max(36, lyricRow.isCurrent
-                                    ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (activeFallbackTxt.visible ? activeFallbackTxt.paintedHeight : 36))
+                                    ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (fullLineBlock.visible ? fullLineBlock.implicitHeight : 36))
                                     : nonActiveTxt.paintedHeight)
 
                                 // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
