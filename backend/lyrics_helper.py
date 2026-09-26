@@ -156,15 +156,20 @@ def parse_lrc(lrc_text):
 
     results.sort(key=lambda x: x["time"])
 
-    # Fallback endTime calculation and word timing synthesis for lines without syllable timestamps
+    # Fallback endTime calculation for lines without syllable timestamps.
+    # IMPORTANT: We do NOT synthesize fake word timing here anymore.
+    # Lines without real <mm:ss.xx> tags stay as isSynthetic=True with hasWords=False
+    # so the QML layer correctly shows Apple Music Full-Line Solid Highlight instead
+    # of AppleMusicWordFlow with guessed timing that drifts vs the singer.
     for i, it in enumerate(results):
         if not it.get("hasWords"):
             if i + 1 < len(results):
                 it["endTime"] = results[i + 1]["time"]
             else:
                 it["endTime"] = round(it["time"] + 5.0, 2)
-            it["words"] = synthesize_line_words(it["text"], it["time"], it["endTime"])
-            it["hasWords"] = bool(it["words"])
+            # Keep hasWords=False and words=[] — no fake synthesis
+            it["words"] = []
+            it["isSynthetic"] = True  # Signal to QML: use Full-Line Solid Highlight
 
     return results
 
@@ -249,8 +254,8 @@ def get_lyrics_from_local_db(title, artist=None, video_id=None):
                     it["endTime"] = results[i + 1]["time"]
                 else:
                     it["endTime"] = round(it["time"] + 5.0, 2)
-                it["words"] = synthesize_line_words(it["text"], it["time"], it["endTime"])
-                it["hasWords"] = bool(it["words"])
+                it["words"] = []
+                it["isSynthetic"] = True
         return results
     except Exception:
         return []

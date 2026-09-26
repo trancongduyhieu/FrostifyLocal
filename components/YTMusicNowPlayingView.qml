@@ -1916,38 +1916,43 @@ Item {
                                     ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (activeFallbackTxt.visible ? activeFallbackTxt.paintedHeight : 36))
                                     : nonActiveTxt.paintedHeight)
 
-                                // Apple Music Word Flow: Traveling wave ripple + multi-layer overlap + phosphor bloom
-                                // Loaded lazily only for active/adjacent line (dist <= 1) to eliminate 98% idle word bindings
+                                // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
+                                // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
+                                // isSynthetic=true means LRC plain line — routed to Full-Line Solid Highlight below.
                                 Loader {
                                     id: appleMusicFlowLoader
-                                    active: lyricRow.dist <= 1 && modelData.hasWords && modelData.words && modelData.words.length > 0
+                                    active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
                                     visible: lyricRow.isCurrent
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     sourceComponent: Component {
                                         AppleMusicWordFlow {
-                                            words: (modelData.hasWords && modelData.words) ? modelData.words : []
+                                            words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
                                             currentTime: root.currentTime
                                             fontSize: 28
                                         }
                                     }
                                 }
 
-                                // Fallback: LRC thường không có syllable timestamps
+                                // Apple Music Full-Line Solid Highlight — for plain LRC lines (isSynthetic or no words).
+                                // Entire line glows solid white when active, dims to slate when past/inactive.
+                                // This NEVER drifts vs the singer because there is zero per-word timing assumption.
                                 Text {
                                     id: activeFallbackTxt
-                                    visible: lyricRow.isCurrent && (!modelData.hasWords || !modelData.words || modelData.words.length === 0)
+                                    readonly property bool shouldShow: lyricRow.isCurrent && (!modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0)
+                                    visible: shouldShow
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    textFormat: Text.RichText
-                                    text: (lyricRow.isCurrent && (!modelData.hasWords || !modelData.words || modelData.words.length === 0))
-                                        ? lyricRow.formatKaraokeWords(modelData.text || "", lyricRow.lineProgress)
-                                        : ""
+                                    textFormat: Text.PlainText
+                                    text: modelData.text || ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 28
                                     font.weight: Font.Bold
+                                    color: "#ffffff"
                                     wrapMode: Text.Wrap
                                     lineHeight: 1.28
+                                    style: Text.Outline
+                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
                                 }
 
                                 Text {
