@@ -46,94 +46,20 @@ Item {
     property int displayIndex: -1
     property real slideOffsetY: 0.0
 
-    // FontMetrics and Character-level Active Glow Engine
-    FontMetrics {
-        id: slot1FontMetrics
-        font.family: Theme.fontFamily
-        font.pixelSize: 28
-        font.weight: Font.Bold
+    // Current line data and word-level timing resolution
+    function getCurrentLineData(idx) {
+        if (!root.activeLyrics || idx < 0 || idx >= root.activeLyrics.length) return null;
+        return root.activeLyrics[idx];
     }
 
-    property int activeCharIndex: -1
-    property string activeChar: ""
-    property real activeCharX: 0
-    property real activeCharW: 0
-
-    onLineProgressChanged: {
-        if (!rollAnimation.running) {
-            updateActiveChar();
-        }
-    }
-
-    onDisplayIndexChanged: {
-        updateActiveChar();
-        updateParsedWords();
-    }
-
-    // Word-level Parsing & Preparation Engine
-    property var parsedWords: []
-
-    function updateParsedWords() {
-        var txt = getLyricText(displayIndex);
-        if (!txt || txt.length === 0) {
-            parsedWords = [];
-            return;
-        }
-
-        var words = [];
-        var regex = /\S+/g;
-        var match;
-
-        while ((match = regex.exec(txt)) !== null) {
-            var wordStr = match[0];
-            var sIdx = match.index;
-            var eIdx = match.index + wordStr.length;
-            var sX = slot1FontMetrics.advanceWidth(txt.substring(0, sIdx));
-            var eX = slot1FontMetrics.advanceWidth(txt.substring(0, eIdx));
-            words.push({
-                text: wordStr,
-                startIndex: sIdx,
-                endIndex: eIdx,
-                startX: sX,
-                endX: eX,
-                width: Math.max(1, eX - sX)
-            });
-        }
-        parsedWords = words;
-    }
-
-    function updateActiveChar() {
-        var txt = getLyricText(displayIndex);
-        if (!txt || txt.length === 0 || lineProgress <= 0.001) {
-            activeCharIndex = -1;
-            activeChar = "";
-            activeCharX = 0;
-            activeCharW = 0;
-            return;
-        }
-
-        var totalW = slot1FontMetrics.advanceWidth(txt);
-        var targetW = totalW * lineProgress;
-        var startX = 0;
-
-        for (var i = 0; i < txt.length; i++) {
-            var nextX = slot1FontMetrics.advanceWidth(txt.substring(0, i + 1));
-            if (targetW <= nextX || i === txt.length - 1) {
-                activeCharIndex = i;
-                activeChar = txt.charAt(i);
-                activeCharX = startX;
-                activeCharW = Math.max(1, nextX - startX);
-                return;
-            }
-            startX = nextX;
-        }
-    }
+    readonly property var currentLineObj: getCurrentLineData(root.displayIndex)
+    readonly property var currentLineWords: (currentLineObj && currentLineObj.words) ? currentLineObj.words : []
+    readonly property bool currentLineHasWords: !!(currentLineObj && currentLineObj.hasWords && !currentLineObj.isSynthetic && currentLineWords.length > 0)
 
     onCurrentTimeChanged: updateProgress()
     onActiveLyricsChanged: {
         updateProgress();
         displayIndex = currentLyricIndex;
-        updateParsedWords();
     }
 
     function updateProgress() {
@@ -262,7 +188,7 @@ Item {
             }
 
             // -----------------------------------------------------------------
-            // Slot 1: Active line (White sung text + Single-Character Gradual Glow)
+            // Slot 1: Active Line — Driven by AppleMusicWordFlow Engine
             // -----------------------------------------------------------------
             Item {
                 id: slot1Item
@@ -273,8 +199,6 @@ Item {
 
                 // Normalized rolling animation progress (0.0 at rest, 0.0 -> 1.0 during glide)
                 readonly property real rollProgress: rollAnimation.running ? Math.min(1.0, Math.max(0.0, -root.slideOffsetY / root.slotHeight)) : 0.0
-
-                // When rolling up into Slot 0 position, smoothly apply frosted glass mist blur
                 readonly property real rollBlur: rollProgress * 0.35
 
                 layer.enabled: rollBlur > 0.01
@@ -286,133 +210,44 @@ Item {
 
                 opacity: rollAnimation.running ? Math.max(0.58, 1.0 - 0.42 * rollProgress) : 1.0
 
-                // Base Hidden Text (For width measurement)
-                Text {
-                    id: slot1BaseText
-                    text: root.getLyricText(root.displayIndex)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 28
-                    font.weight: Font.Bold
-                    visible: false
-                }
+                // Syllable Mode: Real AppleMusicWordFlow engine (accurate physics, wave lift, phosphor bloom)
+                Loader {
+                    id: activeWordFlowLoader
+                    anchors.fill: parent
+                    active: root.currentLineHasWords
+                    visible: active
 
-                // 1. Pending Unsung Text
-                Text {
-                    id: slot1PendingText
-                    text: slot1BaseText.text
-                    font: slot1BaseText.font
-                    color: root.colPendingText
-                    elide: Text.ElideRight
-                    width: parent.width
-                    style: Text.Outline
-                    styleColor: root.colShadowAmb
-                    visible: !rollAnimation.running || (slot1WipeClip.width < parent.width)
-                }
-
-                // 2. Sung Text (Clean White #ffffff) - smoothly lerps to root.colPendingText during roll animation
-                Item {
-                    id: slot1WipeClip
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: {
-                        if (rollAnimation.running || root.lineProgress >= 0.99) return parent.width;
-                        if (root.activeCharIndex < 0) return 0;
-                        return (root.activeChar === " ") ? (root.activeCharX + root.activeCharW) : root.activeCharX;
+                    sourceComponent: Component {
+                        AppleMusicWordFlow {
+                            width: slot1Item.width
+                            words: root.currentLineWords
+                            currentTime: root.currentTime
+                            isLineActive: true
+                            fontSize: 28
+                            fontFamily: Theme.fontFamily
+                            fontWeight: Font.Bold
+                            accentColor: root.colHighlight
+                        }
                     }
-                    clip: true
-                    visible: width > 0
+                }
+
+                // Fallback Mode: For LRC lines without word timestamps (isSynthetic)
+                Item {
+                    id: activeFallbackItem
+                    anchors.fill: parent
+                    visible: !root.currentLineHasWords
 
                     Text {
-                        text: slot1BaseText.text
-                        font: slot1BaseText.font
-                        color: {
-                            if (rollAnimation.running) {
-                                var p = slot1Item.rollProgress;
-                                var baseR = root.colPendingText.r;
-                                var baseG = root.colPendingText.g;
-                                var baseB = root.colPendingText.b;
-                                var r = 1.0 - (1.0 - baseR) * p;
-                                var g = 1.0 - (1.0 - baseG) * p;
-                                var b = 1.0 - (1.0 - baseB) * p;
-                                return Qt.rgba(r, g, b, 1.0);
-                            }
-                            return "#ffffff";
-                        }
-                        width: slot1BaseText.width
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.getLyricText(root.displayIndex)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 28
+                        font.weight: Font.Bold
+                        color: "#ffffff"
+                        elide: Text.ElideRight
+                        width: parent.width
                         style: Text.Outline
                         styleColor: root.colShadowAmb
-                    }
-                }
-
-                // 3. SINGLE ACTIVE CHARACTER: Gradually illuminating from root.colPendingText into white phosphorescent glow
-                Item {
-                    id: singleActiveCharContainer
-                    x: root.activeCharX
-                    y: 0
-                    width: Math.max(1, root.activeCharW)
-                    height: slot1Item.height
-                    visible: !rollAnimation.running && root.activeChar !== "" && root.activeChar !== " " && root.lineProgress > 0.001 && root.lineProgress < 0.99
-                    z: 10
-
-                    readonly property real charProgress: {
-                        if (root.activeCharW <= 0) return 0.0;
-                        var playheadX = slot1BaseText.contentWidth * root.lineProgress;
-                        return Math.min(1.0, Math.max(0.0, (playheadX - root.activeCharX) / root.activeCharW));
-                    }
-
-                    readonly property real glowIntensity: Math.min(1.0, charProgress * 1.8)
-
-                    readonly property color charColor: {
-                        var baseR = root.colPendingText.r;
-                        var baseG = root.colPendingText.g;
-                        var baseB = root.colPendingText.b;
-                        var r = baseR + (1.0 - baseR) * charProgress;
-                        var g = baseG + (1.0 - baseG) * charProgress;
-                        var b = baseB + (1.0 - baseB) * charProgress;
-                        return Qt.rgba(r, g, b, 1.0);
-                    }
-
-                    Text {
-                        id: singleGlyphSource
-                        text: root.activeChar
-                        font: slot1BaseText.font
-                        color: "#ffffff"
-                        opacity: 0.01
-                    }
-
-                    MultiEffect {
-                        source: singleGlyphSource
-                        anchors.fill: singleGlyphSource
-                        shadowEnabled: true
-                        shadowColor: "#ffffff"
-                        shadowBlur: 0.85
-                        shadowOpacity: 1.0
-                        blurEnabled: true
-                        blur: 0.50
-                        blurMax: 16
-                        opacity: singleActiveCharContainer.glowIntensity * 0.95
-                    }
-
-                    MultiEffect {
-                        source: singleGlyphSource
-                        anchors.fill: singleGlyphSource
-                        shadowEnabled: true
-                        shadowColor: "#ffffff"
-                        shadowBlur: 0.40
-                        shadowOpacity: 1.0
-                        blurEnabled: true
-                        blur: 0.20
-                        blurMax: 8
-                        opacity: singleActiveCharContainer.glowIntensity * 1.0
-                    }
-
-                    Text {
-                        text: root.activeChar
-                        font: slot1BaseText.font
-                        color: singleActiveCharContainer.charColor
-                        style: Text.Outline
-                        styleColor: Qt.rgba(1.0, 1.0, 1.0, singleActiveCharContainer.glowIntensity * 0.9)
                     }
                 }
             }
