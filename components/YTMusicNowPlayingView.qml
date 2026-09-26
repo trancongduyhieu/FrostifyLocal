@@ -373,11 +373,12 @@ Item {
         var songPath = (track && (track.path || track.file_path || track.filePath)) ? (track.path || track.file_path || track.filePath) : "";
 
         if (songTitle !== "") {
+            var songDur = root.totalDuration > 1 ? String(Math.round(root.totalDuration)) : "";
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",
                 root.appDir + "/backend/lyrics_helper.py",
-                songTitle, songArtist, songVid, songPath
+                songTitle, songArtist, songVid, songPath, songDur
             ];
             lyricsProc.running = true;
         } else {

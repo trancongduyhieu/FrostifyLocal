@@ -110,12 +110,14 @@ Rectangle {
         var songVid = (track && track.videoId) ? track.videoId : "";
         var songPath = (track && (track.path || track.file_path || track.filePath)) ? (track.path || track.file_path || track.filePath) : "";
         if (songTitle !== "") {
-            console.log("Fetching lyrics for track:", songTitle, "by", songArtist);
+            var songDur = (root.track && root.track.duration && !isNaN(Number(root.track.duration)))
+                ? String(Math.round(Number(root.track.duration))) : "";
+            console.log("Fetching lyrics for track:", songTitle, "by", songArtist, "dur:", songDur);
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",
                 root.appDir + "/backend/lyrics_helper.py",
-                songTitle, songArtist, songVid, songPath
+                songTitle, songArtist, songVid, songPath, songDur
             ];
             lyricsProc.running = true;
         }
