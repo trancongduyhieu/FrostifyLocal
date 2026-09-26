@@ -268,7 +268,7 @@ PanelWindow {
             currentTrack: root.currentTrack
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
-            colPendingText: root.colDeadText
+            colPendingText: "#a0a5b5"
             colShadowDir: root.colShadowDir
             colShadowAmb: root.colShadowAmb
             visibleLinesCount: 5

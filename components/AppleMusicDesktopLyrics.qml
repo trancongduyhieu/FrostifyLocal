@@ -21,7 +21,7 @@ Item {
     property color colShadowDir: "#a6020305"
     property color colShadowAmb: "#66000000"
 
-    // Parametric Multi-Line Configuration (Easily switch between 3, 5, 7 lines)
+    // 5 Visible Lines Layout (Slot 0: Prev, Slot 1: Active, Slots 2..4: Upcoming)
     property int visibleLinesCount: 5
 
     // Sizing constants
@@ -29,7 +29,7 @@ Item {
     readonly property int lineGap: 14
     readonly property int slotHeight: lineHeight + lineGap // 60px
 
-    implicitHeight: slotHeight * visibleLinesCount // 300px for 5 lines
+    implicitHeight: slotHeight * visibleLinesCount // 300px
     implicitWidth: 880
 
     visible: root.activeLyrics && root.activeLyrics.length > 0 && root.currentLyricIndex >= 0
@@ -38,287 +38,192 @@ Item {
     // Synchronized Timing Engine
     // =========================================================================
     property int currentLyricIndex: -1
-    property real currentLineStart: 0.0
-    property real currentLineEnd: 0.0
-    property real lineProgress: 0.0
-
-    // Display index used for smooth rolling slide animation
-    property int displayIndex: -1
-    property real slideOffsetY: 0.0
-
-    // Current line data and word-level timing resolution
-    function getCurrentLineData(idx) {
-        if (!root.activeLyrics || idx < 0 || idx >= root.activeLyrics.length) return null;
-        return root.activeLyrics[idx];
-    }
-
-    readonly property var currentLineObj: getCurrentLineData(root.displayIndex)
-    readonly property var currentLineWords: (currentLineObj && currentLineObj.words) ? currentLineObj.words : []
-    readonly property bool currentLineHasWords: !!(currentLineObj && currentLineObj.hasWords && !currentLineObj.isSynthetic && currentLineWords.length > 0)
+    property int prevLyricIndex: -1
 
     onCurrentTimeChanged: updateProgress()
     onActiveLyricsChanged: {
+        currentLyricIndex = -1;
+        prevLyricIndex = -1;
         updateProgress();
-        displayIndex = currentLyricIndex;
+        if (currentLyricIndex >= 0) {
+            scrollBehavior.enabled = false;
+            lyricsList.contentY = (currentLyricIndex - 1) * root.slotHeight;
+            scrollBehavior.enabled = true;
+        }
+    }
+
+    Component.onCompleted: {
+        updateProgress();
+        if (currentLyricIndex >= 0) {
+            scrollBehavior.enabled = false;
+            lyricsList.contentY = (currentLyricIndex - 1) * root.slotHeight;
+            scrollBehavior.enabled = true;
+        }
     }
 
     function updateProgress() {
         if (!activeLyrics || activeLyrics.length === 0) {
             currentLyricIndex = -1;
-            displayIndex = -1;
-            lineProgress = 0.0;
             return;
         }
 
+        var cur = root.currentTime;
         var idx = -1;
         for (var i = 0; i < activeLyrics.length; i++) {
-            var startTime = activeLyrics[i].time;
-            var nextTime = (i + 1 < activeLyrics.length) ? activeLyrics[i + 1].time : (startTime + 5.0);
-            if (currentTime >= startTime && currentTime < nextTime) {
+            var t = activeLyrics[i].time;
+            var nextT = (i + 1 < activeLyrics.length) ? activeLyrics[i + 1].time : 999999;
+            if (cur >= t && cur < nextT) {
                 idx = i;
-                currentLineStart = startTime;
-                currentLineEnd = nextTime;
-                var duration = Math.max(0.4, nextTime - startTime);
-                lineProgress = Math.min(1.0, Math.max(0.0, (currentTime - startTime) / duration));
                 break;
             }
         }
+        if (idx === -1 && cur < activeLyrics[0].time) {
+            idx = 0;
+        }
 
         if (idx !== currentLyricIndex) {
-            var oldIdx = currentLyricIndex;
+            var old = currentLyricIndex;
+            prevLyricIndex = old;
             currentLyricIndex = idx;
 
-            if (idx === oldIdx + 1 && displayIndex === oldIdx) {
-                // Advance by exactly 1 line -> Trigger Smooth Apple Glide rolling animation!
-                rollAnimation.restart();
-            } else {
-                // Seek / skip -> snap directly without animation
-                rollAnimation.stop();
-                slideOffsetY = 0.0;
-                displayIndex = idx;
+            if (idx >= 0) {
+                var targetY = (idx - 1) * root.slotHeight;
+                if (old >= 0 && Math.abs(idx - old) === 1) {
+                    // Consecutive line change -> smooth Apple Bezier glide!
+                    lyricsList.contentY = targetY;
+                } else {
+                    // Big jump (seek or initial load) -> instant snap without animation
+                    scrollBehavior.enabled = false;
+                    lyricsList.contentY = targetY;
+                    scrollBehavior.enabled = true;
+                }
             }
         }
     }
 
-    NumberAnimation {
-        id: rollAnimation
-        target: root
-        property: "slideOffsetY"
-        from: 0
-        to: -root.slotHeight
-        duration: 450
-        easing.type: Easing.OutCubic
-        onFinished: {
-            root.displayIndex = root.currentLyricIndex;
-            root.slideOffsetY = 0.0;
-        }
-    }
-
-    // Helper functions to get text safely
-    function getLyricText(index) {
-        if (!activeLyrics || index < 0 || index >= activeLyrics.length) return "";
-        return activeLyrics[index].text || "";
-    }
-
-    // Mathematical Optical Depth-of-Field Formulas
-    function calcBaseOpacity(s) {
-        if (s <= 1) return 1.0;
-        if (s === 2) return 0.58;
-        return Math.max(0.14, 0.58 - 0.20 * (s - 2));
-    }
-
-    function calcBaseBlur(s) {
-        if (s <= 1) return 0.0;
-        if (s === 2) return 0.35;
-        return Math.min(0.85, 0.35 + 0.25 * (s - 2));
-    }
-
-    function calcBaseScale(s) {
-        if (s <= 2) return 1.0;
-        if (s === 3) return 0.93;
-        if (s === 4) return 0.84;
-        return Math.max(0.70, 0.84 - 0.09 * (s - 4));
-    }
-
     // =========================================================================
-    // Rolling Slots Viewport (Pure Presentation)
+    // Native 5-Line Lyrics ListView Engine
+    // Active line sits permanently at Slot 1 (y = root.slotHeight = 60px)
     // =========================================================================
-    Item {
+    ListView {
+        id: lyricsList
         anchors.fill: parent
-        clip: false
+        clip: true
+        interactive: false
+        model: root.activeLyrics
+        spacing: root.lineGap
+        topMargin: root.slotHeight
+        bottomMargin: root.slotHeight * 6
+        boundsBehavior: Flickable.StopAtBounds
+        highlightRangeMode: ListView.NoHighlightRange
+        currentIndex: root.currentLyricIndex
 
-        Item {
-            id: rollingContent
-            x: 0
-            y: root.slideOffsetY
-            width: parent.width
-            height: root.slotHeight * (root.visibleLinesCount + 1)
+        // AMLL-accurate scroll animation: cubic-bezier(0.4, 0, 0.2, 1)
+        Behavior on contentY {
+            id: scrollBehavior
+            NumberAnimation {
+                id: scrollAnim
+                duration: 480
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0, 1.0, 1.0]
+            }
+        }
 
-            // -----------------------------------------------------------------
-            // Slot 0: Previous line (Frosted Glass Optical Blur)
-            // -----------------------------------------------------------------
-            Item {
-                id: slot0Item
-                x: 0
-                y: 0
-                width: parent.width
-                height: root.lineHeight
-                visible: opacity > 0.01
-                opacity: rollAnimation.running ? Math.max(0.0, 0.58 * (1.0 - slot1Item.rollProgress)) : 0.58
+        delegate: Item {
+            id: lyricRow
+            width: lyricsList.width
+            height: root.lineHeight
+            transformOrigin: Item.Left
 
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: 0.35
-                    blurMax: 20
-                }
+            readonly property int dist: index - root.currentLyricIndex
+            readonly property bool isCurrent: dist === 0
+            readonly property bool isHeldNoteActive: dist === -1 && flowLoader.item !== null && flowLoader.item.hasActiveHeldWord
+            readonly property bool hasWords: !!(modelData && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0)
 
-                Text {
-                    id: slot0Text
-                    text: root.getLyricText(root.displayIndex - 1)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 28
-                    font.weight: Font.Bold
-                    color: root.colPendingText
-                    elide: Text.ElideRight
-                    width: parent.width
-                    style: Text.Outline
-                    styleColor: root.colShadowAmb
-                }
+            // ── Optical Depth-of-Field Formulas ──────────────────────────────
+            readonly property real targetOpacity: {
+                if (isCurrent || isHeldNoteActive) return 1.0;
+                if (dist === -1 || dist === 1) return 0.58;
+                if (dist === 2) return 0.38;
+                if (dist === 3) return 0.18;
+                return 0.0;
             }
 
-            // -----------------------------------------------------------------
-            // Slot 1: Active Line — Driven by AppleMusicWordFlow Engine
-            // -----------------------------------------------------------------
-            Item {
-                id: slot1Item
-                x: 0
-                y: root.slotHeight
-                width: parent.width
-                height: root.lineHeight
+            readonly property real targetScale: {
+                if (isCurrent || isHeldNoteActive || dist === 1 || dist === -1) return 1.0;
+                if (dist === 2) return 0.93;
+                if (dist === 3) return 0.84;
+                return 0.75;
+            }
 
-                // Normalized rolling animation progress (0.0 at rest, 0.0 -> 1.0 during glide)
-                readonly property real rollProgress: rollAnimation.running ? Math.min(1.0, Math.max(0.0, -root.slideOffsetY / root.slotHeight)) : 0.0
-                readonly property real rollBlur: rollProgress * 0.35
+            readonly property real targetBlur: {
+                if (isCurrent || isHeldNoteActive) return 0.0;
+                if (dist === -1 || dist === 1) return 0.35;
+                if (dist === 2) return 0.60;
+                return 0.85;
+            }
 
-                layer.enabled: rollBlur > 0.01
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: slot1Item.rollBlur
-                    blurMax: 20
-                }
+            opacity: targetOpacity
+            scale: targetScale
+            visible: dist >= -1 && dist <= 4 && opacity > 0.01
 
-                opacity: rollAnimation.running ? Math.max(0.58, 1.0 - 0.42 * rollProgress) : 1.0
+            Behavior on opacity {
+                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+            }
+            Behavior on scale {
+                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+            }
 
-                // Syllable Mode: Real AppleMusicWordFlow engine (accurate physics, wave lift, phosphor bloom)
-                Loader {
-                    id: activeWordFlowLoader
-                    anchors.fill: parent
-                    active: root.currentLineHasWords
-                    visible: active
+            // Depth of field blur layer (disabled on active line for zero FBO overhead)
+            layer.enabled: targetBlur > 0.01 && dist >= -1 && dist <= 3
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: lyricRow.targetBlur
+                blurMax: 32
+            }
 
-                    sourceComponent: Component {
-                        AppleMusicWordFlow {
-                            width: slot1Item.width
-                            words: root.currentLineWords
-                            currentTime: root.currentTime
-                            isLineActive: true
-                            fontSize: 28
-                            fontFamily: Theme.fontFamily
-                            fontWeight: Font.Bold
-                            accentColor: root.colHighlight
-                        }
-                    }
-                }
+            // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
+            // Loads ONLY for genuine syllable lines (hasWords) around active line.
+            // Starts with words dim (#757a88, layer 1) and lights up word-by-word into white bloom (layer 2).
+            Loader {
+                id: flowLoader
+                anchors.fill: parent
+                active: lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
+                visible: lyricRow.isCurrent || lyricRow.isHeldNoteActive
 
-                // Fallback Mode: For LRC lines without word timestamps (isSynthetic)
-                Item {
-                    id: activeFallbackItem
-                    anchors.fill: parent
-                    visible: !root.currentLineHasWords
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.getLyricText(root.displayIndex)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 28
-                        font.weight: Font.Bold
-                        color: "#ffffff"
-                        elide: Text.ElideRight
-                        width: parent.width
-                        style: Text.Outline
-                        styleColor: root.colShadowAmb
+                sourceComponent: Component {
+                    AppleMusicWordFlow {
+                        width: lyricRow.width
+                        words: (modelData && modelData.words) ? modelData.words : []
+                        currentTime: root.currentTime
+                        isLineActive: lyricRow.isCurrent
+                        fontSize: 28
+                        fontFamily: Theme.fontFamily
+                        fontWeight: Font.Bold
+                        accentColor: root.colHighlight
                     }
                 }
             }
 
-            // -----------------------------------------------------------------
-            // Slots 2..N + Buffer: Parametric Upcoming Lines (Optical DoF Depth of Field)
-            // -----------------------------------------------------------------
-            Repeater {
-                id: upcomingSlotsRepeater
-                model: root.visibleLinesCount // E.g., for 5 lines, creates slots 2, 3, 4, 5 (buffer)
+            // ── 2. Static Typography ─────────────────────────────────────────
+            // Exclusively visible when flowLoader is NOT visible (upcoming, previous, or plain LRC).
+            // CANNOT collide or overlap with AppleMusicWordFlow!
+            Text {
+                id: staticTxt
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !flowLoader.visible
+                text: (modelData && modelData.text) ? modelData.text : ""
+                font.family: Theme.fontFamily
+                font.pixelSize: 28
+                font.weight: Font.Bold
+                color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
+                elide: Text.ElideRight
+                width: parent.width
+                style: Text.Outline
+                styleColor: root.colShadowAmb
 
-                Item {
-                    id: slotItem
-                    readonly property int slotIndex: index + 2
-                    readonly property bool isBufferSlot: slotIndex > root.visibleLinesCount
-
-                    x: 0
-                    y: root.slotHeight * slotIndex
-                    width: rollingContent.width
-                    height: root.lineHeight
-                    transformOrigin: Item.Left
-                    visible: (!isBufferSlot || rollAnimation.running) && opacity > 0.01
-
-                    // Base values at rest
-                    readonly property real baseOp: root.calcBaseOpacity(slotIndex)
-                    readonly property real prevOp: root.calcBaseOpacity(slotIndex - 1)
-
-                    readonly property real baseBl: root.calcBaseBlur(slotIndex)
-                    readonly property real prevBl: root.calcBaseBlur(slotIndex - 1)
-
-                    readonly property real baseSc: root.calcBaseScale(slotIndex)
-                    readonly property real prevSc: root.calcBaseScale(slotIndex - 1)
-
-                    // Dynamic interpolation during roll glide animation
-                    opacity: {
-                        if (isBufferSlot) {
-                            return rollAnimation.running ? Math.min(baseOp, baseOp * slot1Item.rollProgress) : 0.0;
-                        }
-                        return rollAnimation.running ? (baseOp + (prevOp - baseOp) * slot1Item.rollProgress) : baseOp;
-                    }
-
-                    scale: {
-                        if (isBufferSlot) {
-                            return 0.75 + 0.09 * slot1Item.rollProgress;
-                        }
-                        return rollAnimation.running ? (baseSc + (prevSc - baseSc) * slot1Item.rollProgress) : baseSc;
-                    }
-
-                    readonly property real currentBlur: {
-                        if (isBufferSlot) return 0.85;
-                        return rollAnimation.running ? (baseBl + (prevBl - baseBl) * slot1Item.rollProgress) : baseBl;
-                    }
-
-                    layer.enabled: currentBlur > 0.01
-                    layer.effect: MultiEffect {
-                        blurEnabled: true
-                        blur: slotItem.currentBlur
-                        blurMax: 32
-                    }
-
-                    Text {
-                        text: root.getLyricText(root.displayIndex + (slotItem.slotIndex - 1))
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 28
-                        font.weight: Font.Bold
-                        color: root.colPendingText
-                        elide: Text.ElideRight
-                        width: parent.width
-                        style: Text.Outline
-                        styleColor: root.colShadowAmb
-                    }
+                Behavior on color {
+                    ColorAnimation { duration: 180 }
                 }
             }
         }
