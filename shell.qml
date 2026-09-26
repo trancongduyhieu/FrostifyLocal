@@ -511,7 +511,9 @@ Scope {
         command: ["python3", "-u", win.appDir + "/backend/auth_server.py"]
         running: true
         onExited: (exitCode, exitStatus) => {
-            restartAuthServerTimer.restart();
+            if (exitCode !== 0) {
+                restartAuthServerTimer.restart();
+            }
         }
     }
 
@@ -530,35 +532,7 @@ Scope {
         id: radioProc
         stdout: SplitParser {
             splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var arr = JSON.parse(data);
-                    if (Array.isArray(arr) && arr.length > 0) {
-                        var userQueued = [];
-                        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-                        if (curIdx >= 0 && curIdx < win.currentTracks.length - 1) {
-                            userQueued = win.currentTracks.slice(curIdx + 1);
-                        }
-                        var filteredRadio = arr.filter(rt => !win.isSameTrack(rt, win.currentTrack) && !userQueued.some(uq => win.isSameTrack(uq, rt)));
-                        var taggedRadio = filteredRadio.map(function(item) {
-                            var copy = Object.assign({}, item);
-                            copy.isRadioSuggestion = true;
-                            return copy;
-                        });
-
-                        if (win.playingPlaylistId) {
-                            // When playing a custom playlist: preserve playlist tracks first!
-                            var plTracks = win.currentTracks.filter(function(t) { return !t.isRadioSuggestion; });
-                            win.currentTracks = plTracks.concat(taggedRadio);
-                        } else {
-                            var base = win.currentTrack ? [win.currentTrack] : [];
-                            win.currentTracks = base.concat(userQueued).concat(taggedRadio);
-                        }
-                    }
-                } catch(e) {
-                    console.log("radioProc error:", e);
-                }
-            }
+            onRead: data => PlaybackEngine.handleRadioResponse(win, data)
         }
     }
 
@@ -965,16 +939,7 @@ Scope {
     }
 
     function trackPlayback(trk) {
-        if (!win.syncHistoryToGoogle || !trk) return;
-        var vid = trk.videoId || trk.path || "";
-        var title = trk.title || trk.name || "";
-        var artist = trk.artist || "";
-        playbackTrackingProc.running = false;
-        playbackTrackingProc.command = [
-            "python3", "-u", win.appDir + "/backend/ytmusic_helper.py",
-            "track_playback", vid, title, artist
-        ];
-        playbackTrackingProc.running = true;
+        PlaybackEngine.trackPlayback(win, trk, playbackTrackingProc);
     }
 
     function onPlaybackTracked(res) {
@@ -1120,15 +1085,7 @@ Scope {
     }
 
     function isSameTrack(a, b) {
-        if (!a || !b) return false;
-        if (a.path && b.path && a.path === b.path) return true;
-        var vidA = a.videoId || (a.path && a.path.startsWith("ytdl://") ? a.path.replace("ytdl://", "") : "");
-        var vidB = b.videoId || (b.path && b.path.startsWith("ytdl://") ? b.path.replace("ytdl://", "") : "");
-        if (vidA && vidB && vidA === vidB) return true;
-        var nameA = a.title || a.name || "";
-        var nameB = b.title || b.name || "";
-        if (nameA && nameB && nameA === nameB && a.artist && b.artist && a.artist === b.artist) return true;
-        return false;
+        return PlaybackEngine.isSameTrack(a, b);
     }
 
     function isLocalPathExisting(p) {
@@ -1140,189 +1097,11 @@ Scope {
     }
 
     function findLocalDownloadedTrack(trk) {
-        if (!trk) return null;
-        var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        if (rVid && String(rVid).startsWith("yt_")) rVid = String(rVid).replace(/^yt_/, "");
-
-        if (trk.path && win.isLocalPathExisting(trk.path)) {
-            return trk;
-        }
-
-        var dlRef = (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager : ((typeof DownloadManager !== "undefined") ? DownloadManager : null);
-        if (rVid && dlRef && dlRef.downloadTasks) {
-            var dTask = dlRef.downloadTasks[rVid];
-            if (dTask && (dTask.state === 3 || dTask.status === "completed") && dTask.path && win.isLocalPathExisting(dTask.path)) {
-                return {
-                    path: dTask.path,
-                    videoId: rVid,
-                    title: dTask.title || trk.title || trk.name || "",
-                    name: dTask.title || trk.title || trk.name || "",
-                    artist: dTask.artist || trk.artist || "",
-                    image: trk.image || trk.cover || dTask.thumbnail || ""
-                };
-            }
-        }
-
-        var tName = String(trk.title || trk.name || "").toLowerCase().trim();
-        var tArtist = String(trk.artist || "").toLowerCase().trim();
-        if (win.allTracks && win.allTracks.length > 0) {
-            for (var i = 0; i < win.allTracks.length; i++) {
-                var lt = win.allTracks[i];
-                if (!lt || !lt.path || !win.isLocalPathExisting(lt.path)) continue;
-                var ltVid = lt.videoId || "";
-                if (rVid && (ltVid === rVid || (lt.image && String(lt.image).indexOf(rVid) !== -1))) {
-                    return lt;
-                }
-                var ltName = String(lt.title || lt.name || "").toLowerCase().trim();
-                var ltArtist = String(lt.artist || "").toLowerCase().trim();
-                if (tName && ltName === tName && (!tArtist || !ltArtist || ltArtist.indexOf(tArtist) !== -1 || tArtist.indexOf(ltArtist) !== -1)) {
-                    return lt;
-                }
-            }
-        }
-        return null;
+        return PlaybackEngine.findLocalDownloadedTrack(win, trk);
     }
 
     function playOnlineTrack(trk, startRadio) {
-        if (!trk) return;
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.suggestTrackToHost(trk);
-            return;
-        }
-        if (!win.isSyncingFromFriend) {
-            win.pendingListenAlongSeekPosition = 0.0;
-            win.lastTrackSwitchTimestamp = Date.now();
-            win.lastLocalActionTimestamp = Date.now();
-        }
-        var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        if (rVid && rVid.startsWith("yt_")) {
-            rVid = rVid.replace(/^yt_/, "");
-        }
-        if (!rVid) {
-            if (trk.path && !trk.path.startsWith("ytdl://")) {
-                win.playTrack(trk);
-                return;
-            }
-            if (trk.title) {
-                var searchQuery = trk.title + (trk.artist ? (" " + trk.artist) : "");
-                var xhr = new XMLHttpRequest();
-                var searchUrl = "http://127.0.0.1:17890/api/filter_search?q=" + encodeURIComponent(searchQuery) + "&filter=songs";
-                xhr.open("GET", searchUrl, true);
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-                        try {
-                            var res = JSON.parse(xhr.responseText);
-                            if (Array.isArray(res) && res.length > 0 && (res[0].videoId || res[0].id)) {
-                                win.playOnlineTrack(res[0], startRadio);
-                            }
-                        } catch(e) {
-                            console.warn("Nutsty: fallback search parse error", e);
-                        }
-                    }
-                };
-                xhr.send();
-                return;
-            }
-            console.warn("Nutsty: playOnlineTrack called without valid videoId or local path", JSON.stringify(trk));
-            return;
-        }
-        if (!trk.videoId && rVid) {
-            trk.videoId = rVid;
-        }
-        if (!trk.path && rVid) {
-            trk.path = "ytdl://" + rVid;
-        }
-        if (!trk.image && trk.cover) {
-            trk.image = trk.cover;
-        }
-        if (win.isLoadingAudio && win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
-            // Already resolving / loading this track, do not spawn duplicate player process
-            return;
-        }
-        if (startRadio === undefined) startRadio = false;
-
-        // Check if this song is ALREADY downloaded locally (0ms playback priority!)
-        var localMatch = win.findLocalDownloadedTrack(trk);
-        var hasLocalFile = Boolean(localMatch && localMatch.path);
-
-        win.trackChangeTimestamp = Date.now();
-        win.postLoadGraceTimestamp = Date.now();
-        win.currentTrack = trk;
-        win.currentTime = 0.0;
-        win.isLoadingAudio = !hasLocalFile;
-        win.totalDuration = 0.0;
-        win.isPlaying = true;
-        if (win.currentView !== "search") {
-            win.showAmberolDetails = true;
-        } else {
-            win.showAmberolDetails = false;
-        }
-
-        if (win.syncHistoryToGoogle) {
-            win.trackPlayback(trk);
-        }
-
-        if (startRadio || !win.currentTracks || win.currentTracks.length === 0) {
-            win.currentTracks = [trk];
-        } else {
-            var foundIdx = -1;
-            for (var qi = 0; qi < win.currentTracks.length; qi++) {
-                if (win.isSameTrack(win.currentTracks[qi], trk)) {
-                    foundIdx = qi;
-                    break;
-                }
-            }
-            if (foundIdx === -1) {
-                win.currentTracks = [trk];
-            }
-        }
-
-        var streamPath = hasLocalFile ? localMatch.path : ("ytdl://" + rVid);
-        var tTitle = trk.title || trk.name || (localMatch ? (localMatch.title || localMatch.name || "") : "");
-        var tArtist = trk.artist || (localMatch ? (localMatch.artist || "") : "");
-        var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
-        win.syncNowPlaying(true);
-        if (!win.isSyncingFromFriend) {
-            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
-                for (var cli = 0; cli < win.activeCoListeners.length; cli++) {
-                    win.sendSocialEventFast("track_change", win.activeCoListeners[cli], { track: trk });
-                }
-            }
-            if (win.listeningAlongFriend && win.guestCanControlHost) {
-                var hostTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-                if (hostTarget) {
-                    win.sendSocialEventFast("track_change", hostTarget, { track: trk });
-                }
-            }
-        }
-
-        // Pre-warm the next track after 4s delay so current track has 100% bandwidth to start
-        if (win.currentTracks && win.currentTracks.length > 1) {
-            var curIdx = -1;
-            for (var ci = 0; ci < win.currentTracks.length; ci++) {
-                if (win.isSameTrack(win.currentTracks[ci], trk)) {
-                    curIdx = ci;
-                    break;
-                }
-            }
-            var nextIdx = (curIdx !== -1 && curIdx + 1 < win.currentTracks.length) ? (curIdx + 1) : 0;
-            var nextTrk = win.currentTracks[nextIdx];
-            var nextVid = (nextTrk && (nextTrk.videoId || (nextTrk.path && nextTrk.path.startsWith("ytdl://"))))
-                ? (nextTrk.videoId || nextTrk.path.replace("ytdl://", ""))
-                : "";
-            if (nextVid) {
-                prewarmTimer.targetVid = nextVid;
-                prewarmTimer.restart();
-            }
-        }
-
-        if ((startRadio || (!win.playingPlaylistId && (!win.currentTracks || win.currentTracks.length <= 1))) && rVid) {
-            radioProc.running = false;
-            radioProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "radio", rVid];
-            radioProc.running = true;
-        }
-        pollTimer.restart();
+        return PlaybackEngine.playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTimer);
     }
 
     function startRadioFromTrack(trk) {
@@ -1434,6 +1213,9 @@ Scope {
             win.selectedCustomPlaylist = null;
             win.currentView = "library";
             mainGrid.downloadsSubTab = "playlists";
+        }
+        if (win.favoritePlaylists) {
+            win.favoritePlaylists = win.favoritePlaylists.filter(p => String(p.id || p.playlistId || p.browseId) !== String(plId));
         }
         refreshPlaylistsTimer.restart();
         win.showToast(I18n.tr("Đã xóa danh sách phát", "Playlist deleted"));
@@ -2265,7 +2047,14 @@ Scope {
                             }
                             onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
                             onCreatePlaylistRequested: trks => createPlaylistModal.openCreate(trks)
-                            onPlaylistSelected: pl => win.openCustomPlaylistDetail(pl)
+                            onPlaylistSelected: pl => {
+                                var isCustom = pl && (pl.isCustom === true || pl.type === "custom" || String(pl.id || pl.playlistId || "").startsWith("custom_pl_"));
+                                if (isCustom) {
+                                    win.openCustomPlaylistDetail(pl);
+                                } else {
+                                    win.loadPlaylistTracks(pl);
+                                }
+                            }
                             onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
                             onEditPlaylistRequested: pl => createPlaylistModal.openEdit(pl)
                             onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
@@ -2790,6 +2579,7 @@ Scope {
         PlaylistTrackSearchModal {
             id: playlistTrackSearchModal
             accentColor: win.accentColor
+            backgroundSourceItem: glassCompositeBackdrop
             currentTrack: win.currentTrack
             isPlaying: win.isPlaying
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
@@ -3215,227 +3005,39 @@ Scope {
     }
 
     function playTrack(trk) {
-        if (!trk) return;
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.suggestTrackToHost(trk);
-            return;
-        }
-        if (!win.isSyncingFromFriend) {
-            win.pendingListenAlongSeekPosition = 0.0;
-            win.lastTrackSwitchTimestamp = Date.now();
-            win.lastLocalActionTimestamp = Date.now();
-        }
-        if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
-            return;
-        }
-        win.trackChangeTimestamp = Date.now();
-        win.postLoadGraceTimestamp = Date.now(); // Grace period bắt đầu ngay (bài local phát tức thì)
-        win.currentTrack = trk;
-        win.currentTime = 0.0;
-        win.isLoadingAudio = false;
-        win.totalDuration = (trk.durationMs || 0) / 1000.0;
-        win.isPlaying = true;
-        if (win.currentView !== "search") {
-            win.isNowPlayingOpen = true;
-        } else {
-            win.isNowPlayingOpen = false;
-        }
-
-        if (win.syncHistoryToGoogle) {
-            win.trackPlayback(trk);
-        }
-
-        var tTitle = trk.title || trk.name || "";
-        var tArtist = trk.artist || "";
-        var tImage = trk.image || "";
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage]);
-        win.syncNowPlaying(true);
-        if (!win.isSyncingFromFriend) {
-            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
-                for (var cli2 = 0; cli2 < win.activeCoListeners.length; cli2++) {
-                    win.sendSocialEventFast("track_change", win.activeCoListeners[cli2], { track: trk });
-                }
-            }
-            if (win.listeningAlongFriend && win.guestCanControlHost) {
-                var hostTarget2 = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-                if (hostTarget2) {
-                    win.sendSocialEventFast("track_change", hostTarget2, { track: trk });
-                }
-            }
-        }
-        pollTimer.restart();
+        return PlaybackEngine.playTrack(win, trk, pollTimer);
     }
 
     function togglePlay() {
-        if (!win.currentTrack) return;
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.showToast(I18n.tr("Host đã khóa quyền điều khiển chung", "Host disabled shared control"));
-            return;
-        }
-        var targetPath = win.currentTrack.path || "";
-        var isOnline = (targetPath && targetPath.startsWith("ytdl://")) || win.currentTrack.videoId;
-
-        if (win.isLoadingAudio) {
-            // User wants to cancel / pause while track is loading
-            win.isLoadingAudio = false;
-            win.isPlaying = false;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-            pollTimer.restart();
-            win.syncNowPlaying(true);
-            return;
-        }
-
-        if (!win.isPlaying) {
-            // User is pressing Play from paused/idle state
-            win.postLoadGraceTimestamp = Date.now();
-            if (isOnline && (win.currentTime === 0.0 || win.totalDuration === 0.0)) {
-                win.isLoadingAudio = true;
-                win.trackChangeTimestamp = Date.now();
-            }
-            win.isPlaying = true;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
-        } else {
-            // User is pressing Pause
-            win.isPlaying = false;
-            win.isLoadingAudio = false;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-        }
-
-        win.lastLocalActionTimestamp = Date.now();
-        win.syncNowPlaying(true);
-
-        if (!win.isSyncingFromFriend) {
-            var evType = win.isPlaying ? "play" : "pause";
-            if (win.listeningAlongFriend && win.guestCanControlHost) {
-                var hostPlayTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-                if (hostPlayTarget) {
-                    win.sendSocialEventFast(evType, hostPlayTarget);
-                }
-            }
-            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
-                for (var li = 0; li < win.activeCoListeners.length; li++) {
-                    win.sendSocialEventFast(evType, win.activeCoListeners[li]);
-                }
-            }
-        }
-
-        pollTimer.restart();
+        return PlaybackEngine.togglePlay(win, pollTimer);
     }
 
     function playNext() {
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
-            return;
-        }
-        if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
-            // Guard: sleep timer instructed to stop at end of current track
-            win.isSleepTimerActive = false;
-            win.sleepTimerFadeTriggered = false;
-            win.sleepTimerMode = "";
-            win.sleepTimerRemainingSeconds = 0;
-            win.isPlaying = false;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-            return;
-        }
-        if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
-        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-        if (curIdx === -1) return;
-        var nextIdx = 0;
-        if (win.isShuffle && win.currentTracks.length > 1) {
-            nextIdx = curIdx;
-            while (nextIdx === curIdx) {
-                nextIdx = Math.floor(Math.random() * win.currentTracks.length);
-            }
-        } else {
-            nextIdx = curIdx + 1;
-            if (nextIdx >= win.currentTracks.length) {
-                nextIdx = 0;
-            }
-        }
-        var nextTrk = win.currentTracks[nextIdx];
-        if (nextTrk) {
-            if ((nextTrk.path && nextTrk.path.startsWith("ytdl://")) || nextTrk.videoId) {
-                win.playOnlineTrack(nextTrk, false);
-            } else {
-                win.playTrack(nextTrk);
-            }
-        }
+        return PlaybackEngine.playNext(win);
     }
 
     function playPrev() {
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
-            return;
-        }
-        if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
-        if (win.currentTime > 3.0) {
-            win.seekAudio(0.0);
-            return;
-        }
-        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-        if (curIdx === -1) return;
-        var prevIdx = (curIdx - 1 + win.currentTracks.length) % win.currentTracks.length;
-        var prevTrk = win.currentTracks[prevIdx];
-        if (prevTrk) {
-            if ((prevTrk.path && prevTrk.path.startsWith("ytdl://")) || prevTrk.videoId) {
-                win.playOnlineTrack(prevTrk, false);
-            } else {
-                win.playTrack(prevTrk);
-            }
-        }
+        return PlaybackEngine.playPrev(win);
     }
 
     function seekLocalOnly(sec) {
-        win.currentTime = sec;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
+        return PlaybackEngine.seekLocalOnly(win, sec);
     }
 
     function seekAudio(sec) {
-        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-            win.showToast(I18n.tr("Host đã khóa quyền tua bài hát", "Host disabled seeking"));
-            return;
-        }
-        win.lastLocalActionTimestamp = Date.now();
-        win.currentTime = sec;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
-        win.syncNowPlaying(true);
-        if (!win.isSyncingFromFriend) {
-            if (win.listeningAlongFriend && win.guestCanControlHost) {
-                var hostSeekTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-                if (hostSeekTarget) {
-                    win.sendSocialEventFast("seek", hostSeekTarget, { position: sec });
-                }
-            }
-            if (win.activeCoListeners && win.activeCoListeners.length > 0) {
-                for (var si = 0; si < win.activeCoListeners.length; si++) {
-                    win.sendSocialEventFast("seek", win.activeCoListeners[si], { position: sec });
-                }
-            }
-        }
+        return PlaybackEngine.seekAudio(win, sec);
     }
 
     function setVolume(vol) {
-        win.volume = vol;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
+        return PlaybackEngine.setVolume(win, vol);
     }
 
     function startSleepTimer(seconds, mode) {
-        win.sleepTimerMode = mode;
-        if (mode === "end_of_track") {
-            win.sleepTimerRemainingSeconds = Math.max(0, Math.round(win.totalDuration - win.currentTime));
-        } else {
-            win.sleepTimerRemainingSeconds = seconds;
-        }
-        win.sleepTimerFadeTriggered = false;
-        win.isSleepTimerActive = true;
+        return PlaybackEngine.startSleepTimer(win, seconds, mode);
     }
 
     function cancelSleepTimer() {
-        win.isSleepTimerActive = false;
-        win.sleepTimerFadeTriggered = false;
-        win.sleepTimerRemainingSeconds = 0;
-        win.sleepTimerMode = "";
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "cancel_fade"]);
+        return PlaybackEngine.cancelSleepTimer(win);
     }
 
     Timer {
@@ -3476,143 +3078,27 @@ Scope {
     }
 
     function rateSong(vid, rating) {
-        if (!vid) return;
-        Quickshell.execDetached([
-            "python3",
-            win.appDir + "/backend/ytmusic_helper.py",
-            "rate_song", vid, rating
-        ]);
+        return PlaybackEngine.rateSong(win, vid, rating);
     }
 
     function handleDislikedTrack(trk) {
-        if (!trk) return;
-        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        if (vid) {
-            rateSong(vid, "DISLIKE");
-        }
-        // 1. Remove from current playback queue
-        var newQueue = [];
-        for (var i = 0; i < win.currentTracks.length; i++) {
-            var t = win.currentTracks[i];
-            var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
-            if (tVid !== vid) {
-                newQueue.push(t);
-            }
-        }
-        win.currentTracks = newQueue;
-
-        // 2. Remove from browsing tracks
-        var newBrowse = [];
-        for (var j = 0; j < win.browsingTracks.length; j++) {
-            var bt = win.browsingTracks[j];
-            var bVid = bt.videoId || (bt.path && bt.path.startsWith("ytdl://") ? bt.path.replace("ytdl://", "") : "");
-            if (bVid !== vid) {
-                newBrowse.push(bt);
-            }
-        }
-        win.browsingTracks = newBrowse;
-
-        // 3. Skip to next track immediately
-        win.playNext();
+        return PlaybackEngine.handleDislikedTrack(win, trk);
     }
 
     function insertTrackPlayNext(trk) {
-        if (!trk) return;
-
-        // If currently playing track is selected, do not duplicate or restart
-        if (win.isSameTrack(trk, win.currentTrack)) {
-            return;
-        }
-
-        if (!win.currentTracks || win.currentTracks.length === 0) {
-            if (win.currentTrack) {
-                win.currentTracks = [win.currentTrack, trk];
-            } else {
-                win.currentTracks = [trk];
-                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
-                else win.playTrack(trk);
-            }
-            return;
-        }
-
-        var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-        var insertAt = (curIdx >= 0) ? (curIdx + 1) : 1;
-        var updated = win.currentTracks.slice();
-        var dupIdx = updated.findIndex(t => win.isSameTrack(t, trk));
-        if (dupIdx >= 0) {
-            updated.splice(dupIdx, 1);
-            if (dupIdx < insertAt) insertAt--;
-        }
-        updated.splice(insertAt, 0, trk);
-        win.currentTracks = updated;
+        return PlaybackEngine.insertTrackPlayNext(win, trk);
     }
 
     function appendTrackToQueue(trk) {
-        if (!trk) return;
-        if (!win.currentTracks || win.currentTracks.length === 0) {
-            if (win.currentTrack) {
-                win.currentTracks = [win.currentTrack, trk];
-            } else {
-                win.currentTracks = [trk];
-                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) win.playOnlineTrack(trk, false);
-                else win.playTrack(trk);
-            }
-            return;
-        }
-        var updated = win.currentTracks.slice();
-        var dupIdx = updated.findIndex(t => win.isSameTrack(t, trk));
-        if (dupIdx >= 0) {
-            updated.splice(dupIdx, 1);
-        }
-        updated.push(trk);
-        win.currentTracks = updated;
+        return PlaybackEngine.appendTrackToQueue(win, trk);
     }
 
     function removeTrackFromQueue(trk) {
-        if (!trk || !win.currentTracks) return;
-        var idx = win.currentTracks.findIndex(t => win.isSameTrack(t, trk));
-        if (idx >= 0) {
-            var updated = win.currentTracks.slice();
-            updated.splice(idx, 1);
-            win.currentTracks = updated;
-        }
+        return PlaybackEngine.removeTrackFromQueue(win, trk);
     }
 
     function deleteLocalTrack(trk) {
-        if (!trk) return;
-        var p = trk.path || "";
-        var fn = trk.filename || "";
-        var title = trk.title || trk.name || "";
-
-        var wasPlaying = win.isPlaying;
-        var isCurrent = win.isSameTrack(win.currentTrack, trk);
-
-        // Remove from current queue first so indices and playlist stay consistent
-        win.currentTracks = win.currentTracks.filter(t => !win.isSameTrack(t, trk));
-
-        // Immediately update reactive arrays for 0ms UI update
-        win.allTracks = win.allTracks.filter(t => !win.isSameTrack(t, trk));
-        win.browsingTracks = win.browsingTracks.filter(t => !win.isSameTrack(t, trk));
-
-        // If the deleted track was loaded in the player
-        if (isCurrent) {
-            if (wasPlaying && win.currentTracks && win.currentTracks.length > 0) {
-                win.playNext();
-            } else {
-                win.isPlaying = false;
-                win.currentTrack = null;
-                win.currentTime = 0.0;
-                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
-            }
-        }
-
-        // Call backend/library.py to delete file, delete .lrc, and update library.json permanently
-        if (!p.startsWith("ytdl://") && (p || fn || title)) {
-            Quickshell.execDetached([
-                "python3", win.appDir + "/backend/library.py", "delete",
-                p, fn, title
-            ]);
-        }
+        return PlaybackEngine.deleteLocalTrack(win, trk);
     }
 
     function openTrackFolder(trk) {
@@ -3626,63 +3112,15 @@ Scope {
     }
 
     function shufflePlayBrowsing() {
-        var sourceTracks = (win.browsingTracks && win.browsingTracks.length > 0) ? win.browsingTracks : win.allTracks;
-        if (!sourceTracks || sourceTracks.length === 0) return;
-        var shuffled = sourceTracks.slice();
-        for (var i = shuffled.length - 1; i > 0; i--) {
-            var j = Math.floor(Math.random() * (i + 1));
-            var temp = shuffled[i];
-            shuffled[i] = shuffled[j];
-            shuffled[j] = temp;
-        }
-        win.currentTracks = shuffled;
-        if (win.currentView === "playlist") {
-            win.playingPlaylistId = win.activePlaylistId;
-            win.playingSourceTitle = win.mainSectionTitle;
-        } else {
-            win.playingPlaylistId = "";
-            win.playingSourceTitle = "";
-        }
-        var firstTrk = shuffled[0];
-        if (firstTrk && ((firstTrk.path && firstTrk.path.startsWith("ytdl://")) || firstTrk.videoId)) {
-            win.playOnlineTrack(firstTrk, false);
-        } else {
-            win.playTrack(firstTrk);
-        }
+        return PlaybackEngine.shufflePlayBrowsing(win);
     }
 
     function shufflePlayDownloads() {
-        win.shufflePlayBrowsing();
+        return PlaybackEngine.shufflePlayBrowsing(win);
     }
 
     function batchDeleteTracks(paths) {
-        if (!paths || paths.length === 0) return;
-        var pathSet = {};
-        for (var i = 0; i < paths.length; i++) {
-            pathSet[paths[i]] = true;
-        }
-
-        var currentDeleted = win.currentTrack && pathSet[win.currentTrack.path];
-
-        win.currentTracks = win.currentTracks.filter(t => !pathSet[t.path]);
-        win.allTracks = win.allTracks.filter(t => !pathSet[t.path]);
-        win.browsingTracks = win.browsingTracks.filter(t => !pathSet[t.path]);
-
-        if (currentDeleted) {
-            if (win.isPlaying && win.currentTracks.length > 0) {
-                win.playNext();
-            } else {
-                win.isPlaying = false;
-                win.currentTrack = null;
-                win.currentTime = 0.0;
-                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
-            }
-        }
-
-        Quickshell.execDetached([
-            "python3", win.appDir + "/backend/library.py", "batch_delete",
-            JSON.stringify(paths)
-        ]);
+        return PlaybackEngine.batchDeleteTracks(win, paths);
     }
 
     Process {
@@ -3988,7 +3426,7 @@ Scope {
 
     Timer {
         id: pollTimer
-        interval: win.isPlaying ? 120 : (win.isLoadingAudio ? 200 : 400)
+        interval: win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 800)
         running: true
         repeat: true
         onTriggered: {
@@ -4003,112 +3441,7 @@ Scope {
         id: statusProcess
         stdout: SplitParser {
             splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var s = JSON.parse(data);
-                    var elapsed = Date.now() - win.trackChangeTimestamp;
-
-                    if (win.isLoadingAudio) {
-                        // Giữ loading cho đến khi MPV bắt đầu phát bài mục tiêu (!s.is_loading)
-                        // HOẶC timeout 20s để tránh spinner treo vĩnh viễn nếu mạng rớt
-                        if (elapsed > 20000) {
-                            win.isLoadingAudio = false;
-                            win.isPlaying = false;
-                            return;
-                        }
-                        var hasStarted = (!s.is_loading || (s.time_pos && s.time_pos > 0.5) || s.is_playing) && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0));
-                        if (!hasStarted) {
-                            win.currentTime = 0.0;
-                            return;
-                        }
-                        // Bài đã thực sự bắt đầu phát!
-                        win.isLoadingAudio = false;
-                        win.postLoadGraceTimestamp = Date.now();
-                        win.isPlaying = true;
-                        win.currentTime = s.time_pos || 0.0;
-                        if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                        if (win.pendingListenAlongSeekPosition > 0) {
-                            var p = win.pendingListenAlongSeekPosition;
-                            win.pendingListenAlongSeekPosition = 0;
-                            win.seekLocalOnly(p);
-                            listenAlongSeekSafetyTimer.targetPos = p;
-                            listenAlongSeekSafetyTimer.restart();
-                        }
-                    } else {
-                        if (s.is_loading) {
-                            win.isLoadingAudio = true;
-                            win.trackChangeTimestamp = Date.now();
-                            return;
-                        }
-                        if (s.is_playing) {
-                            win.isPlaying = true;
-                        } else if (s.is_paused) {
-                            if (Date.now() - win.postLoadGraceTimestamp < 2500) {
-                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
-                            } else {
-                                win.isPlaying = false;
-                            }
-                        }
-                        // During brief file transitions when neither is_playing nor is_paused is true,
-                        // preserve win.isPlaying to avoid local bounce and false pause loops!
-                        if (s.time_pos !== undefined && s.time_pos > 0) {
-                            win.currentTime = s.time_pos;
-                        }
-                        if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
-                        if (win.pendingListenAlongSeekPosition > 0 && (s.is_playing || s.is_paused)) {
-                            var p2 = win.pendingListenAlongSeekPosition;
-                            win.pendingListenAlongSeekPosition = 0;
-                            win.seekLocalOnly(p2);
-                            listenAlongSeekSafetyTimer.targetPos = p2;
-                            listenAlongSeekSafetyTimer.restart();
-                        }
-                    }
-
-
-                    // Cold-start recovery
-                    if (!win.currentTrack && (s.is_playing || s.is_paused || (s.time_pos && s.time_pos > 0))) {
-                        if (s.filename && win.allTracks && win.allTracks.length > 0) {
-                            var matched = win.allTracks.find(t => t.path && t.path.endsWith(s.filename));
-                            if (matched) win.currentTrack = matched;
-                        }
-                        if (!win.currentTrack && sessionFileView.loaded && sessionFileView.text()) {
-                            try {
-                                var sTrack = JSON.parse(sessionFileView.text());
-                                if (sTrack && (sTrack.title || sTrack.name)) {
-                                    if (!sTrack.image && sTrack.artUrl) sTrack.image = sTrack.artUrl;
-                                    if (!sTrack.cover && sTrack.artUrl) sTrack.cover = sTrack.artUrl;
-                                    win.currentTrack = sTrack;
-                                }
-                            } catch(e) {}
-                        }
-                    }
-
-                    // High-precision fade trigger cho sleep timer
-                    if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track" && win.totalDuration > 5) {
-                        var remToEnd = win.totalDuration - win.currentTime;
-                        if (remToEnd <= 5.0 && remToEnd > 0.6 && !win.sleepTimerFadeTriggered) {
-                            win.sleepTimerFadeTriggered = true;
-                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", String(Math.max(1.0, remToEnd))]);
-                        }
-                    }
-
-                    // Auto-advance / Repeat khi hết bài
-                    if (!win.isLoadingAudio && win.isPlaying && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
-                        if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
-                            win.isSleepTimerActive = false;
-                            win.sleepTimerFadeTriggered = false;
-                            win.sleepTimerMode = "";
-                            win.sleepTimerRemainingSeconds = 0;
-                            win.isPlaying = false;
-                            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-                        } else if (win.isRepeat) {
-                            win.seekAudio(0.0);
-                        } else {
-                            win.playNext();
-                        }
-                    }
-                } catch(e) {}
-            }
+            onRead: data => PlaybackEngine.handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileView)
         }
     }
     } // end win (FloatingWindow)
@@ -4145,6 +3478,7 @@ Scope {
         function testSelectMode() { frostifyIpc.testSelectMode(); }
         function setDownloadsSubTab(tab: string) { frostifyIpc.setDownloadsSubTab(tab); }
         function setSortBy(s: string) { frostifyIpc.setSortBy(s); }
+        function toggleSortPopover() { frostifyIpc.toggleSortPopover(); }
         function toggleMaximize() { frostifyIpc.toggleMaximize(); }
         function togglePlay() { frostifyIpc.togglePlay(); }
         function playNext() { frostifyIpc.playNext(); }
@@ -4288,11 +3622,17 @@ Scope {
             }
         }
         function openPlaylistSearchModal() {
+            if (!win.selectedCustomPlaylist && win.customPlaylists && win.customPlaylists.length > 0) {
+                win.selectedCustomPlaylist = win.customPlaylists[0];
+            }
             if (win.selectedCustomPlaylist) {
                 playlistTrackSearchModal.openModal(win.selectedCustomPlaylist);
             }
         }
         function testPlaylistSearch(query: string) {
+            if (!win.selectedCustomPlaylist && win.customPlaylists && win.customPlaylists.length > 0) {
+                win.selectedCustomPlaylist = win.customPlaylists[0];
+            }
             if (win.selectedCustomPlaylist) {
                 playlistTrackSearchModal.openModal(win.selectedCustomPlaylist);
             }
@@ -4490,6 +3830,9 @@ Scope {
             win.currentView = "library";
             mainGrid.sectionTitle = "Downloads";
             mainGrid.sortBy = s;
+        }
+        function toggleSortPopover() {
+            mainGrid.toggleSortPopover();
         }
         function typeSearch(q: string) {
             win.visible = true;

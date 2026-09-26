@@ -15,8 +15,11 @@ python3 "$DIR/backend/auth_server.py" >/dev/null 2>&1 &
 # If git commit changed (e.g. after git pull) or --restart flag passed, restart running Quickshell instance
 if [ "$1" == "--restart" ] || { [ -n "$LAST_COMMIT" ] && [ "$CURRENT_COMMIT" != "$LAST_COMMIT" ]; }; then
     echo "Detected updated version ($CURRENT_COMMIT), restarting Nutsty UI..."
-    pkill -f "quickshell.*$DIR/shell.qml" >/dev/null 2>&1 || true
-    sleep 0.3
+    pkill -9 -f "quickshell.*$DIR/shell.qml" >/dev/null 2>&1 || true
+    while pgrep -f "quickshell.*$DIR/shell.qml" >/dev/null 2>&1; do
+        sleep 0.1
+    done
+    sleep 0.2
 fi
 
 echo "$CURRENT_COMMIT" > /tmp/nutsty_running_commit 2>/dev/null || true

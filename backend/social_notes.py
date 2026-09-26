@@ -1,178 +1,65 @@
 #!/usr/bin/env python3
 """
-Nutsty Friends Pulse & 24h Music Capsule Backend Client
-Manages friends list, posts 24h ephemeral notes, and fetches friends' notes.
+Nutsty Friends Pulse & 24h Music Capsule Backend Client (Forwarding Shim)
+Delegates directly to SocialRelayCore (Deep Module) for unified caching,
+identity resolution (SSOT #2), and event distribution.
 """
 
 import os
 import sys
 import json
 import time
-import urllib.request
-import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 try:
     from . import platform_compat as pc
+    from .social_relay_core import SOCIAL_RELAY_CORE
 except (ImportError, ValueError):
     import platform_compat as pc
+    from social_relay_core import SOCIAL_RELAY_CORE
 
 pc.configure_windows_ssl()
 
-# Default local/cloud relay URL for social sync
-DEFAULT_WORKER_URL = os.getenv("NUTSTY_WORKER_URL", "http://127.0.0.1:17890")
-COMMON_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Nutsty-Desktop/1.0"
 
 def get_profile_suffix() -> str:
-    """Hỗ trợ đa profile (NUTSTY_PROFILE) qua Single Source of Truth platform_compat."""
     return pc.get_profile_suffix()
 
+
 def get_config_dir() -> Path:
-    """Xác định thư mục cấu hình chuẩn đồng nhất qua Single Source of Truth platform_compat (~/.config/noctalia)."""
     return pc.get_config_path()
+
 
 def get_friends_file() -> Path:
     return pc.get_friends_file(get_profile_suffix())
 
+
 def get_cache_file() -> Path:
     return pc.get_notes_cache_file(get_profile_suffix())
 
+
 def get_current_user() -> Dict[str, str]:
-    """Lấy thông tin tài khoản hiện tại từ cloud identity (SSOT), settings hoặc profile môi trường."""
-    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    suffix = get_profile_suffix()
-
-    # 0. Đọc từ nutsty_cloud_identity{suffix}.json trước (SSOT)
-    cloud_id_file = pc.get_cloud_identity_file(suffix)
-    if not cloud_id_file.exists() and not suffix:
-        cloud_id_file = pc.get_cloud_identity_file("")
-    if cloud_id_file.exists():
-        try:
-            with open(cloud_id_file, "r", encoding="utf-8") as cif:
-                cdata = json.load(cif)
-                if cdata.get("tag"):
-                    return {
-                        "email": cdata.get("tag", "").lower(),
-                        "tag": cdata.get("tag", ""),
-                        "user_id": cdata.get("user_id", ""),
-                        "name": cdata.get("username", "Nutsty User"),
-                        "avatar": cdata.get("avatar_url", "")
-                    }
-        except Exception:
-            pass
-
-    # 1. Đọc từ cache người dùng nếu còn hiệu lực để đạt tốc độ phản hồi micro-giây (< 1ms)
-    user_cache_file = get_config_dir() / f"nutsty_user_cache{suffix}.json"
-    auth_file = get_config_dir() / f"ytmusic_auth{suffix}.json"
-    if user_cache_file.exists():
-        try:
-            # Nếu auth_file không mới hơn user_cache_file thì dùng cache
-            if not auth_file.exists() or auth_file.stat().st_mtime <= user_cache_file.stat().st_mtime:
-                with open(user_cache_file, "r", encoding="utf-8") as ucf:
-                    cached_u = json.load(ucf)
-                    if cached_u.get("email") or cached_u.get("name"):
-                        return cached_u
-        except Exception:
-            pass
-
-    # 2. Đọc từ ytmusic_auth{suffix}.json nếu có để lấy info chính chủ
-    if auth_file.exists():
-        try:
-            from ytmusicapi import YTMusic
-            yt = YTMusic(str(auth_file))
-            user = yt.get_account_info()
-            name = user.get("accountName") or user.get("name") or ""
-            thumbs = user.get("thumbnails", [])
-            thumb = user.get("accountPhotoUrl") or (thumbs[-1].get("url") if thumbs else "")
-            email = user.get("email") or user.get("channelHandle") or ""
-            if not email and name:
-                import re
-                safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
-                email = f"{safe_name or (profile or 'user')}@gmail.com"
-            if email or name:
-                res_user = {"email": (email or f"{profile or 'user'}@gmail.com").strip().lower(), "name": name or "Me", "avatar": thumb}
-                try:
-                    with open(user_cache_file, "w", encoding="utf-8") as ucf:
-                        json.dump(res_user, ucf, indent=2, ensure_ascii=False)
-                except Exception:
-                    pass
-                return res_user
-        except Exception:
-            pass
-
-    # 2. Đọc từ nutsty_settings{suffix}.json
-    settings_file = get_config_dir() / f"nutsty_settings{suffix}.json"
-    if not settings_file.exists() and not suffix:
-        settings_file = get_config_dir() / "nutsty_settings.json"
-    if settings_file.exists():
-        try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                email = data.get("google_email") or data.get("auth_account_email", "")
-                name = data.get("google_name") or data.get("auth_account_name", "")
-                avatar = data.get("google_avatar") or data.get("auth_account_thumb", "")
-                if email:
-                    return {"email": email.strip().lower(), "name": name or "Me", "avatar": avatar}
-        except Exception:
-            pass
-
-    if profile == "friend":
-        return {
-            "email": "friend@gmail.com",
-            "name": "Bạn Thân",
-            "avatar": ""
-        }
-    elif profile == "beta":
-        return {
-            "email": "beta@gmail.com",
-            "name": "Minh Anh",
-            "avatar": ""
-        }
-    elif profile:
-        return {
-            "email": f"{profile}@gmail.com",
-            "name": profile.capitalize(),
-            "avatar": ""
-        }
-
+    """Returns caller identity from SocialRelayCore (SSOT #2)."""
+    ident = SOCIAL_RELAY_CORE.get_caller_identity(os.getenv("NUTSTY_PROFILE", ""))
     return {
-        "email": "me@gmail.com",
-        "name": "Tôi",
-        "avatar": ""
+        "email": (ident.get("tag") or ident.get("email") or "me@gmail.com").strip().lower(),
+        "tag": ident.get("tag", ""),
+        "user_id": ident.get("user_id", ""),
+        "name": ident.get("username", "Nutsty User"),
+        "avatar": ident.get("avatar_url", ""),
     }
 
+
 def load_friends() -> List[str]:
-    fpath = get_friends_file()
-    if fpath.exists():
-        try:
-            with open(fpath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return [str(e).strip().lower() for e in data if str(e).strip()]
-        except Exception:
-            pass
+    res = SOCIAL_RELAY_CORE.get_friends(os.getenv("NUTSTY_PROFILE", ""))
+    friends = res.get("friends", [])
+    return [str(f.get("tag") or f.get("email") or f.get("user_id")).lower() for f in friends if f]
 
-    # Thử nạp từ friends vault chung
-    try:
-        user = get_current_user()
-        u_email = (user.get("email") or "").strip().lower()
-        if u_email:
-            vpath = get_config_dir() / "nutsty_friends_vault.json"
-            if vpath.exists():
-                with open(vpath, "r", encoding="utf-8") as vf:
-                    vdata = json.load(vf)
-                    if isinstance(vdata, dict) and u_email in vdata:
-                        return [str(e).strip().lower() for e in vdata[u_email] if str(e).strip()]
-    except Exception:
-        pass
-
-    return []
 
 def save_friends(friends_list: List[str]) -> bool:
-    clean = sorted(list(set(e.strip().lower() for e in friends_list if e.strip())))
     fpath = get_friends_file()
     try:
+        clean = sorted(list(set(e.strip().lower() for e in friends_list if e.strip())))
         with open(fpath, "w", encoding="utf-8") as f:
             json.dump(clean, f, indent=2, ensure_ascii=False)
         return True
@@ -180,300 +67,60 @@ def save_friends(friends_list: List[str]) -> bool:
         print(f"Error saving friends: {e}", file=sys.stderr)
         return False
 
-def add_friend(email: str) -> bool:
-    friends = load_friends()
-    clean_email = email.strip().lower()
-    if clean_email and clean_email not in friends:
-        friends.append(clean_email)
-        return save_friends(friends)
-    return True
 
-def remove_friend(email: str) -> bool:
-    friends = load_friends()
-    clean_email = email.strip().lower()
-    if clean_email in friends:
-        friends.remove(clean_email)
-        return save_friends(friends)
-    return True
+def add_friend(target_identifier: str) -> bool:
+    res = SOCIAL_RELAY_CORE.add_friend(target_identifier, os.getenv("NUTSTY_PROFILE", ""))
+    return bool(res.get("success", False))
+
+
+def remove_friend(target_identifier: str) -> bool:
+    res = SOCIAL_RELAY_CORE.remove_friend(target_identifier, os.getenv("NUTSTY_PROFILE", ""))
+    return bool(res.get("success", False))
+
 
 def publish_note(note_text: str, track: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
-    """Đăng ghi chú 24h kèm bài hát lên server."""
-    user = get_current_user()
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes"
+    return SOCIAL_RELAY_CORE.publish_note(note_text, track, os.getenv("NUTSTY_PROFILE", ""))
 
-    # Đính kèm now_playing nếu bài hát đang phát trong MPV
-    now_playing = None
-    suffix = get_profile_suffix()
-    cur_track_file = Path(pc.get_temp_dir()) / f"nutsty_current_track{suffix}.json"
-    if cur_track_file.exists():
-        try:
-            with open(cur_track_file, "r", encoding="utf-8") as f:
-                cur_meta = json.load(f)
-                if cur_meta.get("title"):
-                    now_playing = {
-                        "title": cur_meta.get("title", ""),
-                        "artist": cur_meta.get("artist", ""),
-                        "cover": cur_meta.get("artUrl", "") or cur_meta.get("cover", "") or cur_meta.get("image", ""),
-                        "path": cur_meta.get("path", ""),
-                        "accent_color": cur_meta.get("accent_color", "")
-                    }
-        except Exception:
-            pass
-
-    payload = {
-        "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
-        "user_email": user["email"],
-        "tag": user.get("tag", ""),
-        "user_id": user.get("user_id", ""),
-        "user_name": user["name"],
-        "avatar_url": user["avatar"],
-        "note_text": note_text[:80],
-        "track": track,
-        "now_playing": now_playing
-    }
-
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT}
-        )
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            # Cập nhật cache local
-            cache_file = get_cache_file()
-            cache_data = {}
-            if cache_file.exists():
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as cf:
-                        cache_data = json.load(cf)
-                except Exception:
-                    pass
-            cache_data["my_latest_note"] = data.get("note", payload)
-            with open(cache_file, "w", encoding="utf-8") as cf:
-                json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-            return data
-    except Exception as e:
-        # Fallback offline cache
-        cache_file = get_cache_file()
-        offline_note = {
-            "user_email": user["email"],
-            "user_name": user["name"],
-            "avatar_url": user["avatar"],
-            "note_text": note_text[:80],
-            "track": track,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 86400)),
-            "offline_pending": True
-        }
-        try:
-            cache_data = {}
-            if cache_file.exists():
-                with open(cache_file, "r", encoding="utf-8") as cf:
-                    cache_data = json.load(cf)
-            cache_data["my_latest_note"] = offline_note
-            with open(cache_file, "w", encoding="utf-8") as cf:
-                json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
-        return {"success": False, "error": str(e), "note": offline_note}
 
 def delete_note(worker_url: Optional[str] = None) -> Dict[str, Any]:
-    """Xóa ghi chú 24h của bản thân khỏi cache local và server."""
-    user = get_current_user()
-    cache_file = get_cache_file()
-    if cache_file.exists():
-        try:
-            with open(cache_file, "r", encoding="utf-8") as cf:
-                cache_data = json.load(cf)
-            cache_data["my_latest_note"] = None
-            with open(cache_file, "w", encoding="utf-8") as cf:
-                json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+    return SOCIAL_RELAY_CORE.delete_note(os.getenv("NUTSTY_PROFILE", ""))
 
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/delete"
-    try:
-        payload = {
-            "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
-            "user_email": user["email"]
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        return {"success": True, "offline": True, "error": str(e)}
 
 def fetch_notes(worker_url: Optional[str] = None) -> Dict[str, Any]:
-    """Lấy danh sách ghi chú 24h của bạn bè và ghi chú mới nhất của bản thân."""
-    friends = load_friends()
-    user = get_current_user()
-    user_email = user.get("email", "").strip().lower()
+    res = SOCIAL_RELAY_CORE.get_feed(os.getenv("NUTSTY_PROFILE", ""))
+    return {
+        "notes": res.get("notes", []),
+        "my_note": res.get("my_note"),
+    }
 
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes?friends=" + urllib.parse.quote(",".join(friends))
-    if user_email:
-        url += "&user_email=" + urllib.parse.quote(user_email)
-    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    if profile:
-        url += "&profile=" + urllib.parse.quote(profile)
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": COMMON_USER_AGENT})
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            notes = data.get("notes", [])
-            my_note = data.get("my_note", None)
-            # Lưu cache
-            cache_file = get_cache_file()
-            cache_data = {}
-            if cache_file.exists():
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as cf:
-                        cache_data = json.load(cf)
-                except Exception:
-                    pass
-            cache_data["friends_notes"] = notes
-            cache_data["my_latest_note"] = my_note
-            cache_data["last_sync"] = time.time()
-            with open(cache_file, "w", encoding="utf-8") as cf:
-                json.dump(cache_data, cf, indent=2, ensure_ascii=False)
-            return {"notes": notes, "my_note": my_note}
-    except Exception:
-        # Đọc từ cache
-        cache_file = get_cache_file()
-        if cache_file.exists():
-            try:
-                with open(cache_file, "r", encoding="utf-8") as cf:
-                    cache_data = json.load(cf)
-                    return {
-                        "notes": cache_data.get("friends_notes", []),
-                        "my_note": cache_data.get("my_latest_note")
-                    }
-            except Exception:
-                pass
-        return {"notes": [], "my_note": None}
 
 def fetch_friends_notes(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Lấy danh sách ghi chú 24h của tất cả bạn bè (backward compatibility)."""
     return fetch_notes(worker_url).get("notes", [])
 
-def send_social_event(event_type: str, to_email: str, extra_data: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events"
-    user = get_current_user()
-    my_email = user.get("email", "")
-    my_name = user.get("name", "")
-    my_avatar = user.get("avatar_url", "") or user.get("avatar", "")
-    payload = {
-        "event": event_type,
-        "from_email": my_email,
-        "from_name": my_name,
-        "from_avatar": my_avatar,
-        "to_email": to_email,
-        "data": extra_data
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+
+def send_social_event(event_type: str, to_identifier: str, extra_data: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
+    return SOCIAL_RELAY_CORE.send_event(event_type, to_identifier, extra_data, os.getenv("NUTSTY_PROFILE", ""))
+
 
 def fetch_social_events(worker_url: Optional[str] = None) -> List[Dict[str, Any]]:
-    user = get_current_user()
-    my_email = user.get("email", "")
-    profile = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/notes/events?user_email=" + urllib.parse.quote(my_email)
-    if profile:
-        url += "&profile=" + urllib.parse.quote(profile)
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": COMMON_USER_AGENT})
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("events", [])
-    except Exception:
-        return []
+    return SOCIAL_RELAY_CORE.get_events(os.getenv("NUTSTY_PROFILE", ""))
+
 
 def update_now_playing(now_playing_data: Optional[Dict[str, Any]] = None, worker_url: Optional[str] = None) -> Dict[str, Any]:
-    """Cập nhật trạng thái bài hát đang phát theo thời gian thực (Heartbeat)."""
-    user = get_current_user()
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/now_playing"
+    return SOCIAL_RELAY_CORE.update_presence(now_playing_data, os.getenv("NUTSTY_PROFILE", ""))
 
-    if now_playing_data is None:
-        suffix = get_profile_suffix()
-        cur_track_file = Path(pc.get_temp_dir()) / f"nutsty_current_track{suffix}.json"
-        if cur_track_file.exists():
-            try:
-                with open(cur_track_file, "r", encoding="utf-8") as f:
-                    cur_meta = json.load(f)
-                    if cur_meta.get("title"):
-                        vid = cur_meta.get("path", "")
-                        if vid.startswith("ytdl://"):
-                            vid = vid.replace("ytdl://", "")
-                        now_playing_data = {
-                            "title": cur_meta.get("title", ""),
-                            "artist": cur_meta.get("artist", ""),
-                            "cover": cur_meta.get("artUrl", ""),
-                            "path": cur_meta.get("path", ""),
-                            "id": vid,
-                            "videoId": vid,
-                            "is_playing": True,
-                            "timestamp": time.time()
-                        }
-            except Exception:
-                pass
-
-    payload = {
-        "user_email": user["email"],
-        "user_name": user["name"],
-        "avatar_url": user["avatar"],
-        "now_playing": now_playing_data
-    }
-
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 
 def set_offline(worker_url: Optional[str] = None) -> Dict[str, Any]:
-    """Thông báo cho server rằng người dùng đã thoát/offline."""
-    user = get_current_user()
-    url = (worker_url or DEFAULT_WORKER_URL).rstrip("/") + "/api/users/offline"
-    payload = {
-        "profile": os.getenv("NUTSTY_PROFILE", "").strip().lower(),
-        "user_email": user.get("email", ""),
-        "user_id": user.get("user_id", "")
-    }
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": COMMON_USER_AGENT},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    return SOCIAL_RELAY_CORE.set_offline(os.getenv("NUTSTY_PROFILE", ""))
+
 
 def handle_cli(args):
-    """Entry point for thread-safe in-process execution without modifying sys.argv."""
     execute_command(list(args))
+
 
 def main():
     execute_command(sys.argv[1:])
+
 
 def execute_command(args):
     if len(args) < 1:
@@ -531,6 +178,7 @@ def execute_command(args):
         print(json.dumps(events, ensure_ascii=False))
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()

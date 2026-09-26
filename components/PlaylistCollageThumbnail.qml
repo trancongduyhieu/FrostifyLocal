@@ -5,6 +5,7 @@ import "."
 Item {
     id: root
 
+    property string playlistCover: ""
     property string customCover: ""
     property var tracks: []
     property string playlistTitle: ""
@@ -13,6 +14,16 @@ Item {
 
     implicitWidth: 160
     implicitHeight: 160
+
+    function cleanUrl(s) {
+        if (!s || typeof s !== "string") return "";
+        var str = s.trim();
+        if (str.startsWith("/") && !str.startsWith("file://")) return "file://" + str;
+        return str;
+    }
+
+    readonly property string effectiveCover: cleanUrl(customCover) || cleanUrl(playlistCover)
+    readonly property bool hasEffectiveCover: effectiveCover !== ""
 
     readonly property var validTracks: {
         if (!tracks) return [];
@@ -27,10 +38,14 @@ Item {
         return res;
     }
 
-    readonly property bool hasCustomCover: customCover !== "" && customCover !== undefined
-    readonly property bool isCollage: !hasCustomCover && validTracks.length >= 4
-    readonly property bool isSingleTrackCover: !hasCustomCover && validTracks.length >= 1 && validTracks.length < 4
-    readonly property bool isEmptyPlaylist: !hasCustomCover && validTracks.length === 0
+    readonly property var collageTracks: {
+        if (hasEffectiveCover) return [];
+        return validTracks.slice(0, 4);
+    }
+
+    readonly property bool isCollage: !hasEffectiveCover && validTracks.length >= 4
+    readonly property bool isSingleTrackCover: !hasEffectiveCover && validTracks.length >= 1 && validTracks.length < 4
+    readonly property bool isEmptyPlaylist: !hasEffectiveCover && validTracks.length === 0
 
     // Deterministic Gradient Palette based on title hash (SimpMusic Skill #68)
     readonly property var gradientColors: {
@@ -76,17 +91,25 @@ Item {
             autoPaddingEnabled: false
         }
 
-        // 1. Custom Cover
-        Image {
+        // Base foundation
+        Rectangle {
             anchors.fill: parent
-            source: root.hasCustomCover ? root.customCover : ""
-            fillMode: Image.PreserveAspectCrop
-            visible: root.hasCustomCover
-            asynchronous: true
-            cache: true
+            color: "#181920"
         }
 
-        // 2. 2x2 Collage Grid
+        // 1. Direct Cover (customCover or playlistCover)
+        Image {
+            id: directCoverImg
+            anchors.fill: parent
+            source: root.hasEffectiveCover ? root.effectiveCover : ""
+            fillMode: Image.PreserveAspectCrop
+            visible: root.hasEffectiveCover
+            asynchronous: true
+            cache: true
+            sourceSize: Qt.size(400, 400)
+        }
+
+        // 2. 2x2 Collage Grid (Reactive to collageTracks model)
         Grid {
             id: collageGrid
             anchors.fill: parent
@@ -96,36 +119,35 @@ Item {
             visible: root.isCollage
 
             Repeater {
-                model: 4
+                model: root.collageTracks
                 delegate: Image {
                     width: root.width / 2
                     height: root.height / 2
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
-                    source: {
-                        if (!root.isCollage) return "";
-                        var t = root.validTracks[index];
-                        return t ? (t.image || t.cover || t.thumbnail || "") : "";
-                    }
+                    sourceSize: Qt.size(200, 200)
+                    source: modelData ? root.cleanUrl(modelData.image || modelData.cover || modelData.thumbnail || "") : ""
                 }
             }
         }
 
         // 3. Single Track Cover (1-3 tracks)
         Image {
+            id: singleTrackImg
             anchors.fill: parent
-            source: root.isSingleTrackCover && root.validTracks.length > 0 ? (root.validTracks[0].image || root.validTracks[0].cover || "") : ""
+            source: root.isSingleTrackCover && root.validTracks.length > 0 ? root.cleanUrl(root.validTracks[0].image || root.validTracks[0].cover || root.validTracks[0].thumbnail || "") : ""
             fillMode: Image.PreserveAspectCrop
             visible: root.isSingleTrackCover
             asynchronous: true
             cache: true
+            sourceSize: Qt.size(400, 400)
         }
 
-        // 4. Empty Playlist Generative Gradient + Monogram
+        // 4. Fallback Generative Gradient + Monogram (When empty or images not ready)
         Rectangle {
             anchors.fill: parent
-            visible: root.isEmptyPlaylist
+            visible: root.isEmptyPlaylist || (root.hasEffectiveCover && directCoverImg.status !== Image.Ready && directCoverImg.status !== Image.Loading)
             gradient: Gradient {
                 GradientStop { position: 0.0; color: root.gradientColors.c1 }
                 GradientStop { position: 1.0; color: root.gradientColors.c2 }
@@ -157,12 +179,13 @@ Item {
         }
     }
 
-    // Hairline border
+    // 1px Hairline border overlay
     Rectangle {
         anchors.fill: parent
         radius: root.radius
         color: "transparent"
-        border.color: Qt.rgba(255, 255, 255, 0.1)
+        border.color: Qt.rgba(255, 255, 255, 0.12)
         border.width: 1
+        z: 2
     }
 }

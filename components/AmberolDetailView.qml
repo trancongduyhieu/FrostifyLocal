@@ -566,7 +566,7 @@ Rectangle {
                 Layout.maximumWidth: root.isCompact ? 360 : 320
                 Layout.minimumWidth: 260
                 contentWidth: width
-                contentHeight: artContentCol.height + 110
+                contentHeight: artContentCol.implicitHeight + 110
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 

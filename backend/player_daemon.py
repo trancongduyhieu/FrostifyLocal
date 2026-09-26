@@ -158,10 +158,17 @@ def send_mpv_cmd(command_args):
 
 def get_mpv_properties_batch(props):
     """Retrieve multiple MPV properties in a single socket connection (0.3ms batch query)"""
-    ensure_mpv()
     s = None
     try:
-        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.8)
+    except Exception:
+        ensure_mpv()
+        try:
+            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+        except Exception:
+            return {}
+
+    try:
         payload = "".join(json.dumps({"command": ["get_property", p], "request_id": i}) + "\n" for i, p in enumerate(props))
         s.sendall(payload.encode("utf-8"))
         buf = ""

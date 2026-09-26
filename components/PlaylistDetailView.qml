@@ -63,7 +63,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 20
         contentWidth: width
-        contentHeight: mainCol.height + 60
+        contentHeight: mainCol.implicitHeight + 60
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -125,7 +125,10 @@ Rectangle {
                 PlaylistCollageThumbnail {
                     Layout.preferredWidth: 170
                     Layout.preferredHeight: 170
+                    width: 170
+                    height: 170
                     radius: 16
+                    playlistCover: root.playlist ? (root.playlist.image || root.playlist.thumbnail || "") : ""
                     customCover: root.playlist ? (root.playlist.customCover || "") : ""
                     tracks: root.playlistTracks
                     playlistTitle: root.playlist ? (root.playlist.title || root.playlist.name || "") : ""

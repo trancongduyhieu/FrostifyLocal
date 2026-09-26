@@ -156,6 +156,14 @@ def delete_playlist(pl_id):
     playlists = load_playlists()
     filtered = [p for p in playlists if p.get("id") != pl_id]
     save_playlists(filtered)
+    # Also clean up from favorite playlists if present
+    try:
+        favs = load_favorite_playlists()
+        filtered_favs = [p for p in favs if str(p.get("id") or p.get("playlistId") or p.get("browseId") or "") != str(pl_id)]
+        if len(filtered_favs) != len(favs):
+            save_favorite_playlists(filtered_favs)
+    except Exception as e:
+        sys.stderr.write(f"Error updating favorite playlists on delete: {e}\n")
     return {"success": True, "remaining": len(filtered)}
 
 def add_tracks_to_playlist(pl_id, new_tracks):

@@ -33,6 +33,9 @@ Rectangle {
     property var albumMetadata: null
     property string downloadsSubTab: "tracks" // "tracks", "playlists", "favorites"
     onDownloadsSubTabChanged: {
+        if (sortPopover.isOpen) {
+            sortPopover.isOpen = false;
+        }
         if (downloadsSubTab === "tracks" && typeof win !== "undefined" && win) {
             win.browsingTracks = win.allTracks;
         }
@@ -48,6 +51,17 @@ Rectangle {
     property string sortBy: "recent" // "recent", "title", "artist"
     property bool isSelectionMode: false
     property var selectedTrackPaths: []
+
+    function toggleSortPopover() {
+        if (sortPopover.isOpen) {
+            sortPopover.isOpen = false;
+        } else {
+            var pt = sortDropdownBtn.mapToItem(root, 0, sortDropdownBtn.height + 6);
+            sortPopover.targetX = Math.max(12, Math.min(pt.x + sortDropdownBtn.width - sortPopover.popoverWidth, root.width - sortPopover.popoverWidth - 12));
+            sortPopover.targetY = pt.y;
+            sortPopover.isOpen = true;
+        }
+    }
 
     function toggleTrackSelection(trk) {
         if (!trk || !trk.path) return;
@@ -87,6 +101,18 @@ Rectangle {
         return arr;
     }
 
+    function parseDurationSecs(d) {
+        if (!d) return 0;
+        if (typeof d === "number") return d;
+        var parts = String(d).split(":");
+        if (parts.length === 2) {
+            return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+        } else if (parts.length === 3) {
+            return (parseInt(parts[0], 10) || 0) * 3600 + (parseInt(parts[1], 10) || 0) * 60 + (parseInt(parts[2], 10) || 0);
+        }
+        return 0;
+    }
+
     readonly property var sortedTracks: {
         if (!root.tracks || root.tracks.length === 0) return [];
         var list = root.tracks.slice();
@@ -94,11 +120,22 @@ Rectangle {
             if (isDownloadsView) {
                 list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
             }
-            // For albums and playlists, "recent" maintains original tracklist sequence
+        } else if (sortBy === "oldest") {
+            if (isDownloadsView) {
+                list.sort((a, b) => (a.mtime || 0) - (b.mtime || 0));
+            } else {
+                list.reverse();
+            }
         } else if (sortBy === "title") {
             list.sort((a, b) => (a.name || a.title || "").localeCompare(b.name || b.title || ""));
         } else if (sortBy === "artist") {
             list.sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
+        } else if (sortBy === "duration") {
+            list.sort((a, b) => {
+                var da = a.durationMs || root.parseDurationSecs(a.duration);
+                var db = b.durationMs || root.parseDurationSecs(b.duration);
+                return db - da;
+            });
         }
         return list;
     }
@@ -108,7 +145,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 20
         contentWidth: width
-        contentHeight: contentCol.height + 110
+        contentHeight: contentCol.implicitHeight + 110
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -119,12 +156,9 @@ Rectangle {
         ColumnLayout {
             id: contentCol
             width: scrollArea.width
-            spacing: 24
+            spacing: 14
 
             // Section 1: Header Row
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 14
 
                 // Hero Album Banner (When viewing an Album or detailed Playlist)
                 RowLayout {
@@ -360,136 +394,122 @@ Rectangle {
 
                     Item { Layout.fillWidth: true }
 
-                    // Downloads Sub-tab Switcher: [ Bài hát | Danh sách phát | Danh sách phát yêu thích ] (Refined Dark Glass Segmented Control)
-                    Rectangle {
+                    // Downloads Sub-tab Switcher: Ambient Fluid Text [ Bài hát | Danh sách phát | Yêu thích ]
+                    Row {
                         visible: root.isDownloadsView
-                        implicitHeight: 34
-                        implicitWidth: pillRow.implicitWidth + 8
-                        Layout.preferredHeight: 34
-                        Layout.preferredWidth: implicitWidth
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                        radius: 17
-                        color: Qt.rgba(1, 1, 1, 0.04)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
-                        border.width: 1
+                        spacing: 6
 
-                        Row {
-                            id: pillRow
-                            anchors.centerIn: parent
-                            height: 28
-                            spacing: 4
+                        // Subtab 1: Bài hát
+                        Rectangle {
+                            implicitWidth: trksText.implicitWidth + 24
+                            implicitHeight: 30
+                            width: implicitWidth
+                            height: implicitHeight
+                            radius: 15
+                            color: root.downloadsSubTab === "tracks" 
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                   : (trksH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                            border.color: root.downloadsSubTab === "tracks" 
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
+                                          : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                            HoverHandler { id: trksH }
 
-                            // Subtab 1: Bài hát
-                            Rectangle {
-                                implicitWidth: trksText.implicitWidth + 28
-                                implicitHeight: 28
-                                width: implicitWidth
-                                height: implicitHeight
-                                radius: 14
-                                color: root.downloadsSubTab === "tracks" 
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
-                                       : (trksH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "tracks" 
-                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                              : "transparent"
-                                border.width: 1
+                            Text {
+                                id: trksText
+                                anchors.centerIn: parent
+                                text: I18n.tr("Bài hát", "Songs")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: root.downloadsSubTab === "tracks"
+                                color: root.downloadsSubTab === "tracks" ? root.accentColor : (trksH.hovered ? "#ffffff" : Theme.textSecondary)
                                 Behavior on color { ColorAnimation { duration: 150 } }
-                                Behavior on border.color { ColorAnimation { duration: 150 } }
-                                HoverHandler { id: trksH }
+                            }
 
-                                Text {
-                                    id: trksText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Bài hát", "Songs")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: root.downloadsSubTab === "tracks"
-                                    color: root.downloadsSubTab === "tracks" ? root.accentColor : (trksH.hovered ? "#ffffff" : Theme.textSecondary)
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.downloadsSubTab = "tracks";
-                                        if (typeof win !== "undefined" && win) {
-                                            win.browsingTracks = win.allTracks;
-                                        }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.downloadsSubTab = "tracks";
+                                    if (typeof win !== "undefined" && win) {
+                                        win.browsingTracks = win.allTracks;
                                     }
                                 }
                             }
+                        }
 
-                            // Subtab 2: Danh sách phát (No count in parens!)
-                            Rectangle {
-                                implicitWidth: plsText.implicitWidth + 28
-                                implicitHeight: 28
-                                width: implicitWidth
-                                height: implicitHeight
-                                radius: 14
-                                color: root.downloadsSubTab === "playlists" 
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
-                                       : (plsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "playlists" 
-                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                              : "transparent"
-                                border.width: 1
+                        // Subtab 2: Danh sách phát
+                        Rectangle {
+                            implicitWidth: plsText.implicitWidth + 24
+                            implicitHeight: 30
+                            width: implicitWidth
+                            height: implicitHeight
+                            radius: 15
+                            color: root.downloadsSubTab === "playlists" 
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                   : (plsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                            border.color: root.downloadsSubTab === "playlists" 
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
+                                          : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                            HoverHandler { id: plsH }
+
+                            Text {
+                                id: plsText
+                                anchors.centerIn: parent
+                                text: I18n.tr("Danh sách phát", "Playlists")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: root.downloadsSubTab === "playlists"
+                                color: root.downloadsSubTab === "playlists" ? root.accentColor : (plsH.hovered ? "#ffffff" : Theme.textSecondary)
                                 Behavior on color { ColorAnimation { duration: 150 } }
-                                Behavior on border.color { ColorAnimation { duration: 150 } }
-                                HoverHandler { id: plsH }
-
-                                Text {
-                                    id: plsText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Danh sách phát", "Playlists")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: root.downloadsSubTab === "playlists"
-                                    color: root.downloadsSubTab === "playlists" ? root.accentColor : (plsH.hovered ? "#ffffff" : Theme.textSecondary)
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.downloadsSubTab = "playlists"
-                                }
                             }
 
-                            // Subtab 3: Danh sách phát yêu thích (Favorite Playlists)
-                            Rectangle {
-                                implicitWidth: favsText.implicitWidth + 28
-                                implicitHeight: 28
-                                width: implicitWidth
-                                height: implicitHeight
-                                radius: 14
-                                color: root.downloadsSubTab === "favorites" 
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
-                                       : (favsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.downloadsSubTab === "favorites" 
-                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                              : "transparent"
-                                border.width: 1
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.downloadsSubTab = "playlists"
+                            }
+                        }
+
+                        // Subtab 3: Yêu thích (Favorite Playlists)
+                        Rectangle {
+                            implicitWidth: favsText.implicitWidth + 24
+                            implicitHeight: 30
+                            width: implicitWidth
+                            height: implicitHeight
+                            radius: 15
+                            color: root.downloadsSubTab === "favorites" 
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
+                                   : (favsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
+                            border.color: root.downloadsSubTab === "favorites" 
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
+                                          : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                            HoverHandler { id: favsH }
+
+                            Text {
+                                id: favsText
+                                anchors.centerIn: parent
+                                text: I18n.tr("Yêu thích", "Favorites")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: root.downloadsSubTab === "favorites"
+                                color: root.downloadsSubTab === "favorites" ? root.accentColor : (favsH.hovered ? "#ffffff" : Theme.textSecondary)
                                 Behavior on color { ColorAnimation { duration: 150 } }
-                                Behavior on border.color { ColorAnimation { duration: 150 } }
-                                HoverHandler { id: favsH }
+                            }
 
-                                Text {
-                                    id: favsText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Danh sách phát yêu thích", "Favorite Playlists")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: root.downloadsSubTab === "favorites"
-                                    color: root.downloadsSubTab === "favorites" ? root.accentColor : (favsH.hovered ? "#ffffff" : Theme.textSecondary)
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.downloadsSubTab = "favorites"
-                                }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.downloadsSubTab = "favorites"
                             }
                         }
                     }
@@ -758,124 +778,89 @@ Rectangle {
 
                     Item { Layout.fillWidth: true }
 
-                    // Segmented Glass Sort Control (Unified 36px Height, SimpMusic / Apple Music Hi-Fi)
+                    // Modern Minimalist Dropdown Pill for Sort (Liquid Glass Dynamic Accent Tint)
                     Rectangle {
-                        id: sortControlBox
-                        implicitHeight: 36
-                        implicitWidth: sortInnerRow.implicitWidth + 16
-                        Layout.preferredHeight: 36
+                        id: sortDropdownBtn
+                        implicitHeight: 34
+                        implicitWidth: sortBtnRow.implicitWidth + 24
+                        Layout.preferredHeight: 34
                         Layout.preferredWidth: implicitWidth
-                        radius: 18
-                        color: Qt.rgba(1, 1, 1, 0.05)
-                        border.color: Qt.rgba(1, 1, 1, 0.10)
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                        radius: 17
+                        color: sortPopover.isOpen 
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                               : (sortBtnH.hovered 
+                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) 
+                                  : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08))
+                        border.color: sortPopover.isOpen 
+                                      ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.65) 
+                                      : (sortBtnH.hovered 
+                                         ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.38) 
+                                         : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20))
                         border.width: 1
+                        scale: sortBtnH.hovered && !sortPopover.isOpen ? 1.02 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         Row {
-                            id: sortInnerRow
+                            id: sortBtnRow
                             anchors.centerIn: parent
-                            spacing: 4
+                            spacing: 7
+
+                            AppIcon {
+                                source: "../assets/icons/view-sort-symbolic.svg"
+                                iconSize: 13
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: (sortPopover.isOpen || sortBtnH.hovered) 
+                                       ? root.accentColor 
+                                       : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.90)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
 
                             Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: I18n.tr("Sắp xếp:", "Sort by:")
+                                text: {
+                                    if (root.sortBy === "recent") return I18n.tr("Mới nhất", "Latest");
+                                    if (root.sortBy === "oldest") return I18n.tr("Cũ nhất", "Oldest");
+                                    if (root.sortBy === "title") return I18n.tr("Tên A-Z", "Title A-Z");
+                                    if (root.sortBy === "artist") return I18n.tr("Nghệ sĩ", "Artist");
+                                    if (root.sortBy === "duration") return I18n.tr("Thời lượng", "Duration");
+                                    return I18n.tr("Sắp xếp", "Sort");
+                                }
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 font.bold: true
-                                color: Theme.textMuted
-                                leftPadding: 6
-                                rightPadding: 2
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: (sortPopover.isOpen || sortBtnH.hovered) ? root.accentColor : "#ffffff"
+                                Behavior on color { ColorAnimation { duration: 120 } }
                             }
 
-                            // Pill: Mới nhất
-                            Rectangle {
-                                implicitHeight: 28
-                                implicitWidth: sortRecentText.implicitWidth + 24
-                                width: implicitWidth
-                                height: implicitHeight
+                            AppIcon {
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 9
                                 anchors.verticalCenter: parent.verticalCenter
-                                radius: 14
-                                color: root.sortBy === "recent" ? Qt.rgba(1, 1, 1, 0.14) : (sortRecentH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.sortBy === "recent" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                                Text {
-                                    id: sortRecentText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Mới nhất", "Latest")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: root.sortBy === "recent"
-                                    color: root.sortBy === "recent" ? "#ffffff" : (sortRecentH.hovered ? "#ffffff" : Theme.textSecondary)
-                                }
-                                HoverHandler { id: sortRecentH }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.sortBy = "recent"
-                                }
+                                color: sortPopover.isOpen 
+                                       ? root.accentColor 
+                                       : (sortBtnH.hovered ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.70))
+                                rotation: sortPopover.isOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                Behavior on color { ColorAnimation { duration: 120 } }
                             }
+                        }
 
-                            // Pill: Tên A-Z
-                            Rectangle {
-                                implicitHeight: 28
-                                implicitWidth: sortTitleText.implicitWidth + 24
-                                width: implicitWidth
-                                height: implicitHeight
-                                anchors.verticalCenter: parent.verticalCenter
-                                radius: 14
-                                color: root.sortBy === "title" ? Qt.rgba(1, 1, 1, 0.14) : (sortTitleH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.sortBy === "title" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Behavior on border.color { ColorAnimation { duration: 100 } }
+                        HoverHandler { id: sortBtnH }
 
-                                Text {
-                                    id: sortTitleText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Tên A-Z", "Title A-Z")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: root.sortBy === "title"
-                                    color: root.sortBy === "title" ? "#ffffff" : (sortTitleH.hovered ? "#ffffff" : Theme.textSecondary)
-                                }
-                                HoverHandler { id: sortTitleH }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.sortBy = "title"
-                                }
-                            }
-
-                            // Pill: Nghệ sĩ
-                            Rectangle {
-                                implicitHeight: 28
-                                implicitWidth: sortArtistText.implicitWidth + 24
-                                width: implicitWidth
-                                height: implicitHeight
-                                anchors.verticalCenter: parent.verticalCenter
-                                radius: 14
-                                color: root.sortBy === "artist" ? Qt.rgba(1, 1, 1, 0.14) : (sortArtistH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                                border.color: root.sortBy === "artist" ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                                Text {
-                                    id: sortArtistText
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Nghệ sĩ", "Artist")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: root.sortBy === "artist"
-                                    color: root.sortBy === "artist" ? "#ffffff" : (sortArtistH.hovered ? "#ffffff" : Theme.textSecondary)
-                                }
-                                HoverHandler { id: sortArtistH }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.sortBy = "artist"
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (sortPopover.isOpen) {
+                                    sortPopover.isOpen = false;
+                                } else {
+                                    var pt = sortDropdownBtn.mapToItem(root, 0, sortDropdownBtn.height + 6);
+                                    sortPopover.targetX = Math.max(12, Math.min(pt.x + sortDropdownBtn.width - sortPopover.popoverWidth, root.width - sortPopover.popoverWidth - 12));
+                                    sortPopover.targetY = pt.y;
+                                    sortPopover.isOpen = true;
                                 }
                             }
                         }
@@ -1122,7 +1107,7 @@ Rectangle {
                 }
 
                 Text {
-                    visible: !root.isLoading && (!root.sortedTracks || root.sortedTracks.length === 0)
+                    visible: !root.isLoading && (!root.sortedTracks || root.sortedTracks.length === 0) && (!root.isDownloadsView || root.downloadsSubTab === "tracks")
                     text: root.isPlaylistView ? I18n.tr("Danh sách phát này đang trống. Thêm bài hát bằng menu chuột phải!", "This playlist is empty. Add songs using the context menu on any song!") : I18n.tr("Không tìm thấy bài hát nào. Nhập vào thanh tìm kiếm để khám phá!", "No tracks found. Type in search bar to explore online tracks!")
                     font.family: Theme.fontFamily
                     font.pixelSize: 14
@@ -1241,10 +1226,20 @@ Rectangle {
                             Behavior on color { ColorAnimation { duration: 120 } }
                             Behavior on border.color { ColorAnimation { duration: 120 } }
 
+                            // Card Background Click Area (z: 0)
+                            MouseArea {
+                                id: plCardMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.playlistSelected(plData)
+                            }
+
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 14
                                 spacing: 10
+                                z: 1
 
                                 Item {
                                     Layout.fillWidth: true
@@ -1259,8 +1254,9 @@ Rectangle {
                                         accentColor: root.accentColor
                                     }
 
-                                    // Floating Quick Play Button on Hover
+                                    // Floating Quick Play Button on Hover (z: 20)
                                     Rectangle {
+                                        id: plPlayBtn
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 8
@@ -1270,6 +1266,7 @@ Rectangle {
                                         color: plPlayMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                                         opacity: (plCardMouse.containsMouse || plPlayMouse.containsMouse) && (plData.tracks && plData.tracks.length > 0) ? 1.0 : 0.0
                                         scale: plPlayMouse.containsMouse ? 1.08 : 1.0
+                                        z: 20
 
                                         Behavior on opacity { NumberAnimation { duration: 150 } }
                                         Behavior on scale { NumberAnimation { duration: 150 } }
@@ -1287,7 +1284,9 @@ Rectangle {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
+                                            preventStealing: true
+                                            onClicked: mouse => {
+                                                mouse.accepted = true;
                                                 root.playPlaylistRequested(plData, false);
                                             }
                                         }
@@ -1321,14 +1320,6 @@ Rectangle {
 
                                 Item { Layout.fillHeight: true }
                             }
-
-                            MouseArea {
-                                id: plCardMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.playlistSelected(plData)
-                            }
                         }
                     }
                 }
@@ -1354,10 +1345,20 @@ Rectangle {
                             Behavior on color { ColorAnimation { duration: 120 } }
                             Behavior on border.color { ColorAnimation { duration: 120 } }
 
+                            // Base Card Click Area (z: 0)
+                            MouseArea {
+                                id: favCardMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.playlistSelected(modelData)
+                            }
+
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 14
                                 spacing: 10
+                                z: 1
 
                                 Item {
                                     Layout.fillWidth: true
@@ -1429,27 +1430,33 @@ Rectangle {
                                         z: 2
                                     }
 
-                                    // Top-Right Remove/Toggle Heart Button
+                                    // Top-Right Remove/Toggle Heart Button (z: 20)
                                     Rectangle {
-                                        width: 30
-                                        height: 30
-                                        radius: 15
-                                        color: Qt.rgba(0, 0, 0, 0.65)
-                                        border.color: root.accentColor
+                                        id: favHBtn
+                                        width: 32
+                                        height: 32
+                                        radius: 16
+                                        color: favHBtnMouse.containsMouse 
+                                               ? Qt.rgba(244/255, 63/255, 94/255, 0.28) 
+                                               : Qt.rgba(0, 0, 0, 0.70)
+                                        border.color: favHBtnMouse.containsMouse ? "#f43f5e" : root.accentColor
                                         border.width: 1
                                         anchors.right: parent.right
                                         anchors.top: parent.top
                                         anchors.margins: 6
-                                        visible: favCardMouse.containsMouse
-                                        scale: favHBtnMouse.containsMouse ? 1.1 : 1.0
+                                        visible: favCardMouse.containsMouse || favHBtnMouse.containsMouse
+                                        scale: favHBtnMouse.containsMouse ? 1.12 : 1.0
                                         Behavior on scale { NumberAnimation { duration: 100 } }
-                                        z: 10
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                        Behavior on border.color { ColorAnimation { duration: 120 } }
+                                        z: 20
 
                                         AppIcon {
                                             anchors.centerIn: parent
                                             source: "../assets/icons/emblem-favorite-symbolic.svg"
                                             iconSize: 14
-                                            color: root.accentColor
+                                            color: favHBtnMouse.containsMouse ? "#f43f5e" : root.accentColor
+                                            Behavior on color { ColorAnimation { duration: 120 } }
                                         }
 
                                         MouseArea {
@@ -1457,23 +1464,29 @@ Rectangle {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
+                                            preventStealing: true
+                                            onClicked: mouse => {
+                                                mouse.accepted = true;
                                                 root.toggleFavoritePlaylistRequested(modelData);
                                             }
                                         }
                                     }
 
-                                    // Bottom-Right Play Button on Hover
+                                    // Bottom-Right Play Button on Hover (z: 20)
                                     Rectangle {
+                                        id: favPlayBtn
                                         width: 38
                                         height: 38
                                         radius: 19
-                                        color: root.accentColor
+                                        color: favPlayMouse.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 6
-                                        visible: favCardMouse.containsMouse
-                                        z: 10
+                                        visible: favCardMouse.containsMouse || favPlayMouse.containsMouse
+                                        scale: favPlayMouse.containsMouse ? 1.08 : 1.0
+                                        Behavior on scale { NumberAnimation { duration: 100 } }
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                        z: 20
 
                                         AppIcon {
                                             anchors.centerIn: parent
@@ -1484,9 +1497,13 @@ Rectangle {
                                         }
 
                                         MouseArea {
+                                            id: favPlayMouse
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
+                                            preventStealing: true
+                                            onClicked: mouse => {
+                                                mouse.accepted = true;
                                                 root.playlistSelected(modelData);
                                             }
                                         }
@@ -1520,60 +1537,11 @@ Rectangle {
 
                                 Item { Layout.fillHeight: true }
                             }
-
-                            MouseArea {
-                                id: favCardMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.playlistSelected(modelData)
-                            }
                         }
                     }
                 }
 
-                // Empty state for Favorite Playlists
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 48
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 16
-                    visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        width: 72
-                        height: 72
-                        radius: 36
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-                        border.width: 1
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/emblem-favorite-symbolic.svg"
-                            iconSize: 32
-                            color: root.accentColor
-                        }
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: I18n.tr("Chưa có danh sách phát yêu thích", "No favorite playlists yet")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: I18n.tr("Khám phá các danh sách phát trực tuyến và nhấn biểu tượng Yêu thích để lưu lại.", "Explore online playlists and tap the Favorite icon to save them here.")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        color: Theme.textSecondary
-                    }
-                }
 
                 // =============================================================
                 // SimpMusic Clean Horizontal List View for Downloads
@@ -1887,5 +1855,201 @@ Rectangle {
                 }
             }
         }
+
+    // Automatically dismiss sort popover if user scrolls
+    Connections {
+        target: scrollArea
+        function onContentYChanged() {
+            if (sortPopover.isOpen) sortPopover.isOpen = false;
+        }
+    }
+
+    // Empty state overlay for Favorite Playlists (Dead-Center Optical Alignment)
+    Item {
+        id: favEmptyOverlay
+        anchors.top: parent.top
+        anchors.topMargin: 84
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 100
+        anchors.left: parent.left
+        anchors.right: parent.right
+        visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
+        z: 10
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 16
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                width: 72
+                height: 72
+                radius: 36
+                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                border.width: 1
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    anchors.verticalCenterOffset: 1
+                    source: "../assets/icons/emblem-favorite-symbolic.svg"
+                    iconSize: 32
+                    color: root.accentColor
+                }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: I18n.tr("Chưa có danh sách phát yêu thích", "No favorite playlists yet")
+                font.family: Theme.fontFamily
+                font.pixelSize: 18
+                font.bold: true
+                color: Theme.textPrimary
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: I18n.tr("Khám phá các danh sách phát trực tuyến và nhấn biểu tượng Yêu thích để lưu lại.", "Explore online playlists and tap the Favorite icon to save them here.")
+                font.family: Theme.fontFamily
+                font.pixelSize: 13
+                color: Theme.textSecondary
+            }
+        }
+    }
+
+    // Sort Popover Overlay (LiquidGlass / Frosted Dark Glass Dropdown - SettingsModal Parity)
+    Item {
+        id: sortPopover
+        anchors.fill: parent
+        z: 9999
+        visible: opacity > 0.001
+        opacity: isOpen ? 1.0 : 0.0
+        enabled: isOpen
+
+        Behavior on opacity {
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        property bool isOpen: false
+        property real targetX: 0
+        property real targetY: 0
+        readonly property real popoverWidth: 154
+
+        // Backdrop to dismiss popover when clicking anywhere outside
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: true
+            onClicked: sortPopover.isOpen = false
+        }
+
+        // Popover Card
+        Item {
+            id: sortCardWrapper
+            x: sortPopover.targetX
+            y: sortPopover.targetY
+            width: sortPopover.popoverWidth
+            height: sortMenuCol.implicitHeight + 10
+
+            scale: sortPopover.isOpen ? 1.0 : 0.94
+            transformOrigin: Item.TopRight
+            Behavior on scale {
+                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            }
+
+            // Layer 1: Ambient Base Layer (Opaque foundation to completely prevent underlying track borders from shining through)
+            Rectangle {
+                anchors.fill: parent
+                radius: 10
+                color: "#0d0e15"
+            }
+
+            // Layer 2: Liquid Glass Card (Matching SettingsModal style in Image 2)
+            Rectangle {
+                anchors.fill: parent
+                radius: 10
+                color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                border.width: 1
+
+                Column {
+                    id: sortMenuCol
+                    anchors.top: parent.top
+                    anchors.topMargin: 5
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: 3
+
+                    readonly property var sortOptions: [
+                        { key: "recent", name: I18n.tr("Mới nhất", "Latest") },
+                        { key: "oldest", name: I18n.tr("Cũ nhất", "Oldest") },
+                        { key: "title", name: I18n.tr("Tên A-Z", "Title A-Z") },
+                        { key: "artist", name: I18n.tr("Nghệ sĩ", "Artist") },
+                        { key: "duration", name: I18n.tr("Thời lượng", "Duration") }
+                    ]
+
+                    Repeater {
+                        model: sortMenuCol.sortOptions
+                        delegate: Rectangle {
+                            width: sortMenuCol.width - 10
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            height: 32
+                            radius: 7
+                            color: (root.sortBy === modelData.key)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                   : (sortItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                            border.color: (root.sortBy === modelData.key)
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                          : (sortItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                            Item {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 10
+
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.right: sortCheckIcon.left
+                                    anchors.rightMargin: 6
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.name
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: root.sortBy === modelData.key
+                                    color: (root.sortBy === modelData.key) ? "#ffffff" : (sortItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                    elide: Text.ElideRight
+                                }
+
+                                AppIcon {
+                                    id: sortCheckIcon
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: "../assets/icons/emblem-ok-symbolic.svg"
+                                    iconSize: 11
+                                    color: root.accentColor
+                                    visible: root.sortBy === modelData.key
+                                }
+                            }
+
+                            MouseArea {
+                                id: sortItemMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.sortBy = modelData.key;
+                                    sortPopover.isOpen = false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
+

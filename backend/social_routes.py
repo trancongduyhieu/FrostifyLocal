@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 try:
+    from .social_relay_core import SOCIAL_RELAY_CORE
     from .cloud_relay_client import (
         GLOBAL_RELAY_CLIENT,
         _cloud_notes_cache,
@@ -23,6 +24,7 @@ try:
         get_user_all_identifiers,
     )
 except (ImportError, ValueError):
+    from social_relay_core import SOCIAL_RELAY_CORE
     from cloud_relay_client import (
         GLOBAL_RELAY_CLIENT,
         _cloud_notes_cache,
@@ -41,176 +43,8 @@ except (ImportError, ValueError):
 def handle_get_notes(handler, query):
     profile = query.get("profile", [""])[0].strip()
     user_email = query.get("user_email", [""])[0].strip()
-    suffix = resolve_profile_suffix(profile, user_email)
-    caller_ident = ensure_cloud_identity(suffix)
-
-    if GLOBAL_RELAY_CLIENT.is_external():
-        res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
-        if res and res.get("unauthorized"):
-            caller_ident = ensure_cloud_identity(suffix, force_recreate=True)
-            res = GLOBAL_RELAY_CLIENT.get_notes(caller_ident["user_id"], caller_ident["secret_key"])
-        if res and res.get("success"):
-            notes_arr = res.get("notes") or []
-            seen_ids = set()
-            seen_tags = set()
-            for n_item in notes_arr:
-                if isinstance(n_item, dict):
-                    if n_item.get("tag"):
-                        n_item["user_email"] = n_item["tag"]
-                        seen_tags.add(str(n_item["tag"]).strip().lower())
-                    if n_item.get("user_id"):
-                        seen_ids.add(str(n_item["user_id"]).strip().lower())
-                    if not n_item.get("user_name") and n_item.get("username"):
-                        n_item["user_name"] = n_item["username"]
-                    n_item["is_friend"] = True
-
-            # Ensure all accepted friends from get_friends() are present in notes_arr
-            try:
-                fr_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
-                for f in (fr_res.get("friends") or []):
-                    f_id = str(f.get("id") or "").strip().lower()
-                    f_tag = str(f.get("tag") or "").strip().lower()
-                    if (f_id and f_id in seen_ids) or (f_tag and f_tag in seen_tags):
-                        for n_item in notes_arr:
-                            if (f_id and str(n_item.get("user_id") or "").strip().lower() == f_id) or \
-                               (f_tag and str(n_item.get("tag") or "").strip().lower() == f_tag):
-                                if not n_item.get("avatar_url") and f.get("avatar_url"):
-                                    n_item["avatar_url"] = f.get("avatar_url")
-                                if not n_item.get("user_name") and f.get("username"):
-                                    n_item["user_name"] = f.get("username")
-                                if not n_item.get("now_playing") and f.get("now_playing") and f.get("is_online"):
-                                    n_item["now_playing"] = f.get("now_playing")
-                    else:
-                        notes_arr.append({
-                            "user_id": f.get("id", ""),
-                            "user_email": f.get("tag", ""),
-                            "user_name": f.get("username", ""),
-                            "avatar_url": f.get("avatar_url", ""),
-                            "tag": f.get("tag", ""),
-                            "note_text": "",
-                            "track": None,
-                            "created_at": 0,
-                            "is_friend": True,
-                            "is_online": bool(f.get("is_online", False)),
-                            "last_active_at": f.get("last_active_at", 0),
-                            "now_playing": f.get("now_playing", "") if f.get("is_online") else ""
-                        })
-                        if f_id:
-                            seen_ids.add(f_id)
-                        if f_tag:
-                            seen_tags.add(f_tag)
-            except Exception:
-                pass
-
-            my_n = res.get("my_note")
-            if isinstance(my_n, dict) and my_n.get("tag"):
-                my_n["user_email"] = my_n["tag"]
-            _cloud_notes_cache["ts"] = time.time()
-            _cloud_notes_cache["data"] = notes_arr
-            _cloud_notes_cache["my_note"] = my_n
-            res["notes"] = notes_arr
-            res["count"] = len(notes_arr)
-            handler._send_json(res, 200)
-            return
-
-    relay_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
-    cloud_friends = relay_res.get("friends", [])
-
-    vault = load_notes_vault()
-    now = time.time()
-    valid_notes = []
-    my_note = None
-    cleaned_vault = {}
-
-    caller_tag = (caller_ident.get("tag") or "").strip().lower()
-    caller_uid = (caller_ident.get("user_id") or "").strip().lower()
-    caller_uname = (caller_ident.get("username") or "").strip().lower()
-    caller_email = user_email.strip().lower() if user_email else ""
-
-    for k, item in vault.items():
-        if item.get("_expires_ts", 0) > now:
-            cleaned_vault[k] = item
-            iem = item.get("user_email", "").strip().lower()
-            itag = (item.get("tag") or "").strip().lower()
-            iuid = (item.get("user_id") or "").strip().lower()
-            iname = (item.get("user_name") or "").strip().lower()
-
-            is_me = False
-            if caller_tag and (itag == caller_tag or iem == caller_tag):
-                is_me = True
-            elif caller_uid and (iuid == caller_uid or iem == caller_uid):
-                is_me = True
-            elif caller_email and (iem == caller_email or itag == caller_email):
-                is_me = True
-            elif caller_uname and (iname == caller_uname or iem == caller_uname):
-                is_me = True
-
-            if is_me:
-                if my_note is None or item.get("last_active_ts", 0) >= my_note.get("last_active_ts", 0):
-                    my_note = item.copy()
-
-    if len(cleaned_vault) != len(vault):
-        save_notes_vault(cleaned_vault)
-
-    ONLINE_TIMEOUT_SEC = 25.0
-    for f in cloud_friends:
-        f_tag = (f.get("tag") or "").strip().lower()
-        f_id = (f.get("id") or "").strip().lower()
-        f_name = (f.get("username") or "").strip().lower()
-
-        matched_note = (
-            cleaned_vault.get(f"note:{f_tag}") or
-            cleaned_vault.get(f"note:{f_id}") or
-            cleaned_vault.get(f"note:{f_name}")
-        )
-        if not matched_note:
-            for k, item in cleaned_vault.items():
-                iem = item.get("user_email", "").strip().lower()
-                itag = (item.get("tag") or "").strip().lower()
-                iuid = (item.get("user_id") or "").strip().lower()
-                iname = (item.get("user_name") or "").strip().lower()
-                if (f_tag and (itag == f_tag or iem == f_tag)) or \
-                   (f_id and (iuid == f_id or iem == f_id)) or \
-                   (f_name and (iname == f_name or iem == f_name)):
-                    matched_note = item.copy()
-                    break
-
-        if matched_note:
-            fn = matched_note.copy()
-            fn["avatar_url"] = f.get("avatar_url") or fn.get("avatar_url", "")
-            fn["user_name"] = f.get("username") or fn.get("user_name", "")
-            fn["tag"] = f.get("tag") or fn.get("tag", "")
-
-            last_active = fn.get("last_active_ts") or 0
-            if not last_active and f.get("last_active_at"):
-                last_active = f.get("last_active_at") / 1000.0 if f.get("last_active_at") > 1e11 else f.get("last_active_at")
-            is_online = (now - last_active) < ONLINE_TIMEOUT_SEC if last_active else False
-            fn["is_online"] = is_online
-            fn["last_active_ts"] = last_active
-            fn["now_playing"] = (f.get("now_playing") or fn.get("now_playing", "")) if is_online else ""
-            valid_notes.append(fn)
-        else:
-            last_active = f.get("last_active_at", 0)
-            if last_active > 1e11:
-                last_active = last_active / 1000.0
-            is_online = (now - last_active) < ONLINE_TIMEOUT_SEC if last_active else False
-            valid_notes.append({
-                "user_id": f.get("id", ""),
-                "user_email": f.get("tag", ""),
-                "user_name": f.get("username", ""),
-                "avatar_url": f.get("avatar_url", ""),
-                "tag": f.get("tag", ""),
-                "note_text": "",
-                "track": None,
-                "created_at": 0,
-                "is_friend": True,
-                "is_online": is_online,
-                "last_active_ts": last_active,
-                "now_playing": f.get("now_playing", "") if is_online else ""
-            })
-
-    data = {"count": len(valid_notes), "notes": valid_notes, "my_note": my_note}
-    handler._send_json(data, 200)
+    feed_data = SOCIAL_RELAY_CORE.get_feed(profile, user_email)
+    handler._send_json(feed_data, 200)
 
 
 def handle_get_friends(handler, query):
@@ -507,90 +341,19 @@ def handle_post_publish_note(handler, req_data):
     if isinstance(track, dict) and not track.get("title") and not track.get("name") and not track.get("id"):
         track = None
 
-    suffix = resolve_profile_suffix(profile, email)
-    caller_ident = ensure_cloud_identity(suffix)
-
-    cloud_tag = caller_ident.get("tag") or req_data.get("user_tag") or email
-    user_name = caller_ident.get("username") or req_data.get("user_name", "Anonymous")
-    avatar_url = caller_ident.get("avatar_url") or req_data.get("avatar_url", "")
-    user_id = caller_ident.get("user_id", "")
-
-    if not email and cloud_tag:
-        email = cloud_tag.lower()
-
-    if not email or (not note_text and not track):
+    if not note_text and not track:
         handler._send_json({"success": False, "error": "Missing required fields (either text or track required)"}, 400)
         return
 
-    if GLOBAL_RELAY_CLIENT.is_external():
-        cloud_res = GLOBAL_RELAY_CLIENT.publish_note(
-            caller_ident["user_id"],
-            caller_ident["secret_key"],
-            note_text,
-            track,
-            req_data.get("now_playing")
-        )
-        if cloud_res and cloud_res.get("success"):
-            handler._send_json(cloud_res, 200)
-        else:
-            handler._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
-        return
-
-    ttl = 86400
-    now = time.time()
-    record = {
-        "user_email": email,
-        "tag": cloud_tag,
-        "user_id": user_id,
-        "user_name": user_name,
-        "avatar_url": avatar_url,
-        "note_text": note_text[:80],
-        "track": track,
-        "now_playing": req_data.get("now_playing"),
-        "created_at": datetime.fromtimestamp(now).isoformat(),
-        "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
-        "_expires_ts": now + ttl,
-        "last_active_ts": now
-    }
-    vault = load_notes_vault()
-    if email:
-        vault[f"note:{email}"] = record
-    if cloud_tag:
-        vault[f"note:{cloud_tag.lower()}"] = record
-    if user_id:
-        vault[f"note:{user_id}"] = record
-    if user_name:
-        vault[f"note:{user_name.lower()}"] = record
-
-    save_notes_vault(vault)
-    handler._send_json({"success": True, "note": record}, 200)
+    res = SOCIAL_RELAY_CORE.publish_note(note_text, track, profile, email)
+    handler._send_json(res, 200 if res.get("success") else 400)
 
 
 def handle_post_delete_note(handler, req_data):
     profile = req_data.get("profile", "").strip().lower()
     email = req_data.get("user_email", "").strip().lower()
-    suffix = resolve_profile_suffix(profile, email)
-    caller_ident = ensure_cloud_identity(suffix)
-
-    if GLOBAL_RELAY_CLIENT.is_external():
-        cloud_res = GLOBAL_RELAY_CLIENT.delete_note(caller_ident["user_id"], caller_ident["secret_key"])
-        if cloud_res and cloud_res.get("success"):
-            handler._send_json(cloud_res, 200)
-        else:
-            handler._send_json(cloud_res or {"success": False, "error": "Cloud relay failed"}, 400)
-        return
-
-    vault = load_notes_vault()
-    if email:
-        vault.pop(f"note:{email}", None)
-    if caller_ident.get("tag"):
-        vault.pop(f"note:{caller_ident['tag'].lower()}", None)
-    if caller_ident.get("user_id"):
-        vault.pop(f"note:{caller_ident['user_id']}", None)
-    if caller_ident.get("username"):
-        vault.pop(f"note:{caller_ident['username'].lower()}", None)
-    save_notes_vault(vault)
-    handler._send_json({"success": True}, 200)
+    res = SOCIAL_RELAY_CORE.delete_note(profile, email)
+    handler._send_json(res, 200 if res.get("success") else 400)
 
 
 def handle_post_note_event(handler, req_data):
@@ -674,10 +437,6 @@ def handle_post_note_event(handler, req_data):
 def handle_post_now_playing(handler, req_data):
     profile = req_data.get("profile", "")
     user_email = req_data.get("user_email", "").strip()
-    suffix = resolve_profile_suffix(profile, user_email)
-    caller_ident = ensure_cloud_identity(suffix)
-
-    email = user_email.lower() if user_email else caller_ident.get("tag", "").lower()
     now_playing = req_data.get("now_playing")
     track_meta = req_data.get("track")
     np_payload = None
@@ -708,44 +467,8 @@ def handle_post_now_playing(handler, req_data):
         }
 
     presence_val = np_payload if np_payload else (now_playing if now_playing is not None else "")
-    np_text = ""
-    if isinstance(np_payload, dict):
-        np_text = f"{np_payload.get('title', '')} - {np_payload.get('artist', '')}".strip(" -")
-    elif isinstance(now_playing, str):
-        np_text = now_playing
-
-    try:
-        GLOBAL_RELAY_CLIENT.update_presence(caller_ident["user_id"], caller_ident["secret_key"], presence_val)
-    except Exception as pe:
-        print(f"[auth_server presence error] {pe}")
-
-    vault = load_notes_vault()
-    key = f"note:{email}" if email else f"note:{caller_ident['user_id']}"
-    now = time.time()
-    store_np = np_payload if np_payload else np_text
-    if key in vault:
-        vault[key]["now_playing"] = store_np
-        vault[key]["last_active_ts"] = now
-        if np_payload and not vault[key].get("track"):
-            vault[key]["track"] = np_payload
-        record = vault[key]
-    else:
-        ttl = 86400
-        record = {
-            "user_email": email or caller_ident.get("tag", ""),
-            "user_name": req_data.get("user_name") or caller_ident.get("username", "User"),
-            "avatar_url": req_data.get("avatar_url") or caller_ident.get("avatar_url", ""),
-            "note_text": "",
-            "track": np_payload,
-            "now_playing": store_np,
-            "created_at": datetime.fromtimestamp(now).isoformat(),
-            "expires_at": datetime.fromtimestamp(now + ttl).isoformat(),
-            "_expires_ts": now + ttl,
-            "last_active_ts": now
-        }
-        vault[key] = record
-    save_notes_vault(vault)
-    handler._send_json({"success": True, "note": record}, 200)
+    res = SOCIAL_RELAY_CORE.update_presence(presence_val, profile, user_email)
+    handler._send_json({"success": True, "res": res}, 200)
 
 
 def handle_post_friend_request(handler, req_data):

@@ -2013,7 +2013,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     contentWidth: width
-                    contentHeight: relatedContentCol.height + 40
+                    contentHeight: relatedContentCol.implicitHeight + 40
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 

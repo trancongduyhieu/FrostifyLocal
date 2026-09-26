@@ -98,6 +98,9 @@ flowchart TD
 ## Step 0: Proactive Visual Context Gathering (Khi thiếu ảnh đính kèm)
 - Nếu yêu cầu của người dùng liên quan đến giao diện người dùng, layout, status bar, widget, wallpaper, terminal (ví dụ: Niri, Noctalia Bar, Kitty, Wayland UI) mà **KHÔNG** có ảnh chụp đính kèm:
 - AI **BẮT BUỘC** tự động kích hoạt ứng dụng/terminal -> Chụp ảnh màn hình bằng công cụ CLI (như `/usr/bin/grim /tmp/screen_context.png`) -> Gọi `view_file` trên file ảnh vừa chụp để tự soi và nắm rõ hiện trạng trực quan TRƯỚC KHI đề xuất phương án hay lập plan.
+- **Kích hoạt Kỹ năng Trực quan Bắt Buộc (Visual Skills Trigger)**:
+  - Khi bài toán đụng tới **Bố cục / Layout / Spacing / Căn chỉnh**: BẮT BUỘC gọi `view_file` trên `~/.gemini/config/skills/ui-layout-design-rules/SKILL.md` (hoặc `taste-skill/SKILL.md`).
+  - Khi bài toán đụng tới **Màu sắc / Palette / OKLCH / Tương phản (Contrast)**: BẮT BUỘC gọi `view_file` trên `~/.gemini/config/skills/color-expert/SKILL.md`.
 - Thông báo: *"Tôi sẽ kích hoạt giao diện và chụp ảnh màn hình để soi hiện trạng thực tế."*
 
 ## Step 1: Brainstorming & Design Approval Gate
@@ -152,12 +155,6 @@ Mọi dự án, công cụ hoặc script tạo mới/chỉnh sửa đều phải
 2. **Kiểm tra phụ thuộc hệ thống (System Binaries)**:
    - Script tự kiểm tra các công cụ hệ thống cần thiết (`grim`, `jq`, `ffmpeg`, v.v.). Nếu máy người dùng bị thiếu, in ra thông báo rõ ràng kèm câu lệnh cài đặt chính xác theo distro (Arch/CachyOS: `pacman -S`, Debian/Ubuntu: `apt install`, Fedora: `dnf install`).
 
-## 3. Systemic Future-Proofing & Universal Solution Protocol
-- **KHÔNG SỬA TẠM BỢ CHO HIỆN TẠI (NO SURFACE PATCHES)**: Khi phát hiện lỗi định dạng, từ khóa hoặc logic, không được chỉ fix cứng từ khóa đơn lẻ.
-- **THIẾT KẾ ĐA TẦNG PHÒNG THỦ CHO TƯƠNG LAI**:
-  1. *Bao phủ toàn bộ ngữ nghĩa mở rộng (Semantic Expansion)*: Thêm đầy đủ các từ khóa đồng nghĩa, biến thể dữ liệu liên quan.
-  2. *Kiểm soát theo cấu trúc (Structural Heuristics)*: Kiểm tra trực tiếp cấu trúc kiểu dữ liệu, schema và ràng buộc khoảng giá trị.
-  3. *Vòng lặp tự phục hồi (Self-Healing Feedback Loop)*: Tự động phân tích log lỗi khi thử lại để thích ứng linh hoạt với các trường hợp biên mới.
 
 ---
 
@@ -191,9 +188,32 @@ Hệ thống quản lý tri thức và ngữ cảnh bền vững trong Google An
   4. Built-in Skills & System Defaults
 - Khi một quy tắc dự án mâu thuẫn với quy tắc toàn cục, quy tắc dự án sẽ được ưu tiên áp dụng.
 
-## 2. Progressive Disclosure (Kỹ Năng & Công Cụ Theo Yêu Cầu)
+## 2. Progressive Disclosure & Master Dynamic Skill Routing
 - Toàn bộ nội dung chi tiết của Skill không bị nhồi nhét vào cửa sổ ngữ cảnh ngay từ đầu nhằm tiết kiệm token và giữ cho ngữ cảnh luôn tinh gọn.
-- AI quét danh sách `<skills>` sẵn có. Khi một tác vụ có liên quan đến một skill cụ thể (dù chỉ có 1% khả năng áp dụng), AI **BẮT BUỘC** gọi `view_file` trên file `SKILL.md` của skill đó và thông báo: *"Using [skill] to [purpose]"*.
+- **Cơ chế chống mất trí nhớ (Anti-Amnesia Protocol)**: Do engine Antigravity tự động loại bỏ danh sách `<skills>` khi số lượng skills vượt ngưỡng ngân sách (Context Budget Limit), AI **BẮT BUỘC** sử dụng Bảng Điều Hướng Kỹ Năng Toàn Cục dưới đây làm kim chỉ nam.
+- Bất cứ khi nào tiếp nhận yêu cầu có ngữ nghĩa hoặc từ khóa liên quan (dù người dùng nói tiếng Việt đời thường hay English), AI **BẮT BUỘC** phải chủ động gọi `view_file` trên tệp `SKILL.md` tương ứng TRƯỚC KHI thực hiện và thông báo: *"Using [skill] to [purpose]"*:
+
+| Lĩnh vực cốt lõi | Ngữ nghĩa & Từ khóa nhận diện (Tiếng Việt & English) | Tệp Skill BẮT BUỘC Đọc (`view_file`) |
+| :--- | :--- | :--- |
+| **Giao diện & Bố cục** | Giao diện, layout, căn lề, spacing 4/8pt, padding, bento grid, responsive, visual hierarchy, QML/CSS layout | `~/.gemini/config/skills/ui-layout-design-rules/SKILL.md` |
+| **Thẩm mỹ Frontend** | Web frontend, landing page, portfolio, typography, chống thiết kế generic AI (anti-slop), redesign | `~/.gemini/config/skills/taste-skill/SKILL.md` |
+| **Màu sắc & Phối màu** | Màu sắc, bảng màu, palette, OKLCH, OKLAB, tương phản (contrast), APCA/WCAG, dark/light theme, token màu | `~/.gemini/config/skills/color-expert/SKILL.md` |
+| **Video & Reverse UI** | Video, screen recording, chuyển video thành code/prompt, trích xuất micro-interactions từ video/HTML | `~/.gemini/config/skills/video-ui-superprompt/SKILL.md` |
+| **Soi Kiến Trúc** | Soi kiến trúc, refactor, module nông/rối (shallow), gom module sâu (deep), xuất báo cáo HTML trực quan | `~/.gemini/config/skills/improve-codebase-architecture/SKILL.md`<br/>(kèm `codebase-design/SKILL.md`) |
+| **Bàn Giao & Handoff** | Bàn giao, chat dài quá tóm tắt lại, lưu phiên, chuyển tab mới, tránh trôi context (context rot), handoff | `~/.gemini/config/skills/agent-handoff/SKILL.md` |
+| **Phỏng Vấn & ADR** | `/grill-me`, phỏng vấn vặn vẹo giải pháp, stress-test kế hoạch, ghi quyết định ADR (`docs/adr/`), `CONTEXT.md` | `~/.gemini/config/skills/grill-with-docs/SKILL.md` |
+| **Đo Hiệu Năng** | Lag, giật, đo RAM, ăn CPU, tối ưu tốc độ, benchmark, profiling, bottleneck, flamegraph | `~/.gemini/config/skills/performance-profiler/SKILL.md` |
+| **Bảo Mật & Audit** | Lỗ hổng, security audit, pentest, xss, sqli, rce, kiểm tra an toàn, phân quyền | `~/.gemini/config/skills/security-pentest/SKILL.md` |
+| **Dịch Ngược / Binary** | Reverse engineering, dịch ngược binary, decompile, Ghidra, IDA, firmware, assembly | `~/.gemini/config/skills/reverse-arsenal/SKILL.md` |
+| **Đấu trường CTF** | Giải đề CTF, pwn, web exploitation, crypto, steganography, forensics | `~/.gemini/config/skills/ctf-arsenal/SKILL.md` |
+| **Sơ Đồ & Diagram** | Vẽ sơ đồ, flow chart, sequence diagram, Mermaid, SVG kiến trúc hệ thống | `~/.gemini/config/skills/diagram-generator/SKILL.md` |
+| **Tự Động Browser** | Mở trình duyệt, cào dữ liệu web, click test, Playwright, Puppeteer, web automation | `~/.gemini/config/skills/browser-automation/SKILL.md` |
+| **Tài Liệu Kỹ Thuật** | Viết tài liệu, API docs, README, kiến trúc tài liệu, cẩm nang người dùng | `~/.gemini/config/skills/docs-generator/SKILL.md` |
+| **Code Review Sâu** | Review code, soi lỗi tiềm ẩn, kiểm tra PR, phản biện chất lượng mã nguồn | `~/.gemini/config/skills/open-code-review/SKILL.md` |
+| **TDD & Test Trước** | Viết test trước khi viết code (TDD), red-green-refactor, unit test | `~/.gemini/config/skills/test-driven-development/SKILL.md` |
+| **Subagents Song Song** | Chạy nhiều việc độc lập, chia nhỏ task cho subagents, dispatch subagent | `~/.gemini/config/skills/subagent-driven-development/SKILL.md` |
+| **Git Worktrees** | Tách nhánh thử nghiệm độc lập, cô lập workspace, git worktree | `~/.gemini/config/skills/using-git-worktrees/SKILL.md` |
+| **Dọn Nhánh & Gộp Code**| Dọn dẹp nhánh sau khi xong, chuẩn hóa commit history, kết thúc feature branch | `~/.gemini/config/skills/finishing-a-development-branch/SKILL.md` |
 
 ## 3. Transcript & Lịch Sử Phiên Làm Việc
 - Nhật ký hội thoại đầy đủ được lưu tự động dưới dạng JSONL tại: `<appDataDir>/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`.
