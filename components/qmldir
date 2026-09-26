@@ -26,6 +26,8 @@ singleton I18n 1.0 I18n.qml
 singleton LibraryData 1.0 LibraryData.qml
 LibraryLoader 1.0 LibraryLoader.qml
 LiquidGlass 1.0 LiquidGlass.qml
+LyricTuningPanel 1.0 LyricTuningPanel.qml
+singleton LyricTuningState 1.0 LyricTuningState.qml
 MainTrackGrid 1.0 MainTrackGrid.qml
 ManageFriendsModal 1.0 ManageFriendsModal.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml
