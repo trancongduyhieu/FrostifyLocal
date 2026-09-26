@@ -1999,25 +1999,68 @@ Item {
                                     }
                                 }
 
-                                // Apple Music Full-Line Solid Highlight — for plain LRC lines (isSynthetic or no words).
-                                // Entire line glows solid white when active, dims to slate when past/inactive.
-                                // This NEVER drifts vs the singer because there is zero per-word timing assumption.
-                                Text {
-                                    id: activeFallbackTxt
+                                // Apple Music Full-Line Held Note Bloom — for plain LRC lines (isSynthetic / no words).
+                                // When the line is active (isCurrent), a phosphor glow builds up via sin-bell on
+                                // lineProgress: fades in at start, peaks at mid-duration, fades out at end.
+                                // Scale breathes +1.8% at peak — subtle "swell" that sells the sustained note feel.
+                                // Native Text.Outline bloom (zero MultiEffect GPU overhead).
+                                Item {
+                                    id: fullLineBlock
                                     readonly property bool shouldShow: lyricRow.isCurrent && (!modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0)
                                     visible: shouldShow
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    textFormat: Text.PlainText
-                                    text: modelData.text || ""
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 28
-                                    font.weight: Font.Bold
-                                    color: "#ffffff"
-                                    wrapMode: Text.Wrap
-                                    lineHeight: 1.28
-                                    style: Text.Outline
-                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
+                                    implicitHeight: fullLineMainTxt.implicitHeight
+
+                                    // sin-bell glow driver: 0→1→0 over line duration
+                                    readonly property real glowProgress: lyricRow.isCurrent
+                                        ? Math.sin(Math.PI * lyricRow.lineProgress)
+                                        : 0.0
+
+                                    // Scale breath: 1.0 at endpoints, 1.018 at peak (same as AMLL held-note spec)
+                                    transform: Scale {
+                                        xScale: 1.0 + 0.018 * fullLineBlock.glowProgress
+                                        yScale: xScale
+                                        origin.x: 0
+                                        origin.y: fullLineMainTxt.implicitHeight * 0.5
+                                    }
+
+                                    // ── Phosphor Bloom Layer ──────────────────────────────
+                                    // Rendered ABOVE main text; white outline widens the glow halo.
+                                    Text {
+                                        id: fullLineBloomTxt
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        text: modelData.text || ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 28
+                                        font.weight: Font.Bold
+                                        color: "#ffffff"
+                                        style: Text.Outline
+                                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.45)
+                                        wrapMode: Text.Wrap
+                                        lineHeight: 1.28
+                                        opacity: 0.55 * fullLineBlock.glowProgress
+                                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+                                        visible: opacity > 0.005
+                                    }
+
+                                    // ── Main Crisp Typography ─────────────────────────────
+                                    Text {
+                                        id: fullLineMainTxt
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        textFormat: Text.PlainText
+                                        text: modelData.text || ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 28
+                                        font.weight: Font.Bold
+                                        color: "#ffffff"
+                                        wrapMode: Text.Wrap
+                                        lineHeight: 1.28
+                                        style: Text.Outline
+                                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
+                                    }
                                 }
 
                                 Text {

@@ -1655,24 +1655,61 @@ Rectangle {
                                 }
                             }
 
-                            // Apple Music Full-Line Solid Highlight — for plain LRC lines (isSynthetic or no words).
-                            // Entire line glows solid white when active — NEVER drifts vs singer.
-                            Text {
-                                id: activeFallbackTxt
+                            // Apple Music Full-Line Held Note Bloom — for plain LRC lines (isSynthetic / no words).
+                            // Phosphor glow builds up via sin-bell on lineProgress: 0→peak→0 over line duration.
+                            // Scale breathes +1.8% at peak. Native Text.Outline (zero MultiEffect overhead).
+                            Item {
+                                id: fullLineBlock
                                 readonly property bool shouldShow: lyricRow.isCurrent && (!modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0)
                                 visible: shouldShow
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                textFormat: Text.PlainText
-                                text: modelData.text || ""
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 28
-                                font.weight: Font.Bold
-                                color: "#ffffff"
-                                wrapMode: Text.Wrap
-                                lineHeight: 1.28
-                                style: Text.Outline
-                                styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
+                                implicitHeight: fullLineMainTxt.implicitHeight
+
+                                readonly property real glowProgress: lyricRow.isCurrent
+                                    ? Math.sin(Math.PI * lyricRow.lineProgress)
+                                    : 0.0
+
+                                transform: Scale {
+                                    xScale: 1.0 + 0.018 * fullLineBlock.glowProgress
+                                    yScale: xScale
+                                    origin.x: 0
+                                    origin.y: fullLineMainTxt.implicitHeight * 0.5
+                                }
+
+                                Text {
+                                    id: fullLineBloomTxt
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    text: modelData.text || ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 28
+                                    font.weight: Font.Bold
+                                    color: "#ffffff"
+                                    style: Text.Outline
+                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.45)
+                                    wrapMode: Text.Wrap
+                                    lineHeight: 1.28
+                                    opacity: 0.55 * fullLineBlock.glowProgress
+                                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+                                    visible: opacity > 0.005
+                                }
+
+                                Text {
+                                    id: fullLineMainTxt
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    textFormat: Text.PlainText
+                                    text: modelData.text || ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 28
+                                    font.weight: Font.Bold
+                                    color: "#ffffff"
+                                    wrapMode: Text.Wrap
+                                    lineHeight: 1.28
+                                    style: Text.Outline
+                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
+                                }
                             }
 
                             // 2. Non-active blurred/dimmed lines
