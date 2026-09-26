@@ -24,10 +24,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
     > **Tuyệt đối không dùng viền trắng (White Halo)** quanh chữ lyric vì gây thô ráp và phá hủy thẩm mỹ điện ảnh.
 
 ### Preset 2: Apple Music Parametric Multi-Line Engine (`AppleMusicDesktopLyrics.qml`)
-- **Bố cục**: Hiển thị đồng thời 5 dòng lời parametric.
+- **Bố cục**: Hiển thị đồng thời 5 dòng lời parametric (Slot 0..4 + buffer) với rolling glide animation 450ms OutCubic.
+- **Engine cốt lõi**: Tích hợp trực tiếp `AppleMusicWordFlow.qml` cho dòng active (Slot 1), tận dụng trọn vẹn syllable timing, wave lift và phosphor bloom tự nhiên.
 - **Hiệu ứng quang học**:
-  - Độ sâu trường ảnh quang học (Optical Depth-of-Field - DoF): Dòng hiện tại sắc nét nhất, các dòng trước và sau mờ dần theo gradient Gaussian blur thực tế.
-  - Hiệu ứng phát quang lân tinh (Phosphor Bloom) theo nhịp nhạc.
+  - Độ sâu trường ảnh quang học (Optical Depth-of-Field - DoF): Dòng hiện tại sắc nét nhất (Slot 1), các dòng trước (Slot 0) và sau (Slot 2..4) mờ dần theo gradient Gaussian blur thực tế (blur $0.35 \to 0.85$, opacity $0.58 \to 0.14$).
 
 ### Preset 3: Minimalist Word-by-Word Motion Blur Engine
 - Hiển thị tối giản, làm nhòe chuyển động (motion blur) theo từng từ khi ca sĩ phát âm.
