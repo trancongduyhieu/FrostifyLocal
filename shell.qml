@@ -731,89 +731,6 @@ Scope {
         }
     }
 
-    Process {
-        id: fetchFriendsNotesProc
-        command: ["python3", "-u", win.appDir + "/backend/social_notes.py", "get"]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var parsed = JSON.parse(data);
-                    if (Array.isArray(parsed)) {
-                        win.friendsNotes = parsed;
-                    } else if (parsed && typeof parsed === "object") {
-                        if (Array.isArray(parsed.notes)) {
-                            win.friendsNotes = parsed.notes;
-                        } else if (Array.isArray(parsed.friends)) {
-                            win.friendsNotes = parsed.friends;
-                        }
-                        if (parsed.my_note !== undefined) {
-                            win.myLatestNote = parsed.my_note;
-                        }
-                    }
-                } catch(e) {}
-            }
-        }
-    }
-
-    Process {
-        id: postNoteProc
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var res = JSON.parse(data);
-                    if (res && res.success && res.note) {
-                        win.myLatestNote = res.note;
-                    }
-                } catch(e) {}
-            }
-        }
-        onExited: {
-            if (!fetchFriendsNotesProc.running) {
-                fetchFriendsNotesProc.running = true;
-            }
-        }
-    }
-
-    Process {
-        id: deleteNoteProc
-        onExited: {
-            if (!fetchFriendsNotesProc.running) {
-                fetchFriendsNotesProc.running = true;
-            }
-        }
-    }
-
-    Process {
-        id: sendSocialEventProc
-    }
-
-    Process {
-        id: fetchSocialEventsProc
-        command: ["python3", "-u", win.appDir + "/backend/social_notes.py", "get_events"]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var events = JSON.parse(data);
-                    if (Array.isArray(events)) {
-                        for (var i = 0; i < events.length; i++) {
-                            var ev = events[i];
-                            if (ev && ev.event === "leave") {
-                                var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
-                                win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
-                                if (win.listeningAlongFriend && (win.listeningAlongFriend.user_email === ev.from_email || win.listeningAlongFriend.user_name === ev.from_name)) {
-                                    win.listeningAlongFriend = null;
-                                }
-                            }
-                        }
-                    }
-                } catch(e) {}
-            }
-        }
-    }
-
     Timer {
         id: toastTimer
         interval: 3200
@@ -3406,10 +3323,6 @@ Scope {
             });
         }
         win.showToast(I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist"));
-    }
-
-    Process {
-        id: playerCmd
     }
 
     Timer {

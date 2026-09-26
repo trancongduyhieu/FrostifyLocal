@@ -762,10 +762,6 @@ function postDailyNote(win, text, track) {
         }
     };
     xhr.send(JSON.stringify(payload));
-
-    postNoteProc.running = false;
-    postNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "post", cleanText || " ", JSON.stringify(trackObj || {})];
-    postNoteProc.running = true;
     win.syncNowPlaying(true);
     Qt.callLater(function() { win.fetchFriendsNotesFast(); });
 }
@@ -786,10 +782,6 @@ function deleteMyNote(win) {
         }
     };
     xhr.send(JSON.stringify({ profile: profile, user_email: email }));
-
-    deleteNoteProc.running = false;
-    deleteNoteProc.command = ["python3", "-u", win.appDir + "/backend/social_notes.py", "delete"];
-    deleteNoteProc.running = true;
     Qt.callLater(function() { win.fetchFriendsNotesFast(); });
     win.showToast(I18n.tr("Đã xóa ghi chú", "Note deleted"));
 }
