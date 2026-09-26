@@ -1537,10 +1537,10 @@ Rectangle {
                     topMargin: 32
                     bottomMargin: height * 0.45
                     currentIndex: root.currentLyricIndex
-                    preferredHighlightBegin: height * 0.40
-                    preferredHighlightEnd: height * 0.40
+                    preferredHighlightBegin: height * 0.35
+                    preferredHighlightEnd: height * 0.35
                     highlightRangeMode: userScrollTimer.running ? ListView.NoHighlightRange : ListView.ApplyRange
-                    highlightMoveDuration: 500
+                    highlightMoveDuration: 620
                     highlightMoveVelocity: -1
                     model: root.activeLyrics
 
@@ -1575,14 +1575,9 @@ Rectangle {
 
                         opacity: targetOpacity
                         transformOrigin: Item.Left
-                        scale: isCurrent ? LyricTuningState.sentenceActiveScale : LyricTuningState.sentenceRestScale
-                        Behavior on scale { NumberAnimation { duration: LyricTuningState.sentenceSmoothMs; easing.type: Easing.OutQuad } }
+                        scale: isCurrent ? 1.0 : 0.97
+                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                         Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
-
-                        transform: Translate {
-                            y: lyricRow.isCurrent ? LyricTuningState.sentenceActiveY : LyricTuningState.sentenceRestY
-                            Behavior on y { NumberAnimation { duration: LyricTuningState.sentenceSmoothMs; easing.type: Easing.OutQuad } }
-                        }
 
                         layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 2
                         layer.effect: MultiEffect {
@@ -1714,16 +1709,6 @@ Rectangle {
                 }
             }
         }
-    }
-
-    // Live Apple Music Wave Ripple Tuner (Bộ công cụ tự chỉnh thông số cả câu & từng từ trên bên trái)
-    LyricTuningPanel {
-        id: tuningPanel
-        anchors.left: parent.left
-        anchors.leftMargin: 24
-        anchors.top: parent.top
-        anchors.topMargin: 70
-        z: 99999
     }
 }
 
